@@ -3,31 +3,10 @@ use std::{
     io::{Read, Write},
 };
 
-use bytemuck::{Pod, Zeroable};
-use crc32c::crc32c;
-
 use crate::page::{PAGE_DATA_SIZE, PAGE_SIZE, Page};
 
+mod checksum;
 mod page;
-
-#[repr(transparent)]
-#[derive(Pod, Clone, Copy, Zeroable, Debug, PartialEq, Eq)]
-struct Checksum(u32);
-
-const CHECKSUM_BYTES: usize = size_of::<Checksum>();
-
-impl Checksum {
-    pub fn from_bytes(bytes: [u8; 4]) -> Self {
-        Self(u32::from_le_bytes(bytes))
-    }
-    pub fn of(bytes: &[u8]) -> Self {
-        Self(crc32c(bytes))
-    }
-
-    fn clear(&mut self) {
-        self.0 = 0;
-    }
-}
 
 fn main() {
     let mut file = OpenOptions::new()

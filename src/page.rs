@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable, bytes_of, must_cast};
 use thiserror::Error;
 
-use crate::{CHECKSUM_BYTES, Checksum};
+use crate::checksum::Checksum;
 
 pub const PAGE_SIZE: usize = 4096;
 pub const PAGE_DATA_SIZE: usize = PAGE_SIZE - size_of::<PageHeader>();
@@ -49,9 +49,10 @@ impl Page {
     }
 
     pub fn deserialize(mut bytes: [u8; PAGE_SIZE]) -> Result<Self, PageError> {
-        let expected_checksum = Checksum::from_bytes(bytes[0..CHECKSUM_BYTES].try_into().unwrap());
+        let expected_checksum =
+            Checksum::from_bytes(bytes[0..size_of::<Checksum>()].try_into().unwrap());
 
-        for byte in bytes.iter_mut().take(CHECKSUM_BYTES) {
+        for byte in bytes.iter_mut().take(size_of::<Checksum>()) {
             *byte = 0;
         }
 
