@@ -13,14 +13,14 @@ pub enum PageError {
 }
 
 #[repr(C)]
-#[derive(Pod, Clone, Copy, Zeroable)]
+#[derive(Debug, Pod, Clone, Copy, Zeroable)]
 struct PageHeader {
     checksum: Checksum,
     _unused: u32,
 }
 
 #[repr(C)]
-#[derive(Pod, Clone, Copy, Zeroable)]
+#[derive(Debug, Pod, Clone, Copy, Zeroable)]
 pub struct Page {
     header: PageHeader,
     data: [u8; PAGE_DATA_SIZE],
@@ -29,6 +29,7 @@ pub struct Page {
 const _: () = assert!(size_of::<Page>() == PAGE_SIZE);
 
 impl Page {
+    // TODO get rid of this, and instead make it new_from_data or something
     pub fn new() -> Self {
         Self {
             header: PageHeader::zeroed(),

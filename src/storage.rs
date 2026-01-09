@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
 
@@ -13,12 +15,19 @@ pub enum StorageError {
 #[repr(transparent)]
 pub struct PageIndex(u64);
 
+impl Display for PageIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 pub trait Storage {
     fn get(&self, index: PageIndex) -> Result<&Page, StorageError>;
     fn get_mut(&mut self, index: PageIndex) -> Result<&mut Page, StorageError>;
     fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError>;
 }
 
+#[derive(Debug)]
 pub struct InMemoryStorage {
     pages: Vec<Page>,
 }
@@ -48,5 +57,43 @@ impl Storage for InMemoryStorage {
         self.pages.push(page);
 
         Ok(PageIndex((self.pages.len() - 1) as u64))
+    }
+}
+
+// TODO #[cfg(test)]
+pub mod test {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use super::*;
+    use crate::storage::Storage;
+
+    pub struct TestStorage<T: Storage> {
+        page_count: Arc<AtomicUsize>,
+        inner: T,
+    }
+
+    impl<T: Storage> TestStorage<T> {
+        pub fn new(inner: T, page_count: Arc<AtomicUsize>) -> Self {
+            Self { page_count, inner }
+        }
+    }
+
+    impl<T: Storage> Storage for TestStorage<T> {
+        fn get(&self, index: PageIndex) -> Result<&crate::page::Page, StorageError> {
+            self.inner.get(index)
+        }
+
+        fn get_mut(&mut self, index: PageIndex) -> Result<&mut crate::page::Page, StorageError> {
+            self.inner.get_mut(index)
+        }
+
+        fn insert(&mut self, page: crate::page::Page) -> Result<PageIndex, StorageError> {
+            self.page_count.fetch_add(1, Ordering::Relaxed);
+
+            self.inner.insert(page)
+        }
     }
 }
