@@ -9,7 +9,7 @@ pub enum StorageError {
     PageNotFound(PageIndex),
 }
 
-#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct PageIndex(u64);
 
@@ -36,6 +36,8 @@ impl Storage for InMemoryStorage {
             .map_or_else(|| Err(StorageError::PageNotFound(index)), Ok)
     }
 
+    // TODO return some sort of a WritablePageHandle object, so that we can persist after the write
+    // as neccessary
     fn get_mut(&mut self, index: PageIndex) -> Result<&mut Page, StorageError> {
         self.pages
             .get_mut(index.0 as usize)

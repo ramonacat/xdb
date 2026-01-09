@@ -1,5 +1,3 @@
-pub(super) mod storage;
-
 use crate::storage::PageIndex;
 use crate::{bplustree::TreeError, page::PAGE_DATA_SIZE};
 use bytemuck::{Pod, Zeroable};
@@ -112,9 +110,16 @@ pub(super) struct LeafNodeWriter<'node> {
     node: &'node mut Node,
 }
 
+#[must_use]
+pub(super) enum LeafInsertResult {
+    Done,
+    Split { count: usize, data: Vec<u8> },
+}
+
 impl<'node> LeafNodeWriter<'node> {
     pub(super) fn new(node: &'node mut Node, key_size: usize, value_size: usize) -> Self {
         assert!(node.is_leaf());
+
         // TODO return a result with an error if we can't fit at least two entries
         Self {
             key_size,
@@ -127,7 +132,11 @@ impl<'node> LeafNodeWriter<'node> {
         LeafNodeReader::new(self.node, self.key_size, self.value_size)
     }
 
-    pub(super) fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), TreeError> {
+    pub(super) fn insert(
+        &mut self,
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<LeafInsertResult, TreeError> {
         if key.len() != self.key_size {
             return Err(TreeError::InvalidKeyLength);
         }
@@ -148,7 +157,9 @@ impl<'node> LeafNodeWriter<'node> {
             todo!("Split node");
         }
 
-        self.insert_at(insert_index, key, value)
+        self.insert_at(insert_index, key, value)?;
+
+        Ok(LeafInsertResult::Done)
     }
 
     fn capacity(&self) -> usize {
@@ -284,5 +295,6 @@ pub(super) struct NodeHeader {
     key_len: u16,
     flags: NodeFlags,
     _unused2: u32,
+    parent: PageIndex,
 }
-const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>());
+const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>() * 2);

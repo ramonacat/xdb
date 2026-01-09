@@ -36,6 +36,7 @@ impl Page {
         }
     }
 
+    #[allow(unused)] // TODO this will be needed for file storage
     pub fn serialize(mut self) -> [u8; PAGE_SIZE] {
         self.header.checksum.clear();
 
@@ -49,6 +50,7 @@ impl Page {
         bytes
     }
 
+    #[allow(unused)] // TODO this will be needed for file storage
     pub fn deserialize(mut bytes: [u8; PAGE_SIZE]) -> Result<Self, PageError> {
         let expected_checksum =
             Checksum::from_bytes(bytes[0..size_of::<Checksum>()].try_into().unwrap());
