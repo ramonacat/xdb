@@ -16,6 +16,7 @@ pub enum PageError {
 #[derive(Pod, Clone, Copy, Zeroable)]
 struct PageHeader {
     checksum: Checksum,
+    _unused: u32,
 }
 
 #[repr(C)]
@@ -63,8 +64,7 @@ impl Page {
         }
     }
 
-    #[cfg(test)] // TODO remove?
-    fn data(&self) -> &[u8] {
+    pub fn data(&self) -> &[u8] {
         &self.data
     }
 

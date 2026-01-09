@@ -8,6 +8,7 @@ use bytemuck::bytes_of;
 use crate::{
     bplustree::Tree,
     page::{PAGE_SIZE, Page},
+    storage::InMemoryStorage,
 };
 
 mod bplustree;
@@ -22,8 +23,9 @@ fn main() {
         .open("data.db")
         .unwrap();
 
-    let mut tree = Tree::new(32, 32).unwrap();
-    tree.insert(&[1; 32], &[2; 32]).unwrap();
+    let mut storage = InMemoryStorage::new();
+    let mut tree = Tree::new(32, 32, &mut storage).unwrap();
+    tree.insert(&[1; 32], &[2; 32], &mut storage).unwrap();
 
     let mut page = Page::new();
 
