@@ -433,6 +433,18 @@ impl Node {
         }
     }
 
+    pub(super) fn new_leaf_root() -> Self {
+        Self {
+            header: NodeHeader {
+                key_len: 0,
+                flags: NodeFlags::empty(),
+                _unused2: 0,
+                parent: PageIndex::zeroed(),
+            },
+            data: [0; _],
+        }
+    }
+
     pub(super) fn is_leaf(&self) -> bool {
         !self.header.flags.contains(NodeFlags::INTERNAL)
     }

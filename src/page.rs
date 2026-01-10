@@ -1,4 +1,4 @@
-use bytemuck::{Pod, Zeroable, bytes_of, must_cast};
+use bytemuck::{Pod, Zeroable, bytes_of, from_bytes, from_bytes_mut, must_cast};
 use thiserror::Error;
 
 use crate::checksum::Checksum;
@@ -67,12 +67,12 @@ impl Page {
         }
     }
 
-    pub fn data(&self) -> &[u8] {
-        &self.data
+    pub fn data<T: Pod>(&self) -> &T {
+        from_bytes(&self.data)
     }
 
-    pub fn data_mut(&mut self) -> &mut [u8] {
-        &mut self.data
+    pub fn data_mut<T: Pod>(&mut self) -> &mut T {
+        from_bytes_mut(&mut self.data)
     }
 }
 
@@ -112,6 +112,9 @@ mod tests {
 
         let page = Page::deserialize(bytes);
 
-        assert_eq!(&[0; PAGE_DATA_SIZE], page.unwrap().data());
+        assert_eq!(
+            &[0; PAGE_DATA_SIZE],
+            page.unwrap().data::<[u8; PAGE_DATA_SIZE]>()
+        );
     }
 }

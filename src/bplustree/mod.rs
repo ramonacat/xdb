@@ -12,9 +12,6 @@ use crate::page::Page;
 use crate::storage::PageIndex;
 use crate::storage::Storage;
 use crate::storage::StorageError;
-use bytemuck::bytes_of;
-use bytemuck::from_bytes;
-use bytemuck::from_bytes_mut;
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
 
@@ -118,27 +115,27 @@ impl<T: Storage> Tree<T> {
     fn header(&self) -> Result<&TreeData, TreeError> {
         let header_page = self.storage.get(PageIndex::zeroed())?;
 
-        Ok(from_bytes(header_page.data()))
+        Ok(header_page.data())
     }
 
     fn header_mut(&mut self) -> Result<&mut TreeData, TreeError> {
         let header_page = self.storage.get_mut(PageIndex::zeroed())?;
 
-        Ok(from_bytes_mut(header_page.data_mut()))
+        Ok(header_page.data_mut())
     }
 
     fn node(&self, index: PageIndex) -> Result<&Node, TreeError> {
         assert!(index != PageIndex::zeroed());
         let page = self.storage.get(index)?;
 
-        Ok(from_bytes(page.data()))
+        Ok(page.data())
     }
 
     fn node_mut(&mut self, index: PageIndex) -> Result<&mut Node, TreeError> {
         assert!(index != PageIndex::zeroed());
         let page = self.storage.get_mut(index)?;
 
-        Ok(from_bytes_mut(page.data_mut()))
+        Ok(page.data_mut())
     }
 
     pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), TreeError> {
@@ -167,18 +164,14 @@ impl<T: Storage> Tree<T> {
                     todo!();
                 } else {
                     let mut new_node_page = Page::new();
-                    new_node_page
-                        .data_mut()
-                        .copy_from_slice(bytes_of(new_node.as_ref()));
+                    *new_node_page.data_mut() = *new_node;
 
                     // TODO create a `reserve_page` method, so that the storage can give us an ID,
                     // but the write can be deferred
                     let new_node_index = self.storage.insert(new_node_page)?;
 
                     let mut new_root_page = Page::new();
-                    new_root_page
-                        .data_mut()
-                        .copy_from_slice(bytes_of(&Node::new_internal_root()));
+                    *new_root_page.data_mut() = Node::new_internal_root();
 
                     let new_root_page_index = self.storage.insert(new_root_page)?;
                     let new_root = self.node_mut(new_root_page_index)?;
@@ -208,7 +201,7 @@ impl<T: Storage> Tree<T> {
         assert!(node_index != PageIndex::zeroed());
 
         let node_page = self.storage.get(node_index).unwrap();
-        let node: &Node = from_bytes(node_page.data());
+        let node = node_page.data::<Node>();
 
         if node.is_leaf() {
             return node_index;
@@ -268,10 +261,8 @@ impl TreeData {
         key_size: usize,
         value_size: usize,
     ) -> Result<(), TreeError> {
-        // TODO Self should be stored in storage!
         let mut header_page = Page::new();
-        let treedata: &mut Self = from_bytes_mut(header_page.data_mut());
-        *treedata = Self {
+        *header_page.data_mut() = Self {
             key_size: key_size as u64,
             value_size: value_size as u64,
             root: PageIndex::zeroed(),
@@ -283,16 +274,15 @@ impl TreeData {
         assert!(header_index == PageIndex::zeroed());
 
         let mut root_page = Page::new();
-        let root_node: &mut Node = from_bytes_mut(root_page.data_mut());
-        // TODO create a constructor for node (Node::new_root())
-        *root_node = Node::zeroed();
+        *root_page.data_mut() = Node::new_leaf_root();
 
         let root_index = storage.insert(root_page).unwrap();
 
-        // TODO make data_mut generic, so that the conversion to TreeData gets done inside of it
-        let header_page: &mut TreeData =
-            from_bytes_mut(storage.get_mut(header_index).unwrap().data_mut());
-        header_page.root = root_index;
+        storage
+            .get_mut(header_index)
+            .unwrap()
+            .data_mut::<TreeData>()
+            .root = root_index;
 
         Ok(())
     }
@@ -304,6 +294,8 @@ mod test {
         Arc,
         atomic::{AtomicUsize, Ordering},
     };
+
+    use bytemuck::from_bytes;
 
     use crate::{
         bplustree::node::{LeafInsertResult, LeafNodeReader},
