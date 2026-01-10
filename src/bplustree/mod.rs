@@ -123,9 +123,9 @@ impl<T: Storage> Tree<T> {
         &mut self,
         write: impl FnOnce(&mut TreeData) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        let header_page = self.storage.get_mut(PageIndex::zeroed())?.data_mut();
-
-        Ok(write(header_page))
+        Ok(self
+            .storage
+            .write(PageIndex::zeroed(), |page| write(page.data_mut()))?)
     }
 
     fn node(&self, index: PageIndex) -> Result<&Node, TreeError> {
@@ -142,9 +142,8 @@ impl<T: Storage> Tree<T> {
         write: impl FnOnce(&mut Node) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         assert!(index != PageIndex::zeroed());
-        let page = self.storage.get_mut(index)?.data_mut();
 
-        Ok(write(page))
+        Ok(self.storage.write(index, |page| write(page.data_mut()))?)
     }
 
     // TODO make this take a non-mut reference
@@ -294,11 +293,9 @@ impl TreeData {
 
         let root_index = storage.insert(root_page).unwrap();
 
-        storage
-            .get_mut(header_index)
-            .unwrap()
-            .data_mut::<TreeData>()
-            .root = root_index;
+        storage.write(header_index, |page| {
+            page.data_mut::<TreeData>().root = root_index;
+        })?;
 
         Ok(())
     }

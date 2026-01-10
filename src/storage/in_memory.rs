@@ -21,12 +21,17 @@ impl Storage for InMemoryStorage {
             .map_or_else(|| Err(StorageError::PageNotFound(index)), Ok)
     }
 
-    // TODO return some sort of a WritablePageHandle object, so that we can persist after the write
-    // as neccessary
-    fn get_mut(&mut self, index: PageIndex) -> Result<&mut Page, StorageError> {
-        self.pages
+    fn write<T>(
+        &mut self,
+        index: PageIndex,
+        write: impl FnOnce(&mut Page) -> T,
+    ) -> Result<T, StorageError> {
+        let page = self
+            .pages
             .get_mut(index.0 as usize)
-            .map_or_else(|| Err(StorageError::PageNotFound(index)), Ok)
+            .map_or_else(|| Err(StorageError::PageNotFound(index)), Ok)?;
+
+        Ok(write(page))
     }
 
     fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
@@ -63,14 +68,18 @@ pub mod test {
             self.inner.get(index)
         }
 
-        fn get_mut(&mut self, index: PageIndex) -> Result<&mut crate::page::Page, StorageError> {
-            self.inner.get_mut(index)
-        }
-
         fn insert(&mut self, page: crate::page::Page) -> Result<PageIndex, StorageError> {
             self.page_count.fetch_add(1, Ordering::Relaxed);
 
             self.inner.insert(page)
+        }
+
+        fn write<TReturn>(
+            &mut self,
+            index: PageIndex,
+            write: impl FnOnce(&mut Page) -> TReturn,
+        ) -> Result<TReturn, StorageError> {
+            self.inner.write(index, write)
         }
     }
 }

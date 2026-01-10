@@ -23,12 +23,15 @@ impl Display for PageIndex {
     }
 }
 
+// TODO support transactions
 pub trait Storage {
     fn get(&self, index: PageIndex) -> Result<&Page, StorageError>;
     // TODO take a non-mut self reference
-    // TODO make this called write instead, take a closure and provide the mutable reference only
-    // for the scope of the closure
-    fn get_mut(&mut self, index: PageIndex) -> Result<&mut Page, StorageError>;
+    fn write<T>(
+        &mut self,
+        index: PageIndex,
+        write: impl FnOnce(&mut Page) -> T,
+    ) -> Result<T, StorageError>;
     // TODO take a non-mut self reference
     fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError>;
 }
