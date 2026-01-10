@@ -24,7 +24,8 @@ impl Display for PageIndex {
 }
 
 pub trait Transaction<'storage> {
-    fn get(&self, index: PageIndex) -> Result<&Page, StorageError>;
+    fn read<T>(&self, index: PageIndex, read: impl FnOnce(&Page) -> T) -> Result<T, StorageError>;
+
     // TODO take a non-mut self reference
     fn write<T>(
         &mut self,

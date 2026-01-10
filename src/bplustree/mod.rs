@@ -39,8 +39,7 @@ impl<'tree, T: Storage> TreeIterator<'tree, T> {
         key_size: usize,
         value_size: usize,
     ) -> Result<Self, TreeError> {
-        let header = transaction.header()?;
-        let root = header.root;
+        let root = transaction.read_header(|h| h.root)?;
 
         Ok(Self {
             transaction,
@@ -59,39 +58,43 @@ impl<'tree, T: Storage> Iterator for TreeIterator<'tree, T> {
     // TODO get rid of all the unwraps!
     fn next(&mut self) -> Option<Self::Item> {
         let last = self.nodes_to_visit.front()?;
-        let last = self.transaction.node(*last).unwrap();
 
-        if last.is_leaf() {
-            match LeafNodeReader::new(last, self.key_size, self.value_size)
-                .entries()
-                .nth(self.index)
-            {
-                Some(entry) => {
-                    self.index += 1;
+        let result = self.transaction.read_node(*last, |last| {
+            if last.is_leaf() {
+                match LeafNodeReader::new(last, self.key_size, self.value_size)
+                    .entries()
+                    .nth(self.index)
+                {
+                    Some(entry) => {
+                        self.index += 1;
 
-                    return Some(Ok((entry.key().to_vec(), entry.value().to_vec())));
+                        return Some(Ok((entry.key().to_vec(), entry.value().to_vec())));
+                    }
+                    None => {
+                        self.nodes_to_visit.pop_front();
+
+                        self.index = 0;
+                    }
                 }
-                None => {
-                    self.nodes_to_visit.pop_front();
+            } else {
+                self.nodes_to_visit.pop_front().unwrap();
 
-                    self.index = 0;
+                let mut interior_nodes = InteriorNodeReader::new(last, self.key_size)
+                    .values()
+                    .collect::<Vec<_>>();
+                interior_nodes.reverse();
+
+                for next_node in interior_nodes {
+                    self.nodes_to_visit.push_front(next_node);
                 }
             }
 
-            self.next()
-        } else {
-            let last = self.nodes_to_visit.pop_front().unwrap();
-            let last = self.transaction.node(last).unwrap();
-            let mut interior_nodes = InteriorNodeReader::new(last, self.key_size)
-                .values()
-                .collect::<Vec<_>>();
-            interior_nodes.reverse();
+            None
+        });
 
-            for next_node in interior_nodes {
-                self.nodes_to_visit.push_front(next_node);
-            }
-
-            self.next()
+        match result.unwrap() {
+            Some(r) => Some(r),
+            None => self.next(),
         }
     }
 }
@@ -112,10 +115,13 @@ struct TreeTransaction<'storage, TStorage: Storage + 'storage> {
 }
 
 impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage> {
-    fn header(&self) -> Result<&TreeData, TreeError> {
-        let header_page = self.transaction.get(PageIndex::zeroed())?;
-
-        Ok(header_page.data())
+    fn read_header<TReturn>(
+        &self,
+        read: impl FnOnce(&TreeData) -> TReturn,
+    ) -> Result<TReturn, TreeError> {
+        Ok(self
+            .transaction
+            .read(PageIndex::zeroed(), |page| read(page.data()))?)
     }
 
     // TODO make this take a non-mut reference, and do per-page locking
@@ -128,11 +134,14 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
             .write(PageIndex::zeroed(), |page| write(page.data_mut()))?)
     }
 
-    fn node(&self, index: PageIndex) -> Result<&Node, TreeError> {
+    fn read_node<TReturn>(
+        &self,
+        index: PageIndex,
+        read: impl FnOnce(&Node) -> TReturn,
+    ) -> Result<TReturn, TreeError> {
         assert!(index != PageIndex::zeroed());
-        let page = self.transaction.get(index)?;
 
-        Ok(page.data())
+        Ok(self.transaction.read(index, |page| read(page.data()))?)
     }
 
     // TODO make this take a non-mut reference
@@ -154,32 +163,36 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
         Ok(self.transaction.insert(page)?)
     }
 
+    // TODO this should return a Result
     fn leaf_search(&self, key: &[u8], node_index: PageIndex) -> PageIndex {
         assert!(node_index != PageIndex::zeroed());
 
-        let node_page = self.transaction.get(node_index).unwrap();
-        let node = node_page.data::<Node>();
+        let result = self.transaction.read(node_index, |node_page| {
+            let node = node_page.data::<Node>();
 
-        if node.is_leaf() {
-            return node_index;
-        }
-
-        let interior_node_reader = InteriorNodeReader::new(node, self.key_size);
-
-        let mut found_page_index = None;
-
-        for (key_index, node_key) in interior_node_reader.keys().enumerate() {
-            if node_key > key {
-                let child_page: PageIndex = interior_node_reader.value_at(key_index).unwrap();
-
-                found_page_index = Some(child_page);
+            if node.is_leaf() {
+                return node_index;
             }
-        }
 
-        match found_page_index {
-            Some(child_page_index) => self.leaf_search(key, child_page_index),
-            None => interior_node_reader.last_value(),
-        }
+            let interior_node_reader = InteriorNodeReader::new(node, self.key_size);
+
+            let mut found_page_index = None;
+
+            for (key_index, node_key) in interior_node_reader.keys().enumerate() {
+                if node_key > key {
+                    let child_page: PageIndex = interior_node_reader.value_at(key_index).unwrap();
+
+                    found_page_index = Some(child_page);
+                }
+            }
+
+            match found_page_index {
+                Some(child_page_index) => self.leaf_search(key, child_page_index),
+                None => interior_node_reader.last_value(),
+            }
+        });
+
+        result.unwrap()
     }
 }
 
@@ -216,11 +229,9 @@ impl<T: Storage> Tree<T> {
             value_size: self.value_size,
         };
 
-        let header: &TreeData = transaction.header()?;
+        let root_index = transaction.read_header(|h| h.root)?;
 
-        let root_index = header.root;
-
-        let target_node_index = transaction.leaf_search(key, header.root);
+        let target_node_index = transaction.leaf_search(key, root_index);
         let (parent_index, insert_result) =
             transaction.write_node(target_node_index, |target_node| {
                 // TODO parent_index should be a part of insert_result

@@ -12,10 +12,6 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
         todo!()
     }
 
-    fn get(&self, index: PageIndex) -> Result<&Page, StorageError> {
-        self.storage.get(index)
-    }
-
     fn write<T>(
         &mut self,
         index: PageIndex,
@@ -26,6 +22,16 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
 
     fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
         self.storage.insert(page)
+    }
+
+    fn read<TReturn>(
+        &self,
+        index: PageIndex,
+        read: impl FnOnce(&Page) -> TReturn,
+    ) -> Result<TReturn, StorageError> {
+        let page = self.storage.get(index)?;
+
+        Ok(read(page))
     }
 }
 
@@ -93,10 +99,6 @@ pub mod test {
     pub struct TestTransaction<'a, T: Transaction<'a>>(T, Arc<AtomicUsize>, PhantomData<&'a T>);
 
     impl<'a, T: Transaction<'a>> Transaction<'a> for TestTransaction<'a, T> {
-        fn get(&self, index: PageIndex) -> Result<&Page, StorageError> {
-            self.0.get(index)
-        }
-
         fn write<TReturn>(
             &mut self,
             index: PageIndex,
@@ -113,6 +115,14 @@ pub mod test {
 
         fn commit(self) -> Result<(), StorageError> {
             self.0.commit()
+        }
+
+        fn read<TReturn>(
+            &self,
+            index: PageIndex,
+            read: impl FnOnce(&Page) -> TReturn,
+        ) -> Result<TReturn, StorageError> {
+            self.0.read(index, read)
         }
     }
 
