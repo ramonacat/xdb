@@ -1,3 +1,4 @@
+use crate::bplustree::TreeTransaction;
 use crate::bplustree::node::interior::InteriorNodeReader;
 use crate::{
     bplustree::{Tree, TreeError, node::leaf::LeafNodeReader},
@@ -5,32 +6,38 @@ use crate::{
 };
 
 impl<T: Storage> Tree<T> {
-    pub fn to_dot(
-        &self,
+    pub fn into_dot(
+        mut self,
         stringify_key: impl Fn(&[u8]) -> String,
         stringify_value: impl Fn(&[u8]) -> String,
     ) -> Result<String, TreeError> {
         let mut output = String::new();
 
-        let root_node_index = self.header()?.root;
+        let transaction = self.transaction()?;
+        let root_node_index = transaction.header()?.root;
 
         output += "digraph {\n";
-        output += &self.node_to_dot(root_node_index, &stringify_key, &stringify_value)?;
+        output += &Self::node_to_dot(
+            &transaction,
+            root_node_index,
+            &stringify_key,
+            &stringify_value,
+        )?;
         output += "}\n";
 
         Ok(output)
     }
 
     fn node_to_dot(
-        &self,
+        transaction: &TreeTransaction<'_, T>,
         node_index: PageIndex,
         stringify_key: &impl Fn(&[u8]) -> String,
         stringify_value: &impl Fn(&[u8]) -> String,
     ) -> Result<String, TreeError> {
-        let key_size = self.key_size;
-        let value_size = self.value_size;
+        let key_size = transaction.key_size;
+        let value_size = transaction.value_size;
 
-        let node = self.node(node_index)?;
+        let node = transaction.node(node_index)?;
 
         let mut output = String::new();
 
@@ -62,7 +69,7 @@ impl<T: Storage> Tree<T> {
             for (index, value) in InteriorNodeReader::new(node, key_size).values().enumerate() {
                 output += &format!("N{node_index} -> N{value}[label=\"{index}\"];\n");
 
-                output += &self.node_to_dot(value, stringify_key, stringify_value)?;
+                output += &Self::node_to_dot(transaction, value, stringify_key, stringify_value)?;
             }
         }
 

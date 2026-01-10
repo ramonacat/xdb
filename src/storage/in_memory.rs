@@ -1,7 +1,33 @@
 use crate::{
     page::Page,
-    storage::{PageIndex, Storage, StorageError},
+    storage::{PageIndex, Storage, StorageError, Transaction},
 };
+
+pub struct InMemoryTransaction<'storage> {
+    storage: &'storage mut InMemoryStorage,
+}
+
+impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
+    fn commit(self) -> Result<(), StorageError> {
+        todo!()
+    }
+
+    fn get(&self, index: PageIndex) -> Result<&Page, StorageError> {
+        self.storage.get(index)
+    }
+
+    fn write<T>(
+        &mut self,
+        index: PageIndex,
+        write: impl FnOnce(&mut Page) -> T,
+    ) -> Result<T, StorageError> {
+        self.storage.write(index, write)
+    }
+
+    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
+        self.storage.insert(page)
+    }
+}
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
@@ -14,7 +40,7 @@ impl InMemoryStorage {
     }
 }
 
-impl Storage for InMemoryStorage {
+impl InMemoryStorage {
     fn get(&self, index: PageIndex) -> Result<&Page, StorageError> {
         self.pages
             .get(index.0 as usize)
@@ -41,15 +67,54 @@ impl Storage for InMemoryStorage {
     }
 }
 
+impl Storage for InMemoryStorage {
+    type Transaction<'a> = InMemoryTransaction<'a>;
+
+    fn transaction<'storage>(
+        &'storage mut self,
+    ) -> Result<Self::Transaction<'storage>, StorageError> {
+        Ok(InMemoryTransaction { storage: self })
+    }
+}
+
 // TODO #[cfg(test)]
 pub mod test {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
+    use std::{
+        marker::PhantomData,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
     };
 
     use super::*;
     use crate::storage::Storage;
+
+    pub struct TestTransaction<'a, T: Transaction<'a>>(T, Arc<AtomicUsize>, PhantomData<&'a T>);
+
+    impl<'a, T: Transaction<'a>> Transaction<'a> for TestTransaction<'a, T> {
+        fn get(&self, index: PageIndex) -> Result<&Page, StorageError> {
+            self.0.get(index)
+        }
+
+        fn write<TReturn>(
+            &mut self,
+            index: PageIndex,
+            write: impl FnOnce(&mut Page) -> TReturn,
+        ) -> Result<TReturn, StorageError> {
+            self.0.write(index, write)
+        }
+
+        fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
+            self.1.fetch_add(1, Ordering::Relaxed);
+
+            self.0.insert(page)
+        }
+
+        fn commit(self) -> Result<(), StorageError> {
+            self.0.commit()
+        }
+    }
 
     // TODO a storage that collects metrics should probably be a thing outside of tests
     pub struct TestStorage<T: Storage> {
@@ -64,22 +129,19 @@ pub mod test {
     }
 
     impl<T: Storage> Storage for TestStorage<T> {
-        fn get(&self, index: PageIndex) -> Result<&Page, StorageError> {
-            self.inner.get(index)
-        }
+        type Transaction<'a>
+            = TestTransaction<'a, T::Transaction<'a>>
+        where
+            T: 'a;
 
-        fn insert(&mut self, page: crate::page::Page) -> Result<PageIndex, StorageError> {
-            self.page_count.fetch_add(1, Ordering::Relaxed);
-
-            self.inner.insert(page)
-        }
-
-        fn write<TReturn>(
-            &mut self,
-            index: PageIndex,
-            write: impl FnOnce(&mut Page) -> TReturn,
-        ) -> Result<TReturn, StorageError> {
-            self.inner.write(index, write)
+        fn transaction<'storage>(
+            &'storage mut self,
+        ) -> Result<Self::Transaction<'storage>, StorageError> {
+            Ok(TestTransaction(
+                self.inner.transaction()?,
+                self.page_count.clone(),
+                PhantomData,
+            ))
         }
     }
 }

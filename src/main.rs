@@ -30,7 +30,7 @@ fn main() {
     }
 
     let dot = tree
-        .to_dot(
+        .into_dot(
             |k| usize::from_le_bytes(k.try_into().unwrap()).to_string(),
             |v| usize::from_le_bytes(v.try_into().unwrap()).to_string(),
         )

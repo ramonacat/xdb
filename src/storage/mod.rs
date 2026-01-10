@@ -23,8 +23,7 @@ impl Display for PageIndex {
     }
 }
 
-// TODO support transactions
-pub trait Storage {
+pub trait Transaction<'storage> {
     fn get(&self, index: PageIndex) -> Result<&Page, StorageError>;
     // TODO take a non-mut self reference
     fn write<T>(
@@ -34,4 +33,19 @@ pub trait Storage {
     ) -> Result<T, StorageError>;
     // TODO take a non-mut self reference
     fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError>;
+
+    // TODO actually make this useful and ensure transactional consistency
+    #[allow(unused)]
+    fn commit(self) -> Result<(), StorageError>;
+}
+
+pub trait Storage {
+    type Transaction<'a>: Transaction<'a>
+    where
+        Self: 'a;
+
+    // TODO take a non-mut reference
+    fn transaction<'storage>(
+        &'storage mut self,
+    ) -> Result<Self::Transaction<'storage>, StorageError>;
 }

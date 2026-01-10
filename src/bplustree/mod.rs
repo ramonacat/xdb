@@ -11,6 +11,7 @@ use crate::page::Page;
 use crate::storage::PageIndex;
 use crate::storage::Storage;
 use crate::storage::StorageError;
+use crate::storage::Transaction;
 use bytemuck::{Pod, Zeroable};
 use std::collections::VecDeque;
 use thiserror::Error;
@@ -22,19 +23,31 @@ const ROOT_NODE_TAIL_SIZE: usize = PAGE_DATA_SIZE - size_of::<u64>() * 2 - size_
 // TODO this is an abomination, we won't need it once we actually have the next/previous keys
 // in leaf nodes!
 struct TreeIterator<'tree, T: Storage> {
-    tree: &'tree Tree<T>,
-    nodes_to_visit: VecDeque<&'tree Node>,
+    transaction: TreeTransaction<'tree, T>,
+    nodes_to_visit: VecDeque<PageIndex>,
     index: usize,
+
+    // TODO these should really not be needed here, we should just depend on the TreeTransaction to
+    // read whatever data it needs to read
+    key_size: usize,
+    value_size: usize,
 }
 
 impl<'tree, T: Storage> TreeIterator<'tree, T> {
-    fn new(tree: &'tree Tree<T>) -> Result<Self, TreeError> {
-        let header = tree.header()?;
+    fn new(
+        transaction: TreeTransaction<'tree, T>,
+        key_size: usize,
+        value_size: usize,
+    ) -> Result<Self, TreeError> {
+        let header = transaction.header()?;
+        let root = header.root;
 
         Ok(Self {
-            tree,
-            nodes_to_visit: VecDeque::from([tree.node(header.root)?]),
+            transaction,
+            nodes_to_visit: VecDeque::from([root]),
             index: 0,
+            key_size,
+            value_size,
         })
     }
 }
@@ -43,41 +56,39 @@ impl<'tree, T: Storage> Iterator for TreeIterator<'tree, T> {
     // TODO we should use references here instead of copying into Vecs
     type Item = Result<(Vec<u8>, Vec<u8>), TreeError>;
 
+    // TODO get rid of all the unwraps!
     fn next(&mut self) -> Option<Self::Item> {
         let last = self.nodes_to_visit.front()?;
+        let last = self.transaction.node(*last).unwrap();
 
         if last.is_leaf() {
-            match LeafNodeReader::new(last, self.tree.key_size, self.tree.value_size)
+            match LeafNodeReader::new(last, self.key_size, self.value_size)
                 .entries()
                 .nth(self.index)
             {
                 Some(entry) => {
                     self.index += 1;
 
-                    Some(Ok((entry.key().to_vec(), entry.value().to_vec())))
+                    return Some(Ok((entry.key().to_vec(), entry.value().to_vec())));
                 }
                 None => {
                     self.nodes_to_visit.pop_front();
 
                     self.index = 0;
-
-                    self.next()
                 }
             }
+
+            self.next()
         } else {
             let last = self.nodes_to_visit.pop_front().unwrap();
-            let mut interior_nodes = InteriorNodeReader::new(last, self.tree.key_size)
+            let last = self.transaction.node(last).unwrap();
+            let mut interior_nodes = InteriorNodeReader::new(last, self.key_size)
                 .values()
                 .collect::<Vec<_>>();
             interior_nodes.reverse();
 
             for next_node in interior_nodes {
-                let value = self.tree.node(next_node);
-
-                match value {
-                    Ok(value) => self.nodes_to_visit.push_front(value),
-                    Err(error) => return Some(Err(error)),
-                }
+                self.nodes_to_visit.push_front(next_node);
             }
 
             self.next()
@@ -92,28 +103,17 @@ pub struct Tree<T: Storage> {
     value_size: usize,
 }
 
-// TODO this should have &[u8] instead of vecs!
-type TreeIteratorItem = Result<(Vec<u8>, Vec<u8>), TreeError>;
+struct TreeTransaction<'storage, TStorage: Storage + 'storage> {
+    transaction: TStorage::Transaction<'storage>,
 
-impl<T: Storage> Tree<T> {
-    // TODO also create a "new_read" method, or something like that (that reads a tree that already
-    // exists from storage)
-    pub fn new(mut storage: T, key_size: usize, value_size: usize) -> Result<Self, TreeError> {
-        // TODO assert that the storage is empty, and that the header get's the 0th page, as we
-        // depend on that invariant (i.e. PageIndex=0 must always refer to the TreeData and not to
-        // a node)!
+    // TODO figure something out so we don't have to pass those around everywhere
+    key_size: usize,
+    value_size: usize,
+}
 
-        TreeData::new_in(&mut storage, key_size, value_size)?;
-
-        Ok(Self {
-            storage,
-            key_size,
-            value_size,
-        })
-    }
-
+impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage> {
     fn header(&self) -> Result<&TreeData, TreeError> {
-        let header_page = self.storage.get(PageIndex::zeroed())?;
+        let header_page = self.transaction.get(PageIndex::zeroed())?;
 
         Ok(header_page.data())
     }
@@ -124,13 +124,13 @@ impl<T: Storage> Tree<T> {
         write: impl FnOnce(&mut TreeData) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self
-            .storage
+            .transaction
             .write(PageIndex::zeroed(), |page| write(page.data_mut()))?)
     }
 
     fn node(&self, index: PageIndex) -> Result<&Node, TreeError> {
         assert!(index != PageIndex::zeroed());
-        let page = self.storage.get(index)?;
+        let page = self.transaction.get(index)?;
 
         Ok(page.data())
     }
@@ -143,79 +143,21 @@ impl<T: Storage> Tree<T> {
     ) -> Result<TReturn, TreeError> {
         assert!(index != PageIndex::zeroed());
 
-        Ok(self.storage.write(index, |page| write(page.data_mut()))?)
+        Ok(self
+            .transaction
+            .write(index, |page| write(page.data_mut()))?)
     }
 
-    // TODO make this take a non-mut reference
-    // TODO this whole method must happen in transaction, so the tree is never accessible in an
-    // inconsistent state
-    pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), TreeError> {
-        let key_size = self.key_size;
-        let value_size = self.value_size;
-
-        let header: &TreeData = self.header()?;
-
-        let root_index = header.root;
-
-        let target_node_index = self.leaf_search(key, header.root);
-        let (parent_index, insert_result) = self.write_node(target_node_index, |target_node| {
-            // TODO parent_index should be a part of insert_result
-            let parent_index = target_node.parent();
-            let insert_result =
-                LeafNodeWriter::new(target_node, key_size, value_size).insert(key, value);
-            (parent_index, insert_result)
-        })?;
-        let insert_result = insert_result?;
-
-        match insert_result {
-            LeafInsertResult::Done => Ok(()),
-            LeafInsertResult::Split {
-                new_node,
-                split_key,
-            } => {
-                if let Some(_parent_index) = parent_index {
-                    todo!();
-                } else {
-                    let mut new_node_page = Page::new();
-                    *new_node_page.data_mut() = *new_node;
-
-                    // TODO create a `reserve_page` method, so that the storage can give us an ID,
-                    // but the write can be deferred
-                    let new_node_index = self.storage.insert(new_node_page)?;
-
-                    let mut new_root_page = Page::new();
-                    *new_root_page.data_mut() = Node::new_internal_root();
-
-                    let new_root_page_index = self.storage.insert(new_root_page)?;
-
-                    self.write_node(new_root_page_index, |new_root| {
-                        let mut new_root_writer = InteriorNodeWriter::new(new_root, key_size);
-
-                        new_root_writer.set_first_pointer(root_index);
-                        new_root_writer.insert_node(&split_key, new_node_index);
-                    })?;
-
-                    self.write_node(new_node_index, |new_node| {
-                        new_node.set_parent(new_root_page_index);
-                    })?;
-
-                    self.write_node(target_node_index, |target_node| {
-                        target_node.set_parent(new_root_page_index);
-                    })?;
-
-                    self.write_header(|header| header.root = new_root_page_index)?;
-
-                    Ok(())
-                }
-            }
-        }
+    // TODO this really should not exist, instead the transaction should be able to execute more
+    // specific actions and not allow page-level access
+    fn insert(&mut self, page: Page) -> Result<PageIndex, TreeError> {
+        Ok(self.transaction.insert(page)?)
     }
 
-    // TODO we also need non-mut leaf_search!
     fn leaf_search(&self, key: &[u8], node_index: PageIndex) -> PageIndex {
         assert!(node_index != PageIndex::zeroed());
 
-        let node_page = self.storage.get(node_index).unwrap();
+        let node_page = self.transaction.get(node_index).unwrap();
         let node = node_page.data::<Node>();
 
         if node.is_leaf() {
@@ -239,10 +181,115 @@ impl<T: Storage> Tree<T> {
             None => interior_node_reader.last_value(),
         }
     }
+}
+
+// TODO this should have &[u8] instead of vecs!
+type TreeIteratorItem = Result<(Vec<u8>, Vec<u8>), TreeError>;
+
+impl<T: Storage> Tree<T> {
+    // TODO also create a "new_read" method, or something like that (that reads a tree that already
+    // exists from storage)
+    pub fn new(mut storage: T, key_size: usize, value_size: usize) -> Result<Self, TreeError> {
+        // TODO assert that the storage is empty, and that the header get's the 0th page, as we
+        // depend on that invariant (i.e. PageIndex=0 must always refer to the TreeData and not to
+        // a node)!
+
+        TreeData::new_in(&mut storage, key_size, value_size)?;
+
+        Ok(Self {
+            storage,
+            key_size,
+            value_size,
+        })
+    }
+
+    // TODO make this take a non-mut reference
+    // TODO this whole method must happen in transaction, so the tree is never accessible in an
+    // inconsistent state
+    pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), TreeError> {
+        let key_size = self.key_size;
+        let value_size = self.value_size;
+
+        let mut transaction = TreeTransaction::<'_, T> {
+            transaction: self.storage.transaction()?,
+            key_size: self.key_size,
+            value_size: self.value_size,
+        };
+
+        let header: &TreeData = transaction.header()?;
+
+        let root_index = header.root;
+
+        let target_node_index = transaction.leaf_search(key, header.root);
+        let (parent_index, insert_result) =
+            transaction.write_node(target_node_index, |target_node| {
+                // TODO parent_index should be a part of insert_result
+                let parent_index = target_node.parent();
+                let insert_result =
+                    LeafNodeWriter::new(target_node, key_size, value_size).insert(key, value);
+                (parent_index, insert_result)
+            })?;
+        let insert_result = insert_result?;
+
+        match insert_result {
+            LeafInsertResult::Done => Ok(()),
+            LeafInsertResult::Split {
+                new_node,
+                split_key,
+            } => {
+                if let Some(_parent_index) = parent_index {
+                    todo!();
+                } else {
+                    let mut new_node_page = Page::new();
+                    *new_node_page.data_mut() = *new_node;
+
+                    // TODO create a `reserve_page` method, so that the storage can give us an ID,
+                    // but the write can be deferred
+                    let new_node_index = transaction.insert(new_node_page)?;
+
+                    let mut new_root_page = Page::new();
+                    *new_root_page.data_mut() = Node::new_internal_root();
+
+                    let new_root_page_index = transaction.insert(new_root_page)?;
+
+                    transaction.write_node(new_root_page_index, |new_root| {
+                        let mut new_root_writer = InteriorNodeWriter::new(new_root, key_size);
+
+                        new_root_writer.set_first_pointer(root_index);
+                        new_root_writer.insert_node(&split_key, new_node_index);
+                    })?;
+
+                    transaction.write_node(new_node_index, |new_node| {
+                        new_node.set_parent(new_root_page_index);
+                    })?;
+
+                    transaction.write_node(target_node_index, |target_node| {
+                        target_node.set_parent(new_root_page_index);
+                    })?;
+
+                    transaction.write_header(|header| header.root = new_root_page_index)?;
+
+                    Ok(())
+                }
+            }
+        }
+    }
 
     #[allow(unused)]
-    fn iter(&self) -> Result<impl Iterator<Item = TreeIteratorItem>, TreeError> {
-        TreeIterator::new(self)
+    // TODO make it take non-mut reference
+    fn iter(&mut self) -> Result<impl Iterator<Item = TreeIteratorItem>, TreeError> {
+        let key_size = self.key_size;
+        let value_size = self.value_size;
+
+        TreeIterator::new(self.transaction()?, key_size, value_size)
+    }
+
+    fn transaction(&mut self) -> Result<TreeTransaction<'_, T>, TreeError> {
+        Ok(TreeTransaction::<T> {
+            transaction: self.storage.transaction()?,
+            key_size: self.key_size,
+            value_size: self.value_size,
+        })
     }
 }
 
@@ -276,6 +323,7 @@ impl TreeData {
         key_size: usize,
         value_size: usize,
     ) -> Result<(), TreeError> {
+        let mut transaction = storage.transaction()?;
         let mut header_page = Page::new();
         *header_page.data_mut() = Self {
             key_size: key_size as u64,
@@ -284,16 +332,16 @@ impl TreeData {
             _unused: [0; _],
         };
 
-        let header_index = storage.insert(header_page)?;
+        let header_index = transaction.insert(header_page)?;
 
         assert!(header_index == PageIndex::zeroed());
 
         let mut root_page = Page::new();
         *root_page.data_mut() = Node::new_leaf_root();
 
-        let root_index = storage.insert(root_page).unwrap();
+        let root_index = transaction.insert(root_page).unwrap();
 
-        storage.write(header_index, |page| {
+        transaction.write(header_index, |page| {
             page.data_mut::<TreeData>().root = root_index;
         })?;
 
