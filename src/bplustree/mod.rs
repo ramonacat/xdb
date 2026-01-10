@@ -118,10 +118,14 @@ impl<T: Storage> Tree<T> {
         Ok(header_page.data())
     }
 
-    fn header_mut(&mut self) -> Result<&mut TreeData, TreeError> {
-        let header_page = self.storage.get_mut(PageIndex::zeroed())?;
+    // TODO make this take a non-mut reference, and do per-page locking
+    fn write_header<TReturn>(
+        &mut self,
+        write: impl FnOnce(&mut TreeData) -> TReturn,
+    ) -> Result<TReturn, TreeError> {
+        let header_page = self.storage.get_mut(PageIndex::zeroed())?.data_mut();
 
-        Ok(header_page.data_mut())
+        Ok(write(header_page))
     }
 
     fn node(&self, index: PageIndex) -> Result<&Node, TreeError> {
@@ -131,13 +135,21 @@ impl<T: Storage> Tree<T> {
         Ok(page.data())
     }
 
-    fn node_mut(&mut self, index: PageIndex) -> Result<&mut Node, TreeError> {
+    // TODO make this take a non-mut reference
+    fn write_node<TReturn>(
+        &mut self,
+        index: PageIndex,
+        write: impl FnOnce(&mut Node) -> TReturn,
+    ) -> Result<TReturn, TreeError> {
         assert!(index != PageIndex::zeroed());
-        let page = self.storage.get_mut(index)?;
+        let page = self.storage.get_mut(index)?.data_mut();
 
-        Ok(page.data_mut())
+        Ok(write(page))
     }
 
+    // TODO make this take a non-mut reference
+    // TODO this whole method must happen in transaction, so the tree is never accessible in an
+    // inconsistent state
     pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), TreeError> {
         let key_size = self.key_size;
         let value_size = self.value_size;
@@ -147,12 +159,14 @@ impl<T: Storage> Tree<T> {
         let root_index = header.root;
 
         let target_node_index = self.leaf_search(key, header.root);
-        let target_node = self.node_mut(target_node_index)?;
-
-        let parent_index = target_node.parent();
-
-        let insert_result =
-            LeafNodeWriter::new(target_node, key_size, value_size).insert(key, value)?;
+        let (parent_index, insert_result) = self.write_node(target_node_index, |target_node| {
+            // TODO parent_index should be a part of insert_result
+            let parent_index = target_node.parent();
+            let insert_result =
+                LeafNodeWriter::new(target_node, key_size, value_size).insert(key, value);
+            (parent_index, insert_result)
+        })?;
+        let insert_result = insert_result?;
 
         match insert_result {
             node::LeafInsertResult::Done => Ok(()),
@@ -174,21 +188,23 @@ impl<T: Storage> Tree<T> {
                     *new_root_page.data_mut() = Node::new_internal_root();
 
                     let new_root_page_index = self.storage.insert(new_root_page)?;
-                    let new_root = self.node_mut(new_root_page_index)?;
 
-                    let mut new_root_writer = InteriorNodeWriter::new(new_root, key_size);
+                    self.write_node(new_root_page_index, |new_root| {
+                        let mut new_root_writer = InteriorNodeWriter::new(new_root, key_size);
 
-                    new_root_writer.set_first_pointer(root_index);
-                    new_root_writer.insert_node(&split_key, new_node_index);
+                        new_root_writer.set_first_pointer(root_index);
+                        new_root_writer.insert_node(&split_key, new_node_index);
+                    })?;
 
-                    let new_node = self.node_mut(new_node_index)?;
-                    new_node.set_parent(new_root_page_index);
+                    self.write_node(new_node_index, |new_node| {
+                        new_node.set_parent(new_root_page_index);
+                    })?;
 
-                    let target_node = self.node_mut(target_node_index)?;
-                    target_node.set_parent(new_root_page_index);
+                    self.write_node(target_node_index, |target_node| {
+                        target_node.set_parent(new_root_page_index);
+                    })?;
 
-                    let header = self.header_mut()?;
-                    header.root = new_root_page_index;
+                    self.write_header(|header| header.root = new_root_page_index)?;
 
                     Ok(())
                 }

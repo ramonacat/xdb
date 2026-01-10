@@ -26,6 +26,8 @@ impl Display for PageIndex {
 pub trait Storage {
     fn get(&self, index: PageIndex) -> Result<&Page, StorageError>;
     // TODO take a non-mut self reference
+    // TODO make this called write instead, take a closure and provide the mutable reference only
+    // for the scope of the closure
     fn get_mut(&mut self, index: PageIndex) -> Result<&mut Page, StorageError>;
     // TODO take a non-mut self reference
     fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError>;
