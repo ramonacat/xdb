@@ -256,8 +256,8 @@ pub enum TreeError {
 }
 
 impl TreeData {
-    pub fn new_in(
-        storage: &mut dyn Storage,
+    pub fn new_in<T: Storage>(
+        storage: &mut T,
         key_size: usize,
         value_size: usize,
     ) -> Result<(), TreeError> {
@@ -299,7 +299,7 @@ mod test {
 
     use crate::{
         bplustree::node::{LeafInsertResult, LeafNodeReader},
-        storage::{InMemoryStorage, test::TestStorage},
+        storage::in_memory::{InMemoryStorage, test::TestStorage},
     };
 
     use super::*;

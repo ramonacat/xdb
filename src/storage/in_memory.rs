@@ -1,31 +1,7 @@
-use std::fmt::Display;
-
-use bytemuck::{Pod, Zeroable};
-use thiserror::Error;
-
-use crate::page::Page;
-
-#[derive(Debug, Error)]
-pub enum StorageError {
-    #[error("The page at index {0:?} does not exist")]
-    PageNotFound(PageIndex),
-}
-
-#[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Eq)]
-#[repr(transparent)]
-pub struct PageIndex(u64);
-
-impl Display for PageIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-pub trait Storage {
-    fn get(&self, index: PageIndex) -> Result<&Page, StorageError>;
-    fn get_mut(&mut self, index: PageIndex) -> Result<&mut Page, StorageError>;
-    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError>;
-}
+use crate::{
+    page::Page,
+    storage::{PageIndex, Storage, StorageError},
+};
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
@@ -70,6 +46,7 @@ pub mod test {
     use super::*;
     use crate::storage::Storage;
 
+    // TODO a storage that collects metrics should probably be a thing outside of tests
     pub struct TestStorage<T: Storage> {
         page_count: Arc<AtomicUsize>,
         inner: T,
@@ -82,7 +59,7 @@ pub mod test {
     }
 
     impl<T: Storage> Storage for TestStorage<T> {
-        fn get(&self, index: PageIndex) -> Result<&crate::page::Page, StorageError> {
+        fn get(&self, index: PageIndex) -> Result<&Page, StorageError> {
             self.inner.get(index)
         }
 

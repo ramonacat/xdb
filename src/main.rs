@@ -5,7 +5,7 @@ use std::sync::{
 
 use crate::{
     bplustree::Tree,
-    storage::{InMemoryStorage, test::TestStorage},
+    storage::in_memory::{InMemoryStorage, test::TestStorage},
 };
 
 mod bplustree;
