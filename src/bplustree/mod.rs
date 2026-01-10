@@ -7,8 +7,8 @@ use crate::bplustree::node::interior::InteriorNodeWriter;
 use crate::bplustree::node::leaf::LeafInsertResult;
 use crate::bplustree::node::leaf::LeafNodeReader;
 use crate::bplustree::node::leaf::LeafNodeWriter;
-use crate::page::Page;
 use crate::storage::PageIndex;
+use crate::storage::PageReservation;
 use crate::storage::Storage;
 use crate::storage::StorageError;
 use crate::storage::Transaction;
@@ -106,7 +106,10 @@ pub struct Tree<T: Storage> {
     value_size: usize,
 }
 
-struct TreeTransaction<'storage, TStorage: Storage + 'storage> {
+struct TreeTransaction<'storage, TStorage: Storage + 'storage>
+where
+    Self: 'storage,
+{
     transaction: TStorage::Transaction<'storage>,
 
     // TODO figure something out so we don't have to pass those around everywhere
@@ -126,7 +129,7 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
 
     // TODO make this take a non-mut reference, and do per-page locking
     fn write_header<TReturn>(
-        &mut self,
+        &self,
         write: impl FnOnce(&mut TreeData) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self
@@ -144,9 +147,8 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
         Ok(self.transaction.read(index, |page| read(page.data()))?)
     }
 
-    // TODO make this take a non-mut reference
     fn write_node<TReturn>(
-        &mut self,
+        &self,
         index: PageIndex,
         write: impl FnOnce(&mut Node) -> TReturn,
     ) -> Result<TReturn, TreeError> {
@@ -155,12 +157,6 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
         Ok(self
             .transaction
             .write(index, |page| write(page.data_mut()))?)
-    }
-
-    // TODO this really should not exist, instead the transaction should be able to execute more
-    // specific actions and not allow page-level access
-    fn insert(&mut self, page: Page) -> Result<PageIndex, TreeError> {
-        Ok(self.transaction.insert(page)?)
     }
 
     // TODO this should return a Result
@@ -194,6 +190,24 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
 
         result.unwrap()
     }
+
+    fn reserve_node(&self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
+        Ok(self.transaction.reserve()?)
+    }
+
+    fn write_new(&self, write: impl Fn(&mut Node)) -> Result<PageIndex, TreeError> {
+        Ok(self.transaction.write_new(|page| write(page.data_mut()))?)
+    }
+
+    fn write_reserved<TReturn>(
+        &self,
+        reservation: TStorage::PageReservation<'storage>,
+        write: impl FnOnce(&mut Node) -> TReturn,
+    ) -> Result<TReturn, TreeError> {
+        Ok(self
+            .transaction
+            .write_reserved(reservation, |page| write(page.data_mut()))?)
+    }
 }
 
 // TODO this should have &[u8] instead of vecs!
@@ -223,7 +237,7 @@ impl<T: Storage> Tree<T> {
         let key_size = self.key_size;
         let value_size = self.value_size;
 
-        let mut transaction = TreeTransaction::<'_, T> {
+        let transaction = TreeTransaction::<'_, T> {
             transaction: self.storage.transaction()?,
             key_size: self.key_size,
             value_size: self.value_size,
@@ -245,33 +259,29 @@ impl<T: Storage> Tree<T> {
         match insert_result {
             LeafInsertResult::Done => Ok(()),
             LeafInsertResult::Split {
-                new_node,
+                mut new_node,
                 split_key,
             } => {
                 if let Some(_parent_index) = parent_index {
                     todo!();
                 } else {
-                    let mut new_node_page = Page::new();
-                    *new_node_page.data_mut() = *new_node;
-
                     // TODO create a `reserve_page` method, so that the storage can give us an ID,
                     // but the write can be deferred
-                    let new_node_index = transaction.insert(new_node_page)?;
-
-                    let mut new_root_page = Page::new();
-                    *new_root_page.data_mut() = Node::new_internal_root();
-
-                    let new_root_page_index = transaction.insert(new_root_page)?;
+                    let new_node_reservation = transaction.reserve_node()?;
+                    let new_root_page_index =
+                        transaction.write_new(|node| *node = Node::new_internal_root())?;
 
                     transaction.write_node(new_root_page_index, |new_root| {
                         let mut new_root_writer = InteriorNodeWriter::new(new_root, key_size);
 
                         new_root_writer.set_first_pointer(root_index);
-                        new_root_writer.insert_node(&split_key, new_node_index);
+                        new_root_writer.insert_node(&split_key, new_node_reservation.index());
                     })?;
 
-                    transaction.write_node(new_node_index, |new_node| {
+                    transaction.write_reserved(new_node_reservation, |x| {
                         new_node.set_parent(new_root_page_index);
+
+                        *x = *new_node;
                     })?;
 
                     transaction.write_node(target_node_index, |target_node| {
@@ -334,26 +344,22 @@ impl TreeData {
         key_size: usize,
         value_size: usize,
     ) -> Result<(), TreeError> {
-        let mut transaction = storage.transaction()?;
-        let mut header_page = Page::new();
-        *header_page.data_mut() = Self {
-            key_size: key_size as u64,
-            value_size: value_size as u64,
-            root: PageIndex::zeroed(),
-            _unused: [0; _],
-        };
+        let transaction = storage.transaction()?;
 
-        let header_index = transaction.insert(header_page)?;
+        let header_page = transaction.reserve()?;
+        assert!(header_page.index() == PageIndex::zeroed());
 
-        assert!(header_index == PageIndex::zeroed());
+        let root_index = transaction.write_new(|page| {
+            *page.data_mut() = Node::new_leaf_root();
+        })?;
 
-        let mut root_page = Page::new();
-        *root_page.data_mut() = Node::new_leaf_root();
-
-        let root_index = transaction.insert(root_page).unwrap();
-
-        transaction.write(header_index, |page| {
-            page.data_mut::<TreeData>().root = root_index;
+        transaction.write_reserved(header_page, |page| {
+            *page.data_mut() = Self {
+                key_size: key_size as u64,
+                value_size: value_size as u64,
+                root: root_index,
+                _unused: [0; _],
+            }
         })?;
 
         Ok(())

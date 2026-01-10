@@ -10,6 +10,7 @@ use crate::page::Page;
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("The page at index {0:?} does not exist")]
+    #[allow(unused)] // TODO fix the error handling!
     PageNotFound(PageIndex),
 }
 
@@ -23,17 +24,32 @@ impl Display for PageIndex {
     }
 }
 
-pub trait Transaction<'storage> {
+pub trait PageReservation<'storage> {
+    fn index(&self) -> PageIndex;
+}
+
+pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
     fn read<T>(&self, index: PageIndex, read: impl FnOnce(&Page) -> T) -> Result<T, StorageError>;
 
     // TODO take a non-mut self reference
     fn write<T>(
-        &mut self,
+        &self,
         index: PageIndex,
         write: impl FnOnce(&mut Page) -> T,
     ) -> Result<T, StorageError>;
+
     // TODO take a non-mut self reference
-    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError>;
+    fn reserve(&self) -> Result<TPageReservation, StorageError>;
+
+    // TODO take a non-mut self reference
+    fn write_reserved<T>(
+        &self,
+        reservation: TPageReservation,
+        write: impl FnOnce(&mut Page) -> T,
+    ) -> Result<T, StorageError>;
+
+    // TODO take a non-mut self reference
+    fn write_new(&self, write: impl FnOnce(&mut Page)) -> Result<PageIndex, StorageError>;
 
     // TODO actually make this useful and ensure transactional consistency
     #[allow(unused)]
@@ -41,12 +57,17 @@ pub trait Transaction<'storage> {
 }
 
 pub trait Storage {
-    type Transaction<'a>: Transaction<'a>
+    type PageReservation<'storage>: PageReservation<'storage>
     where
-        Self: 'a;
+        Self: 'storage;
+    type Transaction<'storage>: Transaction<'storage, Self::PageReservation<'storage>>
+    where
+        Self: 'storage;
 
     // TODO take a non-mut reference
     fn transaction<'storage>(
         &'storage mut self,
-    ) -> Result<Self::Transaction<'storage>, StorageError>;
+    ) -> Result<Self::Transaction<'storage>, StorageError>
+    where
+        Self: Sized;
 }

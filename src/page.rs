@@ -29,14 +29,6 @@ pub struct Page {
 const _: () = assert!(size_of::<Page>() == PAGE_SIZE);
 
 impl Page {
-    // TODO get rid of this, and instead make it new_from_data or something
-    pub fn new() -> Self {
-        Self {
-            header: PageHeader::zeroed(),
-            data: [0; _],
-        }
-    }
-
     #[allow(unused)] // TODO this will be needed for file storage
     pub fn serialize(mut self) -> [u8; PAGE_SIZE] {
         self.header.checksum.clear();
@@ -82,7 +74,7 @@ mod tests {
 
     #[test]
     pub fn serialize_has_correct_crc32() {
-        let page = Page::new();
+        let page = Page::zeroed();
 
         let serialized = page.serialize();
 

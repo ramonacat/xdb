@@ -1,27 +1,46 @@
+use std::sync::RwLock;
+
+use bytemuck::Zeroable;
+
 use crate::{
     page::Page,
-    storage::{PageIndex, Storage, StorageError, Transaction},
+    storage::{PageIndex, PageReservation, Storage, StorageError, Transaction},
 };
 
-pub struct InMemoryTransaction<'storage> {
-    storage: &'storage mut InMemoryStorage,
+// TODO impl Drop to return the page to free pool if it doesn't get written
+pub struct InMemoryPageReservation<'storage> {
+    #[allow(unused)] // TODO use it?
+    storage: &'storage InMemoryStorage,
+    index: PageIndex,
 }
 
-impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
+impl<'storage> PageReservation<'storage> for InMemoryPageReservation<'storage> {
+    fn index(&self) -> PageIndex {
+        self.index
+    }
+}
+
+pub struct InMemoryTransaction<'storage> {
+    storage: &'storage InMemoryStorage,
+}
+
+impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
+    for InMemoryTransaction<'storage>
+{
     fn commit(self) -> Result<(), StorageError> {
         todo!()
     }
 
     fn write<T>(
-        &mut self,
+        &self,
         index: PageIndex,
         write: impl FnOnce(&mut Page) -> T,
     ) -> Result<T, StorageError> {
-        self.storage.write(index, write)
-    }
+        // TODO kill unwraps
+        let mut storage = self.storage.pages.write().unwrap();
+        let page = storage.get_mut(index.0 as usize).unwrap();
 
-    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
-        self.storage.insert(page)
+        Ok(write(page))
     }
 
     fn read<TReturn>(
@@ -29,52 +48,59 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
         index: PageIndex,
         read: impl FnOnce(&Page) -> TReturn,
     ) -> Result<TReturn, StorageError> {
-        let page = self.storage.get(index)?;
+        let storage = self.storage.pages.read().unwrap();
+        let page = storage.get(index.0 as usize).unwrap();
 
         Ok(read(page))
+    }
+
+    fn write_new(&self, write: impl FnOnce(&mut Page)) -> Result<PageIndex, StorageError> {
+        let mut page = Page::zeroed();
+        write(&mut page);
+
+        let mut storage = self.storage.pages.write().unwrap();
+        storage.push(page);
+
+        Ok(PageIndex((storage.len() - 1) as u64))
+    }
+
+    fn reserve<'a>(&'a self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
+        let mut storage = self.storage.pages.write().unwrap();
+        storage.push(Page::zeroed());
+
+        let index = PageIndex((storage.len() - 1) as u64);
+
+        Ok(InMemoryPageReservation {
+            storage: self.storage,
+            index,
+        })
+    }
+
+    fn write_reserved<'a, T>(
+        &'a self,
+        reservation: InMemoryPageReservation<'storage>,
+        write: impl FnOnce(&mut Page) -> T,
+    ) -> Result<T, StorageError> {
+        self.write(reservation.index, write)
     }
 }
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
-    pages: Vec<Page>,
+    pages: RwLock<Vec<Page>>,
 }
 
 impl InMemoryStorage {
     pub fn new() -> Self {
-        Self { pages: vec![] }
-    }
-}
-
-impl InMemoryStorage {
-    fn get(&self, index: PageIndex) -> Result<&Page, StorageError> {
-        self.pages
-            .get(index.0 as usize)
-            .map_or_else(|| Err(StorageError::PageNotFound(index)), Ok)
-    }
-
-    fn write<T>(
-        &mut self,
-        index: PageIndex,
-        write: impl FnOnce(&mut Page) -> T,
-    ) -> Result<T, StorageError> {
-        let page = self
-            .pages
-            .get_mut(index.0 as usize)
-            .map_or_else(|| Err(StorageError::PageNotFound(index)), Ok)?;
-
-        Ok(write(page))
-    }
-
-    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
-        self.pages.push(page);
-
-        Ok(PageIndex((self.pages.len() - 1) as u64))
+        Self {
+            pages: RwLock::new(vec![]),
+        }
     }
 }
 
 impl Storage for InMemoryStorage {
     type Transaction<'a> = InMemoryTransaction<'a>;
+    type PageReservation<'a> = InMemoryPageReservation<'a>;
 
     fn transaction<'storage>(
         &'storage mut self,
@@ -96,21 +122,21 @@ pub mod test {
     use super::*;
     use crate::storage::Storage;
 
-    pub struct TestTransaction<'a, T: Transaction<'a>>(T, Arc<AtomicUsize>, PhantomData<&'a T>);
+    pub struct TestTransaction<'a, T: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>(
+        T,
+        Arc<AtomicUsize>,
+        PhantomData<&'a TStorage>,
+    );
 
-    impl<'a, T: Transaction<'a>> Transaction<'a> for TestTransaction<'a, T> {
+    impl<'a, T: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
+        Transaction<'a, TStorage::PageReservation<'a>> for TestTransaction<'a, T, TStorage>
+    {
         fn write<TReturn>(
-            &mut self,
+            &self,
             index: PageIndex,
             write: impl FnOnce(&mut Page) -> TReturn,
         ) -> Result<TReturn, StorageError> {
             self.0.write(index, write)
-        }
-
-        fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
-            self.1.fetch_add(1, Ordering::Relaxed);
-
-            self.0.insert(page)
         }
 
         fn commit(self) -> Result<(), StorageError> {
@@ -123,6 +149,26 @@ pub mod test {
             read: impl FnOnce(&Page) -> TReturn,
         ) -> Result<TReturn, StorageError> {
             self.0.read(index, read)
+        }
+
+        fn write_new(&self, write: impl FnOnce(&mut Page)) -> Result<PageIndex, StorageError> {
+            self.1.fetch_add(1, Ordering::Relaxed);
+
+            self.0.write_new(write)
+        }
+
+        fn reserve(&self) -> Result<TStorage::PageReservation<'a>, StorageError> {
+            self.0.reserve()
+        }
+
+        fn write_reserved<TReturn>(
+            &self,
+            reservation: TStorage::PageReservation<'a>,
+            write: impl FnOnce(&mut Page) -> TReturn,
+        ) -> Result<TReturn, StorageError> {
+            self.1.fetch_add(1, Ordering::Relaxed);
+
+            self.0.write_reserved(reservation, write)
         }
     }
 
@@ -140,7 +186,12 @@ pub mod test {
 
     impl<T: Storage> Storage for TestStorage<T> {
         type Transaction<'a>
-            = TestTransaction<'a, T::Transaction<'a>>
+            = TestTransaction<'a, T::Transaction<'a>, T>
+        where
+            T: 'a;
+
+        type PageReservation<'a>
+            = T::PageReservation<'a>
         where
             T: 'a;
 
