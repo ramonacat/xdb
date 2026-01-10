@@ -1,18 +1,18 @@
 pub mod dot;
 mod node;
 
-use std::collections::VecDeque;
-
-use crate::bplustree::node::InteriorNodeReader;
-use crate::bplustree::node::InteriorNodeWriter;
-use crate::bplustree::node::LeafNodeReader;
-use crate::bplustree::node::LeafNodeWriter;
 use crate::bplustree::node::Node;
+use crate::bplustree::node::interior::InteriorNodeReader;
+use crate::bplustree::node::interior::InteriorNodeWriter;
+use crate::bplustree::node::leaf::LeafInsertResult;
+use crate::bplustree::node::leaf::LeafNodeReader;
+use crate::bplustree::node::leaf::LeafNodeWriter;
 use crate::page::Page;
 use crate::storage::PageIndex;
 use crate::storage::Storage;
 use crate::storage::StorageError;
 use bytemuck::{Pod, Zeroable};
+use std::collections::VecDeque;
 use thiserror::Error;
 
 use crate::page::PAGE_DATA_SIZE;
@@ -168,8 +168,8 @@ impl<T: Storage> Tree<T> {
         let insert_result = insert_result?;
 
         match insert_result {
-            node::LeafInsertResult::Done => Ok(()),
-            node::LeafInsertResult::Split {
+            LeafInsertResult::Done => Ok(()),
+            LeafInsertResult::Split {
                 new_node,
                 split_key,
             } => {
@@ -310,10 +310,7 @@ mod test {
 
     use bytemuck::from_bytes;
 
-    use crate::{
-        bplustree::node::{LeafInsertResult, LeafNodeReader},
-        storage::in_memory::{InMemoryStorage, test::TestStorage},
-    };
+    use crate::storage::in_memory::{InMemoryStorage, test::TestStorage};
 
     use super::*;
 

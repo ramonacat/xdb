@@ -1,5 +1,6 @@
+use crate::bplustree::node::interior::InteriorNodeReader;
 use crate::{
-    bplustree::{InteriorNodeReader, LeafNodeReader, Tree, TreeError},
+    bplustree::{Tree, TreeError, node::leaf::LeafNodeReader},
     storage::{PageIndex, Storage},
 };
 
