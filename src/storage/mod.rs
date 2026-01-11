@@ -31,24 +31,20 @@ pub trait PageReservation<'storage> {
 pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
     fn read<T>(&self, index: PageIndex, read: impl FnOnce(&Page) -> T) -> Result<T, StorageError>;
 
-    // TODO take a non-mut self reference
     fn write<T>(
         &self,
         index: PageIndex,
         write: impl FnOnce(&mut Page) -> T,
     ) -> Result<T, StorageError>;
 
-    // TODO take a non-mut self reference
     fn reserve(&self) -> Result<TPageReservation, StorageError>;
 
-    // TODO take a non-mut self reference
     fn write_reserved<T>(
         &self,
         reservation: TPageReservation,
         write: impl FnOnce(&mut Page) -> T,
     ) -> Result<T, StorageError>;
 
-    // TODO take a non-mut self reference
     fn write_new(&self, write: impl FnOnce(&mut Page)) -> Result<PageIndex, StorageError>;
 
     // TODO actually make this useful and ensure transactional consistency
@@ -64,7 +60,6 @@ pub trait Storage {
     where
         Self: 'storage;
 
-    // TODO take a non-mut reference
     fn transaction<'storage>(&'storage self) -> Result<Self::Transaction<'storage>, StorageError>
     where
         Self: Sized;

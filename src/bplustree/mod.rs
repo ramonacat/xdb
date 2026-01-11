@@ -1,6 +1,8 @@
+mod algorithms;
 pub mod dot;
 mod node;
 
+use crate::bplustree::algorithms::leaf_search;
 use crate::bplustree::node::Node;
 use crate::bplustree::node::interior::InteriorNodeReader;
 use crate::bplustree::node::interior::InteriorNodeWriter;
@@ -159,38 +161,6 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
             .write(index, |page| write(page.data_mut()))?)
     }
 
-    // TODO this should return a Result
-    fn leaf_search(&self, key: &[u8], node_index: PageIndex) -> PageIndex {
-        assert!(node_index != PageIndex::zeroed());
-
-        let result = self.transaction.read(node_index, |node_page| {
-            let node = node_page.data::<Node>();
-
-            if node.is_leaf() {
-                return node_index;
-            }
-
-            let interior_node_reader = InteriorNodeReader::new(node, self.key_size);
-
-            let mut found_page_index = None;
-
-            for (key_index, node_key) in interior_node_reader.keys().enumerate() {
-                if node_key > key {
-                    let child_page: PageIndex = interior_node_reader.value_at(key_index).unwrap();
-
-                    found_page_index = Some(child_page);
-                }
-            }
-
-            match found_page_index {
-                Some(child_page_index) => self.leaf_search(key, child_page_index),
-                None => interior_node_reader.last_value(),
-            }
-        });
-
-        result.unwrap()
-    }
-
     fn reserve_node(&self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
         Ok(self.transaction.reserve()?)
     }
@@ -230,10 +200,7 @@ impl<T: Storage> Tree<T> {
         })
     }
 
-    // TODO make this take a non-mut reference
-    // TODO this whole method must happen in transaction, so the tree is never accessible in an
-    // inconsistent state
-    pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<(), TreeError> {
+    pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<(), TreeError> {
         let key_size = self.key_size;
         let value_size = self.value_size;
 
@@ -245,7 +212,7 @@ impl<T: Storage> Tree<T> {
 
         let root_index = transaction.read_header(|h| h.root)?;
 
-        let target_node_index = transaction.leaf_search(key, root_index);
+        let target_node_index = leaf_search(&transaction, root_index, key);
         let (parent_index, insert_result) =
             transaction.write_node(target_node_index, |target_node| {
                 // TODO parent_index should be a part of insert_result
