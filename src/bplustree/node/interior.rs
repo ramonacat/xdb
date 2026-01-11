@@ -1,6 +1,12 @@
 use bytemuck::{Zeroable as _, bytes_of, from_bytes};
 
-use crate::{bplustree::Node, storage::PageIndex};
+use crate::{
+    bplustree::{
+        Node, NodeId,
+        node::{NodeReader, NodeWriter, UnknownNodeId},
+    },
+    storage::PageIndex,
+};
 
 struct InteriorNodeKeysIterator<'node> {
     node: &'node Node,
@@ -28,6 +34,12 @@ impl<'node> Iterator for InteriorNodeKeysIterator<'node> {
 pub(in crate::bplustree) struct InteriorNodeReader<'node> {
     node: &'node Node,
     key_size: usize,
+}
+
+impl<'node> NodeReader<'node> for InteriorNodeReader<'node> {
+    fn new(node: &'node Node, key_size: usize, _value_size: usize) -> Self {
+        Self { node, key_size }
+    }
 }
 
 impl<'node> InteriorNodeReader<'node> {
@@ -62,25 +74,26 @@ impl<'node> InteriorNodeReader<'node> {
         self.key_capacity() * self.key_size
     }
 
-    pub(in crate::bplustree) fn value_at(&self, index: usize) -> Option<PageIndex> {
+    pub(in crate::bplustree) fn value_at(&self, index: usize) -> Option<UnknownNodeId> {
         if index > self.key_len() {
             return None;
         }
 
         let value_start = self.values_offset() + (index * size_of::<PageIndex>());
 
-        let value = *from_bytes(&self.node.data[value_start..value_start + size_of::<PageIndex>()]);
+        let value: PageIndex =
+            *from_bytes(&self.node.data[value_start..value_start + size_of::<PageIndex>()]);
 
         assert!(value != PageIndex::zeroed());
 
-        Some(value)
+        Some(UnknownNodeId::new(value))
     }
 
-    pub(crate) fn last_value(&self) -> PageIndex {
+    pub(crate) fn last_value(&self) -> UnknownNodeId {
         self.value_at(self.key_len()).unwrap()
     }
 
-    pub(crate) fn values(&self) -> impl Iterator<Item = PageIndex> {
+    pub(crate) fn values(&self) -> impl Iterator<Item = UnknownNodeId> {
         (0..(self.key_len() + 1)).map(|x| self.value_at(x).unwrap())
     }
 }
@@ -95,6 +108,12 @@ pub(in crate::bplustree) struct InteriorNodeWriter<'node> {
     key_size: usize,
 }
 
+impl<'node> NodeWriter<'node> for InteriorNodeWriter<'node> {
+    fn new(node: &'node mut Node, key_size: usize, _value_size: usize) -> Self {
+        Self { node, key_size }
+    }
+}
+
 impl<'node> InteriorNodeWriter<'node> {
     pub(in crate::bplustree) fn new(node: &'node mut Node, key_size: usize) -> Self {
         Self { node, key_size }
@@ -104,10 +123,11 @@ impl<'node> InteriorNodeWriter<'node> {
         InteriorNodeReader::new(self.node, self.key_size)
     }
 
-    pub(crate) fn set_first_pointer(&mut self, index: PageIndex) {
+    pub(crate) fn set_first_pointer(&mut self, index: UnknownNodeId) {
         let offset = self.reader().values_offset();
 
-        self.node.data[offset..offset + size_of::<PageIndex>()].copy_from_slice(bytes_of(&index));
+        self.node.data[offset..offset + size_of::<PageIndex>()]
+            .copy_from_slice(bytes_of(&index.page()));
     }
 
     pub(crate) fn insert_node(&mut self, key: &[u8], value: PageIndex) -> InteriorInsertResult {
@@ -145,9 +165,5 @@ impl<'node> InteriorNodeWriter<'node> {
             .copy_from_slice(bytes_of(&value));
 
         InteriorInsertResult::Ok
-    }
-
-    pub(crate) fn set_parent(&mut self, new_parent: PageIndex) {
-        self.node.set_parent(new_parent);
     }
 }

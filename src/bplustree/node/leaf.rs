@@ -3,7 +3,7 @@ use bytemuck::Zeroable as _;
 use crate::{
     bplustree::{
         Node, TreeError,
-        node::{NodeFlags, NodeHeader},
+        node::{NodeFlags, NodeHeader, NodeReader, NodeWriter},
     },
     storage::PageIndex,
 };
@@ -46,6 +46,16 @@ pub(in crate::bplustree) struct LeafNodeReader<'node> {
     key_size: usize,
     value_size: usize,
     node: &'node Node,
+}
+
+impl<'node> NodeReader<'node> for LeafNodeReader<'node> {
+    fn new(node: &'node Node, key_size: usize, value_size: usize) -> Self {
+        Self {
+            key_size,
+            value_size,
+            node,
+        }
+    }
 }
 
 impl<'node> LeafNodeReader<'node> {
@@ -114,6 +124,16 @@ pub(in crate::bplustree) struct LeafNodeWriter<'node> {
     key_size: usize,
     value_size: usize,
     node: &'node mut Node,
+}
+
+impl<'node> NodeWriter<'node> for LeafNodeWriter<'node> {
+    fn new(node: &'node mut Node, key_size: usize, value_size: usize) -> Self {
+        Self {
+            key_size,
+            value_size,
+            node,
+        }
+    }
 }
 
 #[must_use]

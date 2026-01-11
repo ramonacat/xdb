@@ -1,10 +1,86 @@
 pub(super) mod interior;
 pub(super) mod leaf;
 
+use std::fmt::Display;
+
 use crate::bplustree::{InteriorNodeWriter, LeafNodeReader, LeafNodeWriter};
 use crate::storage::PageIndex;
 use crate::{bplustree::InteriorNodeReader, page::PAGE_DATA_SIZE};
 use bytemuck::{Pod, Zeroable};
+
+pub(super) trait NodeReader<'node> {
+    fn new(node: &'node Node, key_size: usize, value_size: usize) -> Self;
+}
+
+pub(super) trait NodeWriter<'node> {
+    fn new(node: &'node mut Node, key_size: usize, value_size: usize) -> Self;
+}
+
+pub(super) trait NodeId: Copy + PartialEq {
+    type Reader<'node>: NodeReader<'node>;
+    type Writer<'node>: NodeWriter<'node>;
+
+    fn page(&self) -> PageIndex;
+}
+
+// TODO rename -> AnyNodeId
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(super) struct UnknownNodeId(PageIndex);
+
+impl Display for UnknownNodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl UnknownNodeId {
+    pub fn new(index: PageIndex) -> Self {
+        assert!(index != PageIndex::zeroed());
+
+        Self(index)
+    }
+}
+
+impl NodeId for UnknownNodeId {
+    type Reader<'node> = UnknownNodeReader<'node>;
+    type Writer<'node> = UnknownNodeWriter<'node>;
+
+    fn page(&self) -> PageIndex {
+        self.0
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(super) struct LeafNodeId(PageIndex);
+
+impl LeafNodeId {
+    // TODO is there a way to enforce validity in this API?
+    pub(crate) fn from_unknown(unknown: UnknownNodeId) -> LeafNodeId {
+        Self(unknown.0)
+    }
+}
+
+impl NodeId for LeafNodeId {
+    type Reader<'node> = LeafNodeReader<'node>;
+    type Writer<'node> = LeafNodeWriter<'node>;
+
+    fn page(&self) -> PageIndex {
+        self.0
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[allow(unused)] // TODO remove if we really don't need it
+pub(super) struct InteriorNodeId(PageIndex);
+
+impl NodeId for InteriorNodeId {
+    type Reader<'node> = InteriorNodeReader<'node>;
+    type Writer<'node> = InteriorNodeWriter<'node>;
+
+    fn page(&self) -> PageIndex {
+        self.0
+    }
+}
 
 // TODO Support variable-sized values
 // TODO Support variable-sized keys?
@@ -63,13 +139,11 @@ impl Node {
         }
     }
 
-    // TODO make private
-    pub(super) fn is_leaf(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         !self.header.flags.contains(NodeFlags::INTERNAL)
     }
 
-    // TODO move to NodeReader?
-    pub(super) fn parent(&self) -> Option<PageIndex> {
+    fn parent(&self) -> Option<PageIndex> {
         if self.header.parent == PageIndex::zeroed() {
             None
         } else {
@@ -82,40 +156,35 @@ impl Node {
 
         self.header.parent = parent;
     }
-
-    // TODO avoid passing key_size/value_size here?
-    pub(super) fn reader(&'_ self, key_size: usize, value_size: usize) -> NodeReader<'_> {
-        if self.is_leaf() {
-            NodeReader::Leaf(LeafNodeReader::new(self, key_size, value_size))
-        } else {
-            NodeReader::Interior(InteriorNodeReader::new(self, key_size))
-        }
-    }
-
-    pub(super) fn writer(&'_ mut self, key_size: usize, value_size: usize) -> NodeWriter<'_> {
-        if self.is_leaf() {
-            NodeWriter::Leaf(LeafNodeWriter::new(self, key_size, value_size))
-        } else {
-            NodeWriter::Interior(InteriorNodeWriter::new(self, key_size))
-        }
-    }
 }
 
-pub(super) enum NodeReader<'node> {
+pub(super) enum UnknownNodeReader<'node> {
     Interior(InteriorNodeReader<'node>),
     Leaf(LeafNodeReader<'node>),
 }
 
-pub(super) enum NodeWriter<'node> {
+impl<'node> NodeReader<'node> for UnknownNodeReader<'node> {
+    fn new(node: &'node Node, key_size: usize, value_size: usize) -> Self {
+        if node.is_leaf() {
+            Self::Leaf(LeafNodeReader::new(node, key_size, value_size))
+        } else {
+            Self::Interior(InteriorNodeReader::new(node, key_size))
+        }
+    }
+}
+
+#[allow(unused)] // TODO remove if we really don't need it
+pub(super) enum UnknownNodeWriter<'node> {
     Interior(InteriorNodeWriter<'node>),
     Leaf(LeafNodeWriter<'node>),
 }
 
-impl<'node> NodeWriter<'node> {
-    pub(crate) fn set_parent(&mut self, new_parent: PageIndex) {
-        match self {
-            NodeWriter::Interior(writer) => writer.set_parent(new_parent),
-            NodeWriter::Leaf(writer) => writer.set_parent(new_parent),
+impl<'node> NodeWriter<'node> for UnknownNodeWriter<'node> {
+    fn new(node: &'node mut Node, key_size: usize, value_size: usize) -> Self {
+        if node.is_leaf() {
+            UnknownNodeWriter::Leaf(LeafNodeWriter::new(node, key_size, value_size))
+        } else {
+            UnknownNodeWriter::Interior(InteriorNodeWriter::new(node, key_size))
         }
     }
 }

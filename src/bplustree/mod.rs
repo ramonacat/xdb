@@ -4,8 +4,11 @@ mod node;
 
 use crate::bplustree::algorithms::leaf_search;
 use crate::bplustree::node::Node;
+use crate::bplustree::node::NodeId;
 use crate::bplustree::node::NodeReader;
 use crate::bplustree::node::NodeWriter;
+use crate::bplustree::node::UnknownNodeId;
+use crate::bplustree::node::UnknownNodeReader;
 use crate::bplustree::node::interior::InteriorNodeReader;
 use crate::bplustree::node::interior::InteriorNodeWriter;
 use crate::bplustree::node::leaf::LeafInsertResult;
@@ -29,13 +32,14 @@ const ROOT_NODE_TAIL_SIZE: usize = PAGE_DATA_SIZE - size_of::<u64>() * 2 - size_
 // in leaf nodes!
 struct TreeIterator<'tree, T: Storage> {
     transaction: TreeTransaction<'tree, T>,
-    nodes_to_visit: VecDeque<PageIndex>,
+    nodes_to_visit: VecDeque<UnknownNodeId>,
     index: usize,
 }
 
 impl<'tree, T: Storage> TreeIterator<'tree, T> {
     fn new(transaction: TreeTransaction<'tree, T>) -> Result<Self, TreeError> {
-        let root = transaction.read_header(|h| h.root)?;
+        // TODO introduce some better/more abstract API for reading the header?
+        let root = transaction.read_header(|h| UnknownNodeId::new(h.root))?;
 
         Ok(Self {
             transaction,
@@ -55,7 +59,7 @@ impl<'tree, T: Storage> Iterator for TreeIterator<'tree, T> {
 
         let result = self.transaction.read_node(*last, |last| {
             match last {
-                NodeReader::Interior(reader) => {
+                UnknownNodeReader::Interior(reader) => {
                     self.nodes_to_visit.pop_front().unwrap();
 
                     let mut interior_nodes = reader.values().collect::<Vec<_>>();
@@ -65,7 +69,7 @@ impl<'tree, T: Storage> Iterator for TreeIterator<'tree, T> {
                         self.nodes_to_visit.push_front(next_node);
                     }
                 }
-                NodeReader::Leaf(reader) => match reader.entries().nth(self.index) {
+                UnknownNodeReader::Leaf(reader) => match reader.entries().nth(self.index) {
                     Some(entry) => {
                         self.index += 1;
 
@@ -127,30 +131,34 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
             .write(PageIndex::zeroed(), |page| write(page.data_mut()))?)
     }
 
-    fn read_node<TReturn>(
+    fn read_node<TReturn, TNodeId: NodeId>(
         &self,
-        index: PageIndex,
-        read: impl FnOnce(NodeReader) -> TReturn,
+        index: TNodeId,
+        read: impl for<'node> FnOnce(TNodeId::Reader<'node>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        assert!(index != PageIndex::zeroed());
+        Ok(self.transaction.read(index.page(), |page| {
+            let reader = <TNodeId::Reader<'_> as NodeReader>::new(
+                page.data(),
+                self.key_size,
+                self.value_size,
+            );
 
-        Ok(self.transaction.read(index, |page| {
-            read(page.data::<Node>().reader(self.key_size, self.value_size))
+            read(reader)
         })?)
     }
 
-    fn write_node<TReturn>(
+    fn write_node<TReturn, TNodeId: NodeId>(
         &self,
-        index: PageIndex,
-        write: impl FnOnce(NodeWriter) -> TReturn,
+        index: TNodeId,
+        write: impl for<'node> FnOnce(TNodeId::Writer<'node>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        assert!(index != PageIndex::zeroed());
-
-        Ok(self.transaction.write(index, |page| {
-            write(
-                page.data_mut::<Node>()
-                    .writer(self.key_size, self.value_size),
-            )
+        Ok(self.transaction.write(index.page(), |page| {
+            let writer = <TNodeId::Writer<'_> as NodeWriter>::new(
+                page.data_mut(),
+                self.key_size,
+                self.value_size,
+            );
+            write(writer)
         })?)
     }
 
@@ -202,18 +210,11 @@ impl<T: Storage> Tree<T> {
             value_size: self.value_size,
         };
 
-        let root_index = transaction.read_header(|h| h.root)?;
+        let root_index = UnknownNodeId::new(transaction.read_header(|h| h.root)?);
 
         let target_node_index = leaf_search(&transaction, root_index, key);
         let (parent_index, insert_result) =
-            transaction.write_node(target_node_index, |target_node| {
-                // TODO is this match the clearest way to express this? should the leaf search return
-                // something special so that we don't have to check if it's a leaf again?
-                let mut writer = match target_node {
-                    NodeWriter::Interior(_) => panic!(),
-                    NodeWriter::Leaf(writer) => writer,
-                };
-
+            transaction.write_node(target_node_index, |mut writer| {
                 // TODO parent_index should be a part of insert_result
                 let parent_index = writer.reader().parent();
                 let insert_result = writer.insert(key, value);
