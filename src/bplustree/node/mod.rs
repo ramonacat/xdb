@@ -23,7 +23,6 @@ pub(super) trait NodeId: Copy + PartialEq {
     fn page(&self) -> PageIndex;
 }
 
-// TODO rename -> AnyNodeId
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct AnyNodeId(PageIndex);
 
@@ -53,10 +52,20 @@ impl NodeId for AnyNodeId {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct LeafNodeId(PageIndex);
 
+impl Display for LeafNodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl LeafNodeId {
     // TODO is there a way to enforce validity in this API?
-    pub(crate) fn from_unknown(unknown: AnyNodeId) -> LeafNodeId {
+    pub fn from_unknown(unknown: AnyNodeId) -> LeafNodeId {
         Self(unknown.0)
+    }
+
+    pub fn new(index: PageIndex) -> Self {
+        Self(index)
     }
 }
 

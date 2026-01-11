@@ -5,6 +5,7 @@ mod node;
 use crate::bplustree::algorithms::leaf_search;
 use crate::bplustree::node::AnyNodeId;
 use crate::bplustree::node::AnyNodeReader;
+use crate::bplustree::node::LeafNodeId;
 use crate::bplustree::node::Node;
 use crate::bplustree::node::NodeId;
 use crate::bplustree::node::NodeReader;
@@ -246,13 +247,22 @@ impl<T: Storage> Tree<T> {
                     let new_root_page_index = transaction.insert(new_root_page)?;
 
                     new_node.set_parent(new_root_page_index);
+                    let mut new_node_writer =
+                        LeafNodeWriter::new(&mut new_node, self.key_size, self.value_size);
+                    new_node_writer.set_previous(Some(target_node_index));
+
+                    transaction.read_node(target_node_index, |reader| {
+                        new_node_writer.set_next(reader.next());
+                    })?;
 
                     let mut new_node_page = Page::zeroed();
                     *new_node_page.data_mut() = *new_node;
+                    let new_node_index = new_node_reservation.index();
                     transaction.insert_reserved(new_node_reservation, new_node_page)?;
 
                     transaction.write_node(target_node_index, |mut target_node| {
                         target_node.set_parent(new_root_page_index);
+                        target_node.set_next(Some(LeafNodeId::new(new_node_index)));
                     })?;
 
                     transaction.write_header(|header| header.root = new_root_page_index)?;

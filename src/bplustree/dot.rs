@@ -57,6 +57,13 @@ impl<T: Storage> Tree<T> {
                 }
                 super::AnyNodeReader::Leaf(reader) => {
                     let mut label: Vec<String> = vec![];
+                    if let Some(previous) = reader.previous() {
+                        label.push(format!("previous: {previous}"));
+                    }
+
+                    if let Some(next) = reader.next() {
+                        label.push(format!("next: {next}"));
+                    }
 
                     for entry in reader.entries() {
                         label.push(format!(
