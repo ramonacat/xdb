@@ -464,8 +464,8 @@ mod test {
             assert!(i < entry_count);
             let (key, value) = item.unwrap();
 
-            let key: usize = *from_bytes(&key);
-            let value: usize = *from_bytes(&value);
+            let key: usize = usize::from_le_bytes(key.try_into().unwrap());
+            let value: usize = usize::from_le_bytes(value.try_into().unwrap());
 
             assert!(key == i);
             assert!(value == usize::max_value() - i);

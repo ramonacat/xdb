@@ -8,10 +8,28 @@ use bytemuck::{Pod, Zeroable};
 // TODO Support variable-sized values
 // TODO Support variable-sized keys?
 
+bitflags::bitflags! {
+    #[derive(Debug, Pod, Zeroable, Clone, Copy)]
+    #[repr(transparent)]
+    struct NodeFlags: u16 {
+        const INTERNAL = 1 << 0;
+    }
+}
+
+#[derive(Debug, Pod, Zeroable, Clone, Copy)]
+#[repr(C, align(8))]
+pub(super) struct NodeHeader {
+    key_len: u16,
+    flags: NodeFlags,
+    _unused2: u32,
+    parent: PageIndex,
+}
+const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>() * 2);
+
 const NODE_DATA_SIZE: usize = PAGE_DATA_SIZE - size_of::<NodeHeader>();
 
 #[derive(Debug, Pod, Zeroable, Clone, Copy)]
-#[repr(C)]
+#[repr(C, align(8))]
 pub(super) struct Node {
     header: NodeHeader,
     data: [u8; NODE_DATA_SIZE],
@@ -62,21 +80,3 @@ impl Node {
         self.header.parent = parent;
     }
 }
-
-bitflags::bitflags! {
-    #[derive(Debug, Pod, Zeroable, Clone, Copy)]
-    #[repr(transparent)]
-    struct NodeFlags: u16 {
-        const INTERNAL = 1 << 0;
-    }
-}
-
-#[derive(Debug, Pod, Zeroable, Clone, Copy)]
-#[repr(C)]
-pub(super) struct NodeHeader {
-    key_len: u16,
-    flags: NodeFlags,
-    _unused2: u32,
-    parent: PageIndex,
-}
-const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>() * 2);

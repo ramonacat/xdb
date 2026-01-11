@@ -87,6 +87,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
+    // TODO: per page locks
     pages: RwLock<Vec<Page>>,
 }
 

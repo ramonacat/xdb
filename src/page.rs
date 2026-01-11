@@ -12,15 +12,17 @@ pub enum PageError {
     Checksum,
 }
 
-#[repr(C)]
 #[derive(Debug, Pod, Clone, Copy, Zeroable)]
+#[repr(C, align(8))]
 struct PageHeader {
     checksum: Checksum,
     _unused: u32,
 }
 
-#[repr(C)]
+const _:() = assert!(size_of::<PageHeader>() == size_of::<u64>());
+
 #[derive(Debug, Pod, Clone, Copy, Zeroable)]
+#[repr(C, align(8))]
 pub struct Page {
     header: PageHeader,
     data: [u8; PAGE_DATA_SIZE],
