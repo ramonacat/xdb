@@ -6,8 +6,7 @@ use crate::{
     storage::Storage,
 };
 
-// TODO use a separate type for NodeIndex
-// // TODO return a Result, remove unwraps
+// TODO return a Result, remove unwraps
 pub(super) fn leaf_search<TStorage: Storage>(
     transaction: &TreeTransaction<TStorage>,
     node_index: AnyNodeId,
@@ -20,7 +19,7 @@ pub(super) fn leaf_search<TStorage: Storage>(
             // TODO this should maybe be held by the reader which would do the conversion so we
             // don't share the `From`???
             crate::bplustree::AnyNodeReader::Leaf(_) => {
-                return LeafNodeId::from_unknown(node_index);
+                return LeafNodeId::from_any(node_index);
             }
         };
 
@@ -32,7 +31,7 @@ pub(super) fn leaf_search<TStorage: Storage>(
             }
         }
 
-        leaf_search(transaction, reader.last_value(), key)
+        leaf_search(transaction, reader.last_value().unwrap(), key)
     });
 
     result.unwrap()
@@ -46,9 +45,9 @@ pub(super) fn first_leaf<TStorage: Storage>(
     transaction
         .read_node(root, |reader| match reader {
             super::AnyNodeReader::Interior(interior_node_reader) => {
-                first_leaf(transaction, interior_node_reader.first_value())
+                first_leaf(transaction, interior_node_reader.first_value().unwrap())
             }
-            super::AnyNodeReader::Leaf(_) => LeafNodeId::from_unknown(root),
+            super::AnyNodeReader::Leaf(_) => LeafNodeId::from_any(root),
         })
         .unwrap()
 }

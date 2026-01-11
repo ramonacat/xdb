@@ -119,7 +119,6 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
             .read(PageIndex::zeroed(), |page| read(page.data()))?)
     }
 
-    // TODO make this take a non-mut reference, and do per-page locking
     fn write_header<TReturn>(
         &self,
         write: impl FnOnce(&mut TreeData) -> TReturn,

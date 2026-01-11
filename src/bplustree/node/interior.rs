@@ -89,14 +89,12 @@ impl<'node> InteriorNodeReader<'node> {
         Some(AnyNodeId::new(value))
     }
 
-    pub(crate) fn first_value(&self) -> AnyNodeId {
-        // TODO ensure there's > 0 values!
-        self.value_at(0).unwrap()
+    pub(crate) fn first_value(&self) -> Option<AnyNodeId> {
+        self.value_at(0)
     }
 
-    pub(crate) fn last_value(&self) -> AnyNodeId {
-        // TODO ensure there's > 0 values!
-        self.value_at(self.key_len()).unwrap()
+    pub(crate) fn last_value(&self) -> Option<AnyNodeId> {
+        self.value_at(self.key_len())
     }
 
     pub(crate) fn values(&self) -> impl Iterator<Item = AnyNodeId> {
