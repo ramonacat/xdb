@@ -100,7 +100,7 @@ impl<'node> InteriorNodeWriter<'node> {
         Self { node, key_size }
     }
 
-    fn reader(&'node self) -> InteriorNodeReader<'node> {
+    pub(in crate::bplustree) fn reader(&'node self) -> InteriorNodeReader<'node> {
         InteriorNodeReader::new(self.node, self.key_size)
     }
 
@@ -145,5 +145,14 @@ impl<'node> InteriorNodeWriter<'node> {
             .copy_from_slice(bytes_of(&value));
 
         InteriorInsertResult::Ok
+    }
+
+    // TODO do we really need it
+    pub(crate) fn replace_with(self, new_node: Node) {
+        *self.node = new_node;
+    }
+
+    pub(crate) fn set_parent(&mut self, new_parent: PageIndex) {
+        self.node.set_parent(new_parent);
     }
 }

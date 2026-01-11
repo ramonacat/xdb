@@ -1,7 +1,7 @@
 pub(super) mod interior;
 pub(super) mod leaf;
 
-use crate::bplustree::LeafNodeReader;
+use crate::bplustree::{InteriorNodeWriter, LeafNodeReader, LeafNodeWriter};
 use crate::storage::PageIndex;
 use crate::{bplustree::InteriorNodeReader, page::PAGE_DATA_SIZE};
 use bytemuck::{Pod, Zeroable};
@@ -63,10 +63,12 @@ impl Node {
         }
     }
 
+    // TODO make private
     pub(super) fn is_leaf(&self) -> bool {
         !self.header.flags.contains(NodeFlags::INTERNAL)
     }
 
+    // TODO move to NodeReader?
     pub(super) fn parent(&self) -> Option<PageIndex> {
         if self.header.parent == PageIndex::zeroed() {
             None
@@ -89,9 +91,39 @@ impl Node {
             NodeReader::Interior(InteriorNodeReader::new(self, key_size))
         }
     }
+
+    pub(super) fn writer(&'_ mut self, key_size: usize, value_size: usize) -> NodeWriter<'_> {
+        if self.is_leaf() {
+            NodeWriter::Leaf(LeafNodeWriter::new(self, key_size, value_size))
+        } else {
+            NodeWriter::Interior(InteriorNodeWriter::new(self, key_size))
+        }
+    }
 }
 
 pub(super) enum NodeReader<'node> {
     Interior(InteriorNodeReader<'node>),
     Leaf(LeafNodeReader<'node>),
+}
+
+pub(super) enum NodeWriter<'node> {
+    Interior(InteriorNodeWriter<'node>),
+    Leaf(LeafNodeWriter<'node>),
+}
+
+impl<'node> NodeWriter<'node> {
+    // TODO do we really really need it
+    pub(crate) fn replace_with(self, new_node: Node) {
+        match self {
+            NodeWriter::Interior(writer) => writer.replace_with(new_node),
+            NodeWriter::Leaf(writer) => writer.replace_with(new_node),
+        }
+    }
+
+    pub(crate) fn set_parent(&mut self, new_parent: PageIndex) {
+        match self {
+            NodeWriter::Interior(writer) => writer.set_parent(new_parent),
+            NodeWriter::Leaf(writer) => writer.set_parent(new_parent),
+        }
+    }
 }

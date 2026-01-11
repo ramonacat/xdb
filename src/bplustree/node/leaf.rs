@@ -104,6 +104,10 @@ impl<'node> LeafNodeReader<'node> {
 
         Some(index * self.entry_size())
     }
+
+    pub(crate) fn parent(&self) -> Option<PageIndex> {
+        self.node.parent()
+    }
 }
 
 pub(in crate::bplustree) struct LeafNodeWriter<'node> {
@@ -134,7 +138,7 @@ impl<'node> LeafNodeWriter<'node> {
         }
     }
 
-    fn reader(&'node self) -> LeafNodeReader<'node> {
+    pub fn reader(&'node self) -> LeafNodeReader<'node> {
         LeafNodeReader::new(self.node, self.key_size, self.value_size)
     }
 
@@ -259,5 +263,14 @@ impl<'node> LeafNodeWriter<'node> {
             new_node.data[..size_of::<PageIndex>()].to_vec(),
             new_node,
         )
+    }
+
+    // TODO do we really need this
+    pub(crate) fn replace_with(self, new_node: Node) {
+        *self.node = new_node;
+    }
+
+    pub(crate) fn set_parent(&mut self, new_parent: PageIndex) {
+        self.node.set_parent(new_parent);
     }
 }

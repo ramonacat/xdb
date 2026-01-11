@@ -5,6 +5,7 @@ mod node;
 use crate::bplustree::algorithms::leaf_search;
 use crate::bplustree::node::Node;
 use crate::bplustree::node::NodeReader;
+use crate::bplustree::node::NodeWriter;
 use crate::bplustree::node::interior::InteriorNodeReader;
 use crate::bplustree::node::interior::InteriorNodeWriter;
 use crate::bplustree::node::leaf::LeafInsertResult;
@@ -140,13 +141,16 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
     fn write_node<TReturn>(
         &self,
         index: PageIndex,
-        write: impl FnOnce(&mut Node) -> TReturn,
+        write: impl FnOnce(NodeWriter) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         assert!(index != PageIndex::zeroed());
 
-        Ok(self
-            .transaction
-            .write(index, |page| write(page.data_mut()))?)
+        Ok(self.transaction.write(index, |page| {
+            write(
+                page.data_mut::<Node>()
+                    .writer(self.key_size, self.value_size),
+            )
+        })?)
     }
 
     fn reserve_node(&self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
@@ -160,11 +164,14 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
     fn write_reserved<TReturn>(
         &self,
         reservation: TStorage::PageReservation<'storage>,
-        write: impl FnOnce(&mut Node) -> TReturn,
+        write: impl FnOnce(NodeWriter) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        Ok(self
-            .transaction
-            .write_reserved(reservation, |page| write(page.data_mut()))?)
+        Ok(self.transaction.write_reserved(reservation, |page| {
+            write(
+                page.data_mut::<Node>()
+                    .writer(self.key_size, self.value_size),
+            )
+        })?)
     }
 }
 
@@ -190,7 +197,6 @@ impl<T: Storage> Tree<T> {
 
     pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<(), TreeError> {
         let key_size = self.key_size;
-        let value_size = self.value_size;
 
         let transaction = TreeTransaction::<'_, T> {
             transaction: self.storage.transaction()?,
@@ -203,10 +209,16 @@ impl<T: Storage> Tree<T> {
         let target_node_index = leaf_search(&transaction, root_index, key);
         let (parent_index, insert_result) =
             transaction.write_node(target_node_index, |target_node| {
+                // TODO is this match the clearest way to express this? should the leaf search return
+                // something special so that we don't have to check if it's a leaf again?
+                let mut writer = match target_node {
+                    NodeWriter::Interior(_) => panic!(),
+                    NodeWriter::Leaf(writer) => writer,
+                };
+
                 // TODO parent_index should be a part of insert_result
-                let parent_index = target_node.parent();
-                let insert_result =
-                    LeafNodeWriter::new(target_node, key_size, value_size).insert(key, value);
+                let parent_index = writer.reader().parent();
+                let insert_result = writer.insert(key, value);
                 (parent_index, insert_result)
             })?;
         let insert_result = insert_result?;
@@ -223,23 +235,24 @@ impl<T: Storage> Tree<T> {
                     // TODO create a `reserve_page` method, so that the storage can give us an ID,
                     // but the write can be deferred
                     let new_node_reservation = transaction.reserve_node()?;
-                    let new_root_page_index =
-                        transaction.write_new(|node| *node = Node::new_internal_root())?;
+                    let new_root_page_index = transaction.write_new(|node| {
+                        *node = Node::new_internal_root();
 
-                    transaction.write_node(new_root_page_index, |new_root| {
-                        let mut new_root_writer = InteriorNodeWriter::new(new_root, key_size);
+                        let mut new_root_writer = InteriorNodeWriter::new(node, key_size);
 
                         new_root_writer.set_first_pointer(root_index);
                         new_root_writer.insert_node(&split_key, new_node_reservation.index());
                     })?;
 
-                    transaction.write_reserved(new_node_reservation, |x| {
-                        new_node.set_parent(new_root_page_index);
+                    new_node.set_parent(new_root_page_index);
 
-                        *x = *new_node;
+                    // TODO should this be insert_reserved instead and take the node as an
+                    // argument?
+                    transaction.write_reserved(new_node_reservation, |x| {
+                        x.replace_with(*new_node);
                     })?;
 
-                    transaction.write_node(target_node_index, |target_node| {
+                    transaction.write_node(target_node_index, |mut target_node| {
                         target_node.set_parent(new_root_page_index);
                     })?;
 
