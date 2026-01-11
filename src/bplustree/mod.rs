@@ -2,6 +2,7 @@ mod algorithms;
 pub mod dot;
 mod node;
 
+use crate::bplustree::algorithms::first_leaf;
 use crate::bplustree::algorithms::leaf_search;
 use crate::bplustree::node::AnyNodeId;
 use crate::bplustree::node::AnyNodeReader;
@@ -22,18 +23,15 @@ use crate::storage::Storage;
 use crate::storage::StorageError;
 use crate::storage::Transaction;
 use bytemuck::{Pod, Zeroable};
-use std::collections::VecDeque;
 use thiserror::Error;
 
 use crate::page::PAGE_DATA_SIZE;
 
 const ROOT_NODE_TAIL_SIZE: usize = PAGE_DATA_SIZE - size_of::<u64>() * 2 - size_of::<PageIndex>();
 
-// TODO this is an abomination, we won't need it once we actually have the next/previous keys
-// in leaf nodes!
 struct TreeIterator<'tree, T: Storage> {
     transaction: TreeTransaction<'tree, T>,
-    nodes_to_visit: VecDeque<AnyNodeId>,
+    current_leaf: LeafNodeId,
     index: usize,
 }
 
@@ -41,13 +39,20 @@ impl<'tree, T: Storage> TreeIterator<'tree, T> {
     fn new(transaction: TreeTransaction<'tree, T>) -> Result<Self, TreeError> {
         // TODO introduce some better/more abstract API for reading the header?
         let root = transaction.read_header(|h| AnyNodeId::new(h.root))?;
+        let first_leaf = first_leaf(&transaction, root);
 
         Ok(Self {
             transaction,
-            nodes_to_visit: VecDeque::from([root]),
+            current_leaf: first_leaf,
             index: 0,
         })
     }
+}
+
+enum IteratorResult {
+    Value(TreeIteratorItem),
+    Next,
+    None,
 }
 
 impl<'tree, T: Storage> Iterator for TreeIterator<'tree, T> {
@@ -56,40 +61,32 @@ impl<'tree, T: Storage> Iterator for TreeIterator<'tree, T> {
 
     // TODO get rid of all the unwraps!
     fn next(&mut self) -> Option<Self::Item> {
-        let last = self.nodes_to_visit.front()?;
-
-        let result = self.transaction.read_node(*last, |last| {
-            match last {
-                AnyNodeReader::Interior(reader) => {
-                    self.nodes_to_visit.pop_front().unwrap();
-
-                    let mut interior_nodes = reader.values().collect::<Vec<_>>();
-                    interior_nodes.reverse();
-
-                    for next_node in interior_nodes {
-                        self.nodes_to_visit.push_front(next_node);
-                    }
-                }
-                AnyNodeReader::Leaf(reader) => match reader.entries().nth(self.index) {
+        let read_result = self
+            .transaction
+            .read_node(self.current_leaf, |reader| {
+                match reader.entries().nth(self.index) {
                     Some(entry) => {
                         self.index += 1;
-
-                        return Some(Ok((entry.key().to_vec(), entry.value().to_vec())));
+                        IteratorResult::Value(Ok((entry.key().to_vec(), entry.value().to_vec())))
                     }
                     None => {
-                        self.nodes_to_visit.pop_front();
+                        if let Some(next_leaf) = reader.next() {
+                            self.current_leaf = next_leaf;
+                            self.index = 0;
 
-                        self.index = 0;
+                            IteratorResult::Next
+                        } else {
+                            IteratorResult::None
+                        }
                     }
-                },
-            }
+                }
+            })
+            .unwrap();
 
-            None
-        });
-
-        match result.unwrap() {
-            Some(r) => Some(r),
-            None => self.next(),
+        match read_result {
+            IteratorResult::Value(x) => Some(x),
+            IteratorResult::Next => self.next(),
+            IteratorResult::None => None,
         }
     }
 }

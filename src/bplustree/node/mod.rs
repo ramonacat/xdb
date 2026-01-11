@@ -60,6 +60,7 @@ impl Display for LeafNodeId {
 
 impl LeafNodeId {
     // TODO is there a way to enforce validity in this API?
+    // TODO rename -> from_any
     pub fn from_unknown(unknown: AnyNodeId) -> LeafNodeId {
         Self(unknown.0)
     }

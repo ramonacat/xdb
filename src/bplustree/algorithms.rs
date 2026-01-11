@@ -37,3 +37,18 @@ pub(super) fn leaf_search<TStorage: Storage>(
 
     result.unwrap()
 }
+
+// TODO return a result, don't unwrap
+pub(super) fn first_leaf<TStorage: Storage>(
+    transaction: &TreeTransaction<TStorage>,
+    root: AnyNodeId,
+) -> LeafNodeId {
+    transaction
+        .read_node(root, |reader| match reader {
+            super::AnyNodeReader::Interior(interior_node_reader) => {
+                first_leaf(transaction, interior_node_reader.first_value())
+            }
+            super::AnyNodeReader::Leaf(_) => LeafNodeId::from_unknown(root),
+        })
+        .unwrap()
+}

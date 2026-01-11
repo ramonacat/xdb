@@ -75,7 +75,7 @@ impl<'node> InteriorNodeReader<'node> {
     }
 
     pub(in crate::bplustree) fn value_at(&self, index: usize) -> Option<AnyNodeId> {
-        if index > self.key_len() {
+        if index >= self.key_len() {
             return None;
         }
 
@@ -89,7 +89,13 @@ impl<'node> InteriorNodeReader<'node> {
         Some(AnyNodeId::new(value))
     }
 
+    pub(crate) fn first_value(&self) -> AnyNodeId {
+        // TODO ensure there's > 0 values!
+        self.value_at(0).unwrap()
+    }
+
     pub(crate) fn last_value(&self) -> AnyNodeId {
+        // TODO ensure there's > 0 values!
         self.value_at(self.key_len()).unwrap()
     }
 
