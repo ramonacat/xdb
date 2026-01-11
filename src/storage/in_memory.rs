@@ -54,10 +54,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         Ok(read(page))
     }
 
-    fn write_new(&self, write: impl FnOnce(&mut Page)) -> Result<PageIndex, StorageError> {
-        let mut page = Page::zeroed();
-        write(&mut page);
-
+    fn insert(&self, page: Page) -> Result<PageIndex, StorageError> {
         let mut storage = self.storage.pages.write().unwrap();
         storage.push(page);
 
@@ -76,12 +73,16 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         })
     }
 
-    fn write_reserved<'a, T>(
-        &'a self,
+    fn insert_reserved(
+        &self,
         reservation: InMemoryPageReservation<'storage>,
-        write: impl FnOnce(&mut Page) -> T,
-    ) -> Result<T, StorageError> {
-        self.write(reservation.index, write)
+        page: Page,
+    ) -> Result<(), StorageError> {
+        let mut storage = self.storage.pages.write().unwrap();
+
+        *storage.get_mut(reservation.index.0 as usize).unwrap() = page;
+
+        Ok(())
     }
 }
 
@@ -150,24 +151,24 @@ pub mod test {
             self.0.read(index, read)
         }
 
-        fn write_new(&self, write: impl FnOnce(&mut Page)) -> Result<PageIndex, StorageError> {
+        fn insert(&self, page: Page) -> Result<PageIndex, StorageError> {
             self.1.fetch_add(1, Ordering::Relaxed);
 
-            self.0.write_new(write)
+            self.0.insert(page)
         }
 
         fn reserve(&self) -> Result<TStorage::PageReservation<'a>, StorageError> {
             self.0.reserve()
         }
 
-        fn write_reserved<TReturn>(
+        fn insert_reserved(
             &self,
             reservation: TStorage::PageReservation<'a>,
-            write: impl FnOnce(&mut Page) -> TReturn,
-        ) -> Result<TReturn, StorageError> {
+            page: Page,
+        ) -> Result<(), StorageError> {
             self.1.fetch_add(1, Ordering::Relaxed);
 
-            self.0.write_reserved(reservation, write)
+            self.0.insert_reserved(reservation, page)
         }
     }
 

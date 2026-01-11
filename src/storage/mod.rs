@@ -39,13 +39,14 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
 
     fn reserve(&self) -> Result<TPageReservation, StorageError>;
 
-    fn write_reserved<T>(
+    fn insert_reserved(
         &self,
         reservation: TPageReservation,
-        write: impl FnOnce(&mut Page) -> T,
-    ) -> Result<T, StorageError>;
+        page: Page,
+    ) -> Result<(), StorageError>;
 
-    fn write_new(&self, write: impl FnOnce(&mut Page)) -> Result<PageIndex, StorageError>;
+    // TODO change to insert and take a Page as the argument
+    fn insert(&self, page: Page) -> Result<PageIndex, StorageError>;
 
     // TODO actually make this useful and ensure transactional consistency
     #[allow(unused)]

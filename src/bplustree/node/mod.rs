@@ -112,14 +112,6 @@ pub(super) enum NodeWriter<'node> {
 }
 
 impl<'node> NodeWriter<'node> {
-    // TODO do we really really need it
-    pub(crate) fn replace_with(self, new_node: Node) {
-        match self {
-            NodeWriter::Interior(writer) => writer.replace_with(new_node),
-            NodeWriter::Leaf(writer) => writer.replace_with(new_node),
-        }
-    }
-
     pub(crate) fn set_parent(&mut self, new_parent: PageIndex) {
         match self {
             NodeWriter::Interior(writer) => writer.set_parent(new_parent),

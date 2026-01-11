@@ -265,11 +265,6 @@ impl<'node> LeafNodeWriter<'node> {
         )
     }
 
-    // TODO do we really need this
-    pub(crate) fn replace_with(self, new_node: Node) {
-        *self.node = new_node;
-    }
-
     pub(crate) fn set_parent(&mut self, new_parent: PageIndex) {
         self.node.set_parent(new_parent);
     }
