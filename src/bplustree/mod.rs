@@ -3,12 +3,12 @@ pub mod dot;
 mod node;
 
 use crate::bplustree::algorithms::leaf_search;
+use crate::bplustree::node::AnyNodeId;
+use crate::bplustree::node::AnyNodeReader;
 use crate::bplustree::node::Node;
 use crate::bplustree::node::NodeId;
 use crate::bplustree::node::NodeReader;
 use crate::bplustree::node::NodeWriter;
-use crate::bplustree::node::UnknownNodeId;
-use crate::bplustree::node::UnknownNodeReader;
 use crate::bplustree::node::interior::InteriorNodeReader;
 use crate::bplustree::node::interior::InteriorNodeWriter;
 use crate::bplustree::node::leaf::LeafInsertResult;
@@ -32,14 +32,14 @@ const ROOT_NODE_TAIL_SIZE: usize = PAGE_DATA_SIZE - size_of::<u64>() * 2 - size_
 // in leaf nodes!
 struct TreeIterator<'tree, T: Storage> {
     transaction: TreeTransaction<'tree, T>,
-    nodes_to_visit: VecDeque<UnknownNodeId>,
+    nodes_to_visit: VecDeque<AnyNodeId>,
     index: usize,
 }
 
 impl<'tree, T: Storage> TreeIterator<'tree, T> {
     fn new(transaction: TreeTransaction<'tree, T>) -> Result<Self, TreeError> {
         // TODO introduce some better/more abstract API for reading the header?
-        let root = transaction.read_header(|h| UnknownNodeId::new(h.root))?;
+        let root = transaction.read_header(|h| AnyNodeId::new(h.root))?;
 
         Ok(Self {
             transaction,
@@ -59,7 +59,7 @@ impl<'tree, T: Storage> Iterator for TreeIterator<'tree, T> {
 
         let result = self.transaction.read_node(*last, |last| {
             match last {
-                UnknownNodeReader::Interior(reader) => {
+                AnyNodeReader::Interior(reader) => {
                     self.nodes_to_visit.pop_front().unwrap();
 
                     let mut interior_nodes = reader.values().collect::<Vec<_>>();
@@ -69,7 +69,7 @@ impl<'tree, T: Storage> Iterator for TreeIterator<'tree, T> {
                         self.nodes_to_visit.push_front(next_node);
                     }
                 }
-                UnknownNodeReader::Leaf(reader) => match reader.entries().nth(self.index) {
+                AnyNodeReader::Leaf(reader) => match reader.entries().nth(self.index) {
                     Some(entry) => {
                         self.index += 1;
 
@@ -210,7 +210,7 @@ impl<T: Storage> Tree<T> {
             value_size: self.value_size,
         };
 
-        let root_index = UnknownNodeId::new(transaction.read_header(|h| h.root)?);
+        let root_index = AnyNodeId::new(transaction.read_header(|h| h.root)?);
 
         let target_node_index = leaf_search(&transaction, root_index, key);
         let (parent_index, insert_result) =

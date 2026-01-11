@@ -1,7 +1,7 @@
 use crate::{
     bplustree::{
         TreeTransaction,
-        node::{LeafNodeId, UnknownNodeId},
+        node::{AnyNodeId, LeafNodeId},
     },
     storage::Storage,
 };
@@ -10,16 +10,16 @@ use crate::{
 // // TODO return a Result, remove unwraps
 pub(super) fn leaf_search<TStorage: Storage>(
     transaction: &TreeTransaction<TStorage>,
-    node_index: UnknownNodeId,
+    node_index: AnyNodeId,
     key: &[u8],
 ) -> LeafNodeId {
     // TODO the closure should just get the node reader as the argument here
     let result = transaction.read_node(node_index, |node| {
         let reader = match node {
-            crate::bplustree::UnknownNodeReader::Interior(reader) => reader,
+            crate::bplustree::AnyNodeReader::Interior(reader) => reader,
             // TODO this should maybe be held by the reader which would do the conversion so we
             // don't share the `From`???
-            crate::bplustree::UnknownNodeReader::Leaf(_) => {
+            crate::bplustree::AnyNodeReader::Leaf(_) => {
                 return LeafNodeId::from_unknown(node_index);
             }
         };

@@ -25,15 +25,15 @@ pub(super) trait NodeId: Copy + PartialEq {
 
 // TODO rename -> AnyNodeId
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub(super) struct UnknownNodeId(PageIndex);
+pub(super) struct AnyNodeId(PageIndex);
 
-impl Display for UnknownNodeId {
+impl Display for AnyNodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl UnknownNodeId {
+impl AnyNodeId {
     pub fn new(index: PageIndex) -> Self {
         assert!(index != PageIndex::zeroed());
 
@@ -41,9 +41,9 @@ impl UnknownNodeId {
     }
 }
 
-impl NodeId for UnknownNodeId {
-    type Reader<'node> = UnknownNodeReader<'node>;
-    type Writer<'node> = UnknownNodeWriter<'node>;
+impl NodeId for AnyNodeId {
+    type Reader<'node> = AnyNodeReader<'node>;
+    type Writer<'node> = AnyNodeWriter<'node>;
 
     fn page(&self) -> PageIndex {
         self.0
@@ -55,7 +55,7 @@ pub(super) struct LeafNodeId(PageIndex);
 
 impl LeafNodeId {
     // TODO is there a way to enforce validity in this API?
-    pub(crate) fn from_unknown(unknown: UnknownNodeId) -> LeafNodeId {
+    pub(crate) fn from_unknown(unknown: AnyNodeId) -> LeafNodeId {
         Self(unknown.0)
     }
 }
@@ -158,12 +158,12 @@ impl Node {
     }
 }
 
-pub(super) enum UnknownNodeReader<'node> {
+pub(super) enum AnyNodeReader<'node> {
     Interior(InteriorNodeReader<'node>),
     Leaf(LeafNodeReader<'node>),
 }
 
-impl<'node> NodeReader<'node> for UnknownNodeReader<'node> {
+impl<'node> NodeReader<'node> for AnyNodeReader<'node> {
     fn new(node: &'node Node, key_size: usize, value_size: usize) -> Self {
         if node.is_leaf() {
             Self::Leaf(LeafNodeReader::new(node, key_size, value_size))
@@ -174,17 +174,17 @@ impl<'node> NodeReader<'node> for UnknownNodeReader<'node> {
 }
 
 #[allow(unused)] // TODO remove if we really don't need it
-pub(super) enum UnknownNodeWriter<'node> {
+pub(super) enum AnyNodeWriter<'node> {
     Interior(InteriorNodeWriter<'node>),
     Leaf(LeafNodeWriter<'node>),
 }
 
-impl<'node> NodeWriter<'node> for UnknownNodeWriter<'node> {
+impl<'node> NodeWriter<'node> for AnyNodeWriter<'node> {
     fn new(node: &'node mut Node, key_size: usize, value_size: usize) -> Self {
         if node.is_leaf() {
-            UnknownNodeWriter::Leaf(LeafNodeWriter::new(node, key_size, value_size))
+            AnyNodeWriter::Leaf(LeafNodeWriter::new(node, key_size, value_size))
         } else {
-            UnknownNodeWriter::Interior(InteriorNodeWriter::new(node, key_size))
+            AnyNodeWriter::Interior(InteriorNodeWriter::new(node, key_size))
         }
     }
 }
