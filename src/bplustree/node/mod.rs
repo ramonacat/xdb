@@ -1,8 +1,9 @@
 pub(super) mod interior;
 pub(super) mod leaf;
 
-use crate::page::PAGE_DATA_SIZE;
+use crate::bplustree::LeafNodeReader;
 use crate::storage::PageIndex;
+use crate::{bplustree::InteriorNodeReader, page::PAGE_DATA_SIZE};
 use bytemuck::{Pod, Zeroable};
 
 // TODO Support variable-sized values
@@ -79,4 +80,18 @@ impl Node {
 
         self.header.parent = parent;
     }
+
+    // TODO avoid passing key_size/value_size here?
+    pub(super) fn reader(&'_ self, key_size: usize, value_size: usize) -> NodeReader<'_> {
+        if self.is_leaf() {
+            NodeReader::Leaf(LeafNodeReader::new(self, key_size, value_size))
+        } else {
+            NodeReader::Interior(InteriorNodeReader::new(self, key_size))
+        }
+    }
+}
+
+pub(super) enum NodeReader<'node> {
+    Interior(InteriorNodeReader<'node>),
+    Leaf(LeafNodeReader<'node>),
 }

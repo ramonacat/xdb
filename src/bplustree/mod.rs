@@ -4,6 +4,7 @@ mod node;
 
 use crate::bplustree::algorithms::leaf_search;
 use crate::bplustree::node::Node;
+use crate::bplustree::node::NodeReader;
 use crate::bplustree::node::interior::InteriorNodeReader;
 use crate::bplustree::node::interior::InteriorNodeWriter;
 use crate::bplustree::node::leaf::LeafInsertResult;
@@ -28,27 +29,16 @@ struct TreeIterator<'tree, T: Storage> {
     transaction: TreeTransaction<'tree, T>,
     nodes_to_visit: VecDeque<PageIndex>,
     index: usize,
-
-    // TODO these should really not be needed here, we should just depend on the TreeTransaction to
-    // read whatever data it needs to read
-    key_size: usize,
-    value_size: usize,
 }
 
 impl<'tree, T: Storage> TreeIterator<'tree, T> {
-    fn new(
-        transaction: TreeTransaction<'tree, T>,
-        key_size: usize,
-        value_size: usize,
-    ) -> Result<Self, TreeError> {
+    fn new(transaction: TreeTransaction<'tree, T>) -> Result<Self, TreeError> {
         let root = transaction.read_header(|h| h.root)?;
 
         Ok(Self {
             transaction,
             nodes_to_visit: VecDeque::from([root]),
             index: 0,
-            key_size,
-            value_size,
         })
     }
 }
@@ -62,11 +52,18 @@ impl<'tree, T: Storage> Iterator for TreeIterator<'tree, T> {
         let last = self.nodes_to_visit.front()?;
 
         let result = self.transaction.read_node(*last, |last| {
-            if last.is_leaf() {
-                match LeafNodeReader::new(last, self.key_size, self.value_size)
-                    .entries()
-                    .nth(self.index)
-                {
+            match last {
+                NodeReader::Interior(reader) => {
+                    self.nodes_to_visit.pop_front().unwrap();
+
+                    let mut interior_nodes = reader.values().collect::<Vec<_>>();
+                    interior_nodes.reverse();
+
+                    for next_node in interior_nodes {
+                        self.nodes_to_visit.push_front(next_node);
+                    }
+                }
+                NodeReader::Leaf(reader) => match reader.entries().nth(self.index) {
                     Some(entry) => {
                         self.index += 1;
 
@@ -77,18 +74,7 @@ impl<'tree, T: Storage> Iterator for TreeIterator<'tree, T> {
 
                         self.index = 0;
                     }
-                }
-            } else {
-                self.nodes_to_visit.pop_front().unwrap();
-
-                let mut interior_nodes = InteriorNodeReader::new(last, self.key_size)
-                    .values()
-                    .collect::<Vec<_>>();
-                interior_nodes.reverse();
-
-                for next_node in interior_nodes {
-                    self.nodes_to_visit.push_front(next_node);
-                }
+                },
             }
 
             None
@@ -142,11 +128,13 @@ impl<'storage, TStorage: Storage + 'storage> TreeTransaction<'storage, TStorage>
     fn read_node<TReturn>(
         &self,
         index: PageIndex,
-        read: impl FnOnce(&Node) -> TReturn,
+        read: impl FnOnce(NodeReader) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         assert!(index != PageIndex::zeroed());
 
-        Ok(self.transaction.read(index, |page| read(page.data()))?)
+        Ok(self.transaction.read(index, |page| {
+            read(page.data::<Node>().reader(self.key_size, self.value_size))
+        })?)
     }
 
     fn write_node<TReturn>(
@@ -266,10 +254,7 @@ impl<T: Storage> Tree<T> {
     #[allow(unused)]
     // TODO make it take non-mut reference
     fn iter(&mut self) -> Result<impl Iterator<Item = TreeIteratorItem>, TreeError> {
-        let key_size = self.key_size;
-        let value_size = self.value_size;
-
-        TreeIterator::new(self.transaction()?, key_size, value_size)
+        TreeIterator::new(self.transaction()?)
     }
 
     fn transaction(&self) -> Result<TreeTransaction<'_, T>, TreeError> {
