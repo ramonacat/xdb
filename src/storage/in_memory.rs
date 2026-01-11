@@ -103,9 +103,7 @@ impl Storage for InMemoryStorage {
     type Transaction<'a> = InMemoryTransaction<'a>;
     type PageReservation<'a> = InMemoryPageReservation<'a>;
 
-    fn transaction<'storage>(
-        &'storage mut self,
-    ) -> Result<Self::Transaction<'storage>, StorageError> {
+    fn transaction<'storage>(&'storage self) -> Result<Self::Transaction<'storage>, StorageError> {
         Ok(InMemoryTransaction { storage: self })
     }
 }
@@ -197,7 +195,7 @@ pub mod test {
             T: 'a;
 
         fn transaction<'storage>(
-            &'storage mut self,
+            &'storage self,
         ) -> Result<Self::Transaction<'storage>, StorageError> {
             Ok(TestTransaction(
                 self.inner.transaction()?,

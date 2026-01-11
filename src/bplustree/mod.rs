@@ -305,7 +305,7 @@ impl<T: Storage> Tree<T> {
         TreeIterator::new(self.transaction()?, key_size, value_size)
     }
 
-    fn transaction(&mut self) -> Result<TreeTransaction<'_, T>, TreeError> {
+    fn transaction(&self) -> Result<TreeTransaction<'_, T>, TreeError> {
         Ok(TreeTransaction::<T> {
             transaction: self.storage.transaction()?,
             key_size: self.key_size,
@@ -372,8 +372,6 @@ mod test {
         Arc,
         atomic::{AtomicUsize, Ordering},
     };
-
-    use bytemuck::from_bytes;
 
     use crate::storage::in_memory::{InMemoryStorage, test::TestStorage};
 

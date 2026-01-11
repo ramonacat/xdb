@@ -7,7 +7,7 @@ use crate::{
 
 impl<T: Storage> Tree<T> {
     pub fn into_dot(
-        mut self,
+        self,
         stringify_key: impl Fn(&[u8]) -> String,
         stringify_value: impl Fn(&[u8]) -> String,
     ) -> Result<String, TreeError> {

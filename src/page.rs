@@ -19,7 +19,7 @@ struct PageHeader {
     _unused: u32,
 }
 
-const _:() = assert!(size_of::<PageHeader>() == size_of::<u64>());
+const _: () = assert!(size_of::<PageHeader>() == size_of::<u64>());
 
 #[derive(Debug, Pod, Clone, Copy, Zeroable)]
 #[repr(C, align(8))]

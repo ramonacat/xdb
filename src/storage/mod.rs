@@ -65,9 +65,7 @@ pub trait Storage {
         Self: 'storage;
 
     // TODO take a non-mut reference
-    fn transaction<'storage>(
-        &'storage mut self,
-    ) -> Result<Self::Transaction<'storage>, StorageError>
+    fn transaction<'storage>(&'storage self) -> Result<Self::Transaction<'storage>, StorageError>
     where
         Self: Sized;
 }
