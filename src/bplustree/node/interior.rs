@@ -149,12 +149,12 @@ impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
             todo!();
         }
 
-        let mut node = Node::new_internal_root();
+        let mut node = Node::new_interior();
 
         let mut writer: InteriorNodeWriter<'_, TKey> = InteriorNodeWriter::new(&mut node);
 
         writer.set_first_pointer(values[0]);
-        match writer.insert_node(keys[0], values[1].page()) {
+        match writer.insert_node(keys[0], values[1]) {
             InteriorInsertResult::Ok => {}
             InteriorInsertResult::Split => todo!(),
         }
@@ -173,10 +173,7 @@ impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
             .copy_from_slice(bytes_of(&index.page()));
     }
 
-    // TODO take AnyNodeId as the argument
-    pub(crate) fn insert_node(&mut self, key: &TKey, value: PageIndex) -> InteriorInsertResult {
-        assert!(value != PageIndex::zeroed());
-
+    pub(crate) fn insert_node(&mut self, key: &TKey, value: AnyNodeId) -> InteriorInsertResult {
         let mut insert_at = self.reader().key_len();
 
         for (index, current_key) in self.reader().keys().enumerate() {
@@ -189,7 +186,7 @@ impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
         self.insert_at(insert_at, key, value)
     }
 
-    fn insert_at(&mut self, index: usize, key: &TKey, value: PageIndex) -> InteriorInsertResult {
+    fn insert_at(&mut self, index: usize, key: &TKey, value: AnyNodeId) -> InteriorInsertResult {
         let key_len = self.reader().key_len();
 
         if key_len + 1 == self.reader().key_capacity() {
@@ -219,7 +216,7 @@ impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
 
         self.node.data[key_offset..key_offset + size_of::<TKey>()].copy_from_slice(bytes_of(key));
         self.node.data[value_offset..value_offset + size_of::<PageIndex>()]
-            .copy_from_slice(bytes_of(&value));
+            .copy_from_slice(bytes_of(&value.page()));
 
         InteriorInsertResult::Ok
     }

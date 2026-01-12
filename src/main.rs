@@ -29,10 +29,7 @@ fn main() {
     }
 
     let dot = tree
-        .into_dot(
-            |k| k.to_string(),
-            |v| usize::from_be_bytes(v.try_into().unwrap()).to_string(),
-        )
+        .into_dot(|v| usize::from_be_bytes(v.try_into().unwrap()).to_string())
         .unwrap();
     println!("{dot}");
 }

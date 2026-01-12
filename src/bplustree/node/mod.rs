@@ -8,9 +8,7 @@ use crate::storage::PageIndex;
 use crate::{bplustree::InteriorNodeReader, page::PAGE_DATA_SIZE};
 use bytemuck::{Pod, Zeroable};
 
-// TODO: keys/values need to be a type parameter that implements Ord, so we can allow e.g. le
-// integers to be stored sensibly
-
+// TODO: should the TKey be Ord, instead of PartialOrd?
 pub(super) trait NodeReader<'node, TKey> {
     fn new(node: &'node Node, value_size: usize) -> Self;
 }
@@ -163,8 +161,7 @@ pub(super) struct Node {
 const _: () = assert!(size_of::<Node>() == PAGE_DATA_SIZE);
 
 impl Node {
-    // TODO rename -> new_interior()
-    pub(super) fn new_internal_root() -> Self {
+    pub(super) fn new_interior() -> Self {
         Self {
             header: NodeHeader {
                 key_len: 0,
@@ -176,8 +173,7 @@ impl Node {
         }
     }
 
-    // TODO rename -> new_leaf()
-    pub(super) fn new_leaf_root() -> Self {
+    pub(super) fn new_leaf() -> Self {
         Self {
             header: NodeHeader {
                 key_len: 0,
@@ -193,11 +189,11 @@ impl Node {
         !self.header.flags.contains(NodeFlags::INTERNAL)
     }
 
-    fn parent(&self) -> Option<PageIndex> {
+    fn parent(&self) -> Option<InteriorNodeId> {
         if self.header.parent == PageIndex::zeroed() {
             None
         } else {
-            Some(self.header.parent)
+            Some(InteriorNodeId::new(self.header.parent))
         }
     }
 

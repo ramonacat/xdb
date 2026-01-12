@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use bytemuck::Pod;
 
 use crate::bplustree::{AnyNodeId, TreeTransaction};
@@ -6,25 +8,15 @@ use crate::{
     storage::Storage,
 };
 
-impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
-    pub fn into_dot(
-        self,
-        // TODO use display instead of these closures
-        stringify_key: impl Fn(&TKey) -> String,
-        stringify_value: impl Fn(&[u8]) -> String,
-    ) -> Result<String, TreeError> {
+impl<T: Storage, TKey: Pod + PartialOrd + Display> Tree<T, TKey> {
+    pub fn into_dot(self, stringify_value: impl Fn(&[u8]) -> String) -> Result<String, TreeError> {
         let mut output = String::new();
 
         let transaction = self.transaction()?;
         let root_node_index = AnyNodeId::new(transaction.read_header(|h| h.root)?);
 
         output += "digraph {\n";
-        output += &Self::node_to_dot(
-            &transaction,
-            root_node_index,
-            &stringify_key,
-            &stringify_value,
-        )?;
+        output += &Self::node_to_dot(&transaction, root_node_index, &stringify_value)?;
         output += "}\n";
 
         Ok(output)
@@ -33,7 +25,6 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
     fn node_to_dot(
         transaction: &TreeTransaction<'_, T, TKey>,
         node_index: AnyNodeId,
-        stringify_key: &impl Fn(&TKey) -> String,
         stringify_value: &impl Fn(&[u8]) -> String,
     ) -> Result<String, TreeError> {
         let output = transaction.read_node(node_index, |node| {
@@ -44,7 +35,7 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                     let mut label: Vec<String> = vec![format!("index: {node_index}")];
 
                     for key in reader.keys() {
-                        label.push(stringify_key(key));
+                        label.push(key.to_string());
                     }
 
                     let label = label.join("\\n");
@@ -54,8 +45,7 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                     for (index, value) in reader.values().enumerate() {
                         output += &format!("N{node_index} -> N{value}[label=\"{index}\"];\n");
 
-                        output +=
-                            &Self::node_to_dot(transaction, value, stringify_key, stringify_value)?;
+                        output += &Self::node_to_dot(transaction, value, stringify_value)?;
                     }
                 }
                 super::AnyNodeReader::Leaf(reader) => {
@@ -72,7 +62,7 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                     for entry in reader.entries() {
                         label.push(format!(
                             "{}/{}",
-                            (stringify_key)(entry.key()),
+                            entry.key(),
                             (stringify_value)(entry.value())
                         ));
                     }

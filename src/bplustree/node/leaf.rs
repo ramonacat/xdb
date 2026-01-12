@@ -118,8 +118,7 @@ impl<'node, TKey: AnyBitPattern> LeafNodeReader<'node, TKey> {
         Some(self.entries_offset() + index * self.entry_size())
     }
 
-    // TODO this should return a NodeId!
-    pub fn parent(&self) -> Option<PageIndex> {
+    pub fn parent(&self) -> Option<InteriorNodeId> {
         self.node.parent()
     }
 

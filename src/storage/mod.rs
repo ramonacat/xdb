@@ -45,7 +45,6 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
         page: Page,
     ) -> Result<(), StorageError>;
 
-    // TODO change to insert and take a Page as the argument
     fn insert(&self, page: Page) -> Result<PageIndex, StorageError>;
 
     // TODO actually make this useful and ensure transactional consistency

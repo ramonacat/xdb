@@ -43,7 +43,7 @@ impl<'tree, T: Storage, TKey: Pod + PartialOrd> TreeIterator<'tree, T, TKey> {
     fn new(transaction: TreeTransaction<'tree, T, TKey>) -> Result<Self, TreeError> {
         // TODO introduce some better/more abstract API for reading the header?
         let root = transaction.read_header(|h| AnyNodeId::new(h.root))?;
-        let first_leaf = first_leaf(&transaction, root);
+        let first_leaf = first_leaf(&transaction, root)?;
 
         Ok(Self {
             transaction,
@@ -211,11 +211,10 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
         };
 
         let root_index = AnyNodeId::new(transaction.read_header(|h| h.root)?);
-
-        let target_node_index = leaf_search(&transaction, root_index, &key);
+        let target_node_id = leaf_search(&transaction, root_index, &key)?;
 
         let (parent_index, insert_result) =
-            transaction.write_node(target_node_index, |mut writer| {
+            transaction.write_node(target_node_id, |mut writer| {
                 // TODO parent_index should be a part of insert_result
                 let parent_index = writer.reader().parent();
                 let insert_result = writer.insert(key, value);
@@ -235,31 +234,26 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                 let mut new_node_writer: LeafNodeWriter<'_, TKey> =
                     LeafNodeWriter::new(&mut new_node, self.value_size);
 
-                let next = transaction.read_node(target_node_index, |reader| reader.next())?;
+                let next = transaction.read_node(target_node_id, |reader| reader.next())?;
 
-                if let Some(parent_index) = parent_index {
-                    transaction.write_node(InteriorNodeId::new(parent_index), |mut writer| {
-                        match writer.insert_node(&split_key, new_node_id.page()) {
+                if let Some(parent_id) = parent_index {
+                    transaction.write_node(parent_id, |mut writer| {
+                        match writer.insert_node(&split_key, new_node_id.into()) {
                             node::interior::InteriorInsertResult::Ok => {}
                             node::interior::InteriorInsertResult::Split => todo!(),
                         }
                     })?;
 
-                    transaction.write_node(target_node_index, |mut target_node| {
+                    transaction.write_node(target_node_id, |mut target_node| {
                         target_node.set_links(
-                            target_node.reader().parent().map(InteriorNodeId::new),
+                            target_node.reader().parent(),
                             target_node.reader().previous(),
                             Some(new_node_id),
                         );
                     })?;
 
-                    new_node_writer.set_links(
-                        Some(InteriorNodeId::new(parent_index)),
-                        Some(target_node_index),
-                        next,
-                    );
+                    new_node_writer.set_links(Some(parent_id), Some(target_node_id), next);
                 } else {
-                    // TODO this constructor should take the children and key as an argument
                     let new_root_page = Page::from_data(InteriorNodeWriter::create_root(
                         &[&split_key],
                         &[root_index, new_node_id.into()],
@@ -267,13 +261,9 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                     let new_root_page_index = transaction.insert(new_root_page)?;
                     let new_root_page_id = InteriorNodeId::new(new_root_page_index);
 
-                    new_node_writer.set_links(
-                        Some(new_root_page_id),
-                        Some(target_node_index),
-                        next,
-                    );
+                    new_node_writer.set_links(Some(new_root_page_id), Some(target_node_id), next);
 
-                    transaction.write_node(target_node_index, |mut target_node| {
+                    transaction.write_node(target_node_id, |mut target_node| {
                         target_node.set_links(
                             Some(new_root_page_id),
                             target_node.reader().previous(),
@@ -292,8 +282,7 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
     }
 
     #[allow(unused)]
-    // TODO make it take non-mut reference
-    fn iter(&mut self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
+    fn iter(&self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
         TreeIterator::new(self.transaction()?)
     }
 
@@ -339,20 +328,14 @@ impl TreeData {
         let header_page = transaction.reserve()?;
         assert!(header_page.index() == PageIndex::zeroed());
 
-        // TODO Page::from_data()?
-        let mut page = Page::zeroed();
-        *page.data_mut() = Node::new_leaf_root();
+        let root_index = transaction.insert(Page::from_data(Node::new_leaf()))?;
 
-        let root_index = transaction.insert(page)?;
-
-        let mut page = Page::zeroed();
-
-        *page.data_mut() = Self {
+        let page = Page::from_data(Self {
             key_size: key_size as u64,
             value_size: value_size as u64,
             root: root_index,
             _unused: [0; _],
-        };
+        });
 
         transaction.insert_reserved(header_page, page)?;
 
@@ -360,6 +343,7 @@ impl TreeData {
     }
 }
 
+// TODO: add quickcheck tests: https://rust-fuzz.github.io/book/cargo-fuzz/structure-aware-fuzzing.html
 #[cfg(test)]
 mod test {
     use std::sync::{
@@ -432,7 +416,7 @@ mod test {
         let page_count = Arc::new(AtomicUsize::new(0));
 
         let storage = TestStorage::new(InMemoryStorage::new(), page_count.clone());
-        let mut tree = Tree::<_, usize>::new(storage, size_of::<usize>()).unwrap();
+        let tree = Tree::<_, usize>::new(storage, size_of::<usize>()).unwrap();
 
         // TODO: find a more explicit way of counting nodes
         let mut i = 0usize;
