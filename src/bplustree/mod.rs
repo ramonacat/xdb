@@ -198,6 +198,7 @@ impl<T: Storage> Tree<T> {
         })
     }
 
+    // TODO move out into algorithms?
     pub fn insert(&self, key: &[u8], value: &[u8]) -> Result<(), TreeError> {
         let key_size = self.key_size;
 
