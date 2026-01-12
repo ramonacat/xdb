@@ -22,8 +22,8 @@ fn main() {
     // 3 pages mean there's been a node split
     // TODO: find a more explicit way of counting nodes
     let mut i = 0usize;
-    while page_count.load(Ordering::Relaxed) < 3 {
-        tree.insert(&i.to_le_bytes(), &(usize::MAX - i).to_le_bytes())
+    while page_count.load(Ordering::Relaxed) < 10 {
+        tree.insert(&i.to_be_bytes(), &(usize::MAX - i).to_be_bytes())
             .unwrap();
 
         i += 1;
@@ -31,8 +31,8 @@ fn main() {
 
     let dot = tree
         .into_dot(
-            |k| usize::from_le_bytes(k.try_into().unwrap()).to_string(),
-            |v| usize::from_le_bytes(v.try_into().unwrap()).to_string(),
+            |k| usize::from_be_bytes(k.try_into().unwrap()).to_string(),
+            |v| usize::from_be_bytes(v.try_into().unwrap()).to_string(),
         )
         .unwrap();
     println!("{dot}");

@@ -38,7 +38,7 @@ impl<T: Storage> Tree<T> {
 
             match node {
                 super::AnyNodeReader::Interior(reader) => {
-                    let mut label: Vec<String> = vec![];
+                    let mut label: Vec<String> = vec![format!("index: {node_index}")];
 
                     for key in reader.keys() {
                         label.push(stringify_key(key));
@@ -56,7 +56,8 @@ impl<T: Storage> Tree<T> {
                     }
                 }
                 super::AnyNodeReader::Leaf(reader) => {
-                    let mut label: Vec<String> = vec![];
+                    let mut label: Vec<String> = vec![format!("index: {node_index}")];
+
                     if let Some(previous) = reader.previous() {
                         label.push(format!("previous: {previous}"));
                     }

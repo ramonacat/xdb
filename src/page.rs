@@ -31,6 +31,15 @@ pub struct Page {
 const _: () = assert!(size_of::<Page>() == PAGE_SIZE);
 
 impl Page {
+    // TODO remove all the instances of Page::zeroed, and use this (or other) constructors
+    // everywhere
+    pub fn from_data<T: Pod>(data: T) -> Self {
+        Self {
+            header: PageHeader::zeroed(),
+            data: must_cast(data),
+        }
+    }
+
     #[allow(unused)] // TODO this will be needed for file storage
     pub fn serialize(mut self) -> [u8; PAGE_SIZE] {
         self.header.checksum.clear();

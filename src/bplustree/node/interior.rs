@@ -26,7 +26,7 @@ impl<'node> Iterator for InteriorNodeKeysIterator<'node> {
 
         self.index += 1;
 
-        Some(&reader.node.data[self.index * self.key_size..(self.index + 1) * self.key_size])
+        Some(&reader.node.data[(self.index - 1) * self.key_size..self.index * self.key_size])
     }
 }
 
@@ -75,7 +75,7 @@ impl<'node> InteriorNodeReader<'node> {
     }
 
     pub(in crate::bplustree) fn value_at(&self, index: usize) -> Option<AnyNodeId> {
-        if index >= self.key_len() {
+        if index > self.key_len() {
             return None;
         }
 
@@ -102,6 +102,7 @@ impl<'node> InteriorNodeReader<'node> {
     }
 }
 
+#[must_use]
 pub(in crate::bplustree) enum InteriorInsertResult {
     Ok,
     Split,
@@ -123,6 +124,26 @@ impl<'node> InteriorNodeWriter<'node> {
         Self { node, key_size }
     }
 
+    pub fn create_root(key_size: usize, keys: &[&[u8]], values: &[AnyNodeId]) -> Node {
+        assert!(values.len() == keys.len() + 1);
+
+        if values.len() != 2 || keys.len() != 1 {
+            todo!();
+        }
+
+        let mut node = Node::new_internal_root();
+
+        let mut writer = InteriorNodeWriter::new(&mut node, key_size);
+
+        writer.set_first_pointer(values[0]);
+        match writer.insert_node(keys[0], values[1].page()) {
+            InteriorInsertResult::Ok => {}
+            InteriorInsertResult::Split => todo!(),
+        }
+
+        node
+    }
+
     pub(in crate::bplustree) fn reader(&'node self) -> InteriorNodeReader<'node> {
         InteriorNodeReader::new(self.node, self.key_size)
     }
@@ -134,9 +155,11 @@ impl<'node> InteriorNodeWriter<'node> {
             .copy_from_slice(bytes_of(&index.page()));
     }
 
+    // TODO take AnyNodeId as the argument
     pub(crate) fn insert_node(&mut self, key: &[u8], value: PageIndex) -> InteriorInsertResult {
         assert!(value != PageIndex::zeroed());
-        let mut insert_at = 0;
+
+        let mut insert_at = self.reader().key_len();
 
         for (index, current_key) in self.reader().keys().enumerate() {
             if current_key > key {
@@ -155,14 +178,25 @@ impl<'node> InteriorNodeWriter<'node> {
             return InteriorInsertResult::Split;
         }
 
-        if key_len < index {
-            todo!();
-        }
+        debug_assert!(key != vec![0; key.len()]);
 
         self.node.header.key_len += 1;
 
-        let key_offset = self.key_size * (index + 1);
+        let key_offset = self.key_size * (index);
         let value_offset = self.reader().values_offset() + size_of::<PageIndex>() * (index + 1);
+
+        let keys_to_move =
+            &self.node.data[key_offset..key_offset + self.key_size * (key_len - index)].to_vec();
+        self.node.data
+            [key_offset + self.key_size..key_offset + self.key_size * (key_len - index + 1)]
+            .copy_from_slice(keys_to_move);
+
+        let values_to_move = &self.node.data
+            [value_offset..value_offset + (key_len - index) * size_of::<PageIndex>()]
+            .to_vec();
+        self.node.data[value_offset + size_of::<PageIndex>()
+            ..value_offset + (key_len - index + 1) * size_of::<PageIndex>()]
+            .copy_from_slice(values_to_move);
 
         self.node.data[key_offset..key_offset + self.key_size].copy_from_slice(key);
         self.node.data[value_offset..value_offset + size_of::<PageIndex>()]

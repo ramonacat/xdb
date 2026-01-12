@@ -3,7 +3,7 @@ use bytemuck::{Pod, Zeroable, from_bytes, from_bytes_mut};
 use crate::{
     bplustree::{
         LeafNodeId, Node, NodeId, TreeError,
-        node::{NodeFlags, NodeHeader, NodeReader, NodeWriter},
+        node::{InteriorNodeId, NodeFlags, NodeHeader, NodeReader, NodeWriter},
     },
     storage::PageIndex,
 };
@@ -203,7 +203,7 @@ impl<'node> LeafNodeWriter<'node> {
 
         for (index, entry) in self.reader().entries().enumerate() {
             if key < entry.key {
-                insert_index = if index == 0 { 0 } else { index - 1 };
+                insert_index = index;
                 break;
             }
         }
@@ -297,6 +297,8 @@ impl<'node> LeafNodeWriter<'node> {
 
         self.node.header.key_len = entries_to_leave as u16;
 
+        // TODO we should not create the node here at all, and instead just return the data, so the
+        // user can construct the new node with the correct links
         let mut new_node = Node {
             header: NodeHeader {
                 key_len: entries_to_move as u16,
@@ -317,16 +319,19 @@ impl<'node> LeafNodeWriter<'node> {
         )
     }
 
-    pub fn set_parent(&mut self, new_parent: PageIndex) {
-        self.node.set_parent(new_parent);
-    }
-
-    pub fn set_previous(&mut self, previous: Option<LeafNodeId>) {
-        self.header_mut().previous = previous.map_or(PageIndex::zeroed(), |x| x.page())
-    }
-
-    pub fn set_next(&mut self, next: Option<LeafNodeId>) {
-        self.header_mut().next = next.map_or(PageIndex::zeroed(), |x| x.page())
+    pub fn set_links(
+        &mut self,
+        parent: Option<InteriorNodeId>,
+        previous: Option<LeafNodeId>,
+        next: Option<LeafNodeId>,
+    ) {
+        self.node
+            // TODO replace this and all the other instances of PageIndex::zeroed() with an
+            // explicit constructor
+            .set_parent(parent.map_or_else(PageIndex::zeroed, |x| x.page()));
+        let header = self.header_mut();
+        header.previous = previous.map_or(PageIndex::zeroed(), |x| x.page());
+        header.next = next.map_or(PageIndex::zeroed(), |x| x.page())
     }
 
     fn header_mut(&mut self) -> &mut LeafNodeHeader {

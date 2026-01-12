@@ -8,6 +8,9 @@ use crate::storage::PageIndex;
 use crate::{bplustree::InteriorNodeReader, page::PAGE_DATA_SIZE};
 use bytemuck::{Pod, Zeroable};
 
+// TODO: keys/values need to be a type parameter that implements Ord, so we can allow e.g. le
+// integers to be stored sensibly
+
 pub(super) trait NodeReader<'node> {
     fn new(node: &'node Node, key_size: usize, value_size: usize) -> Self;
 }
@@ -25,6 +28,12 @@ pub(super) trait NodeId: Copy + PartialEq {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct AnyNodeId(PageIndex);
+
+impl From<LeafNodeId> for AnyNodeId {
+    fn from(value: LeafNodeId) -> Self {
+        Self(value.page())
+    }
+}
 
 impl Display for AnyNodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -82,6 +91,14 @@ impl NodeId for LeafNodeId {
 #[allow(unused)] // TODO remove if we really don't need it
 pub(super) struct InteriorNodeId(PageIndex);
 
+impl InteriorNodeId {
+    pub(crate) fn new(index: PageIndex) -> Self {
+        assert!(index != PageIndex::zeroed());
+
+        Self(index)
+    }
+}
+
 impl NodeId for InteriorNodeId {
     type Reader<'node> = InteriorNodeReader<'node>;
     type Writer<'node> = InteriorNodeWriter<'node>;
@@ -124,6 +141,7 @@ pub(super) struct Node {
 const _: () = assert!(size_of::<Node>() == PAGE_DATA_SIZE);
 
 impl Node {
+    // TODO rename -> new_interior()
     pub(super) fn new_internal_root() -> Self {
         Self {
             header: NodeHeader {
@@ -136,6 +154,7 @@ impl Node {
         }
     }
 
+    // TODO rename -> new_leaf()
     pub(super) fn new_leaf_root() -> Self {
         Self {
             header: NodeHeader {

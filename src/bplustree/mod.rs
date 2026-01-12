@@ -6,6 +6,7 @@ use crate::bplustree::algorithms::first_leaf;
 use crate::bplustree::algorithms::leaf_search;
 use crate::bplustree::node::AnyNodeId;
 use crate::bplustree::node::AnyNodeReader;
+use crate::bplustree::node::InteriorNodeId;
 use crate::bplustree::node::LeafNodeId;
 use crate::bplustree::node::Node;
 use crate::bplustree::node::NodeId;
@@ -211,6 +212,7 @@ impl<T: Storage> Tree<T> {
         let root_index = AnyNodeId::new(transaction.read_header(|h| h.root)?);
 
         let target_node_index = leaf_search(&transaction, root_index, key);
+
         let (parent_index, insert_result) =
             transaction.write_node(target_node_index, |mut writer| {
                 // TODO parent_index should be a part of insert_result
@@ -226,46 +228,65 @@ impl<T: Storage> Tree<T> {
                 mut new_node,
                 split_key,
             } => {
-                if let Some(_parent_index) = parent_index {
-                    todo!();
-                } else {
-                    let new_node_reservation = transaction.reserve_node()?;
+                let new_node_reservation = transaction.reserve_node()?;
+                let new_node_id = LeafNodeId::new(new_node_reservation.index());
 
-                    // TODO remove all instances of Page::zeroed and use a more specific
-                    // constructor
-                    let mut new_root_page = Page::zeroed();
-                    let new_root_node = new_root_page.data_mut::<Node>();
-                    *new_root_node = Node::new_internal_root();
-                    let mut new_root_writer = InteriorNodeWriter::new(new_root_node, key_size);
+                let mut new_node_writer =
+                    LeafNodeWriter::new(&mut new_node, self.key_size, self.value_size);
 
-                    new_root_writer.set_first_pointer(root_index);
-                    new_root_writer.insert_node(&split_key, new_node_reservation.index());
+                let next = transaction.read_node(target_node_index, |reader| reader.next())?;
 
-                    let new_root_page_index = transaction.insert(new_root_page)?;
-
-                    new_node.set_parent(new_root_page_index);
-                    let mut new_node_writer =
-                        LeafNodeWriter::new(&mut new_node, self.key_size, self.value_size);
-                    new_node_writer.set_previous(Some(target_node_index));
-
-                    transaction.read_node(target_node_index, |reader| {
-                        new_node_writer.set_next(reader.next());
+                if let Some(parent_index) = parent_index {
+                    transaction.write_node(InteriorNodeId::new(parent_index), |mut writer| {
+                        match writer.insert_node(&split_key, new_node_id.page()) {
+                            node::interior::InteriorInsertResult::Ok => {}
+                            node::interior::InteriorInsertResult::Split => todo!(),
+                        }
                     })?;
 
-                    let mut new_node_page = Page::zeroed();
-                    *new_node_page.data_mut() = *new_node;
-                    let new_node_index = new_node_reservation.index();
-                    transaction.insert_reserved(new_node_reservation, new_node_page)?;
+                    transaction.write_node(target_node_index, |mut target_node| {
+                        target_node.set_links(
+                            target_node.reader().parent().map(InteriorNodeId::new),
+                            target_node.reader().previous(),
+                            Some(new_node_id),
+                        );
+                    })?;
+
+                    new_node_writer.set_links(
+                        Some(InteriorNodeId::new(parent_index)),
+                        Some(target_node_index),
+                        next,
+                    );
+                } else {
+                    // TODO this constructor should take the children and key as an argument
+                    let new_root_page = Page::from_data(InteriorNodeWriter::create_root(
+                        key_size,
+                        &[&split_key],
+                        &[root_index, new_node_id.into()],
+                    ));
+                    let new_root_page_index = transaction.insert(new_root_page)?;
+                    let new_root_page_id = InteriorNodeId::new(new_root_page_index);
+
+                    new_node_writer.set_links(
+                        Some(new_root_page_id),
+                        Some(target_node_index),
+                        next,
+                    );
 
                     transaction.write_node(target_node_index, |mut target_node| {
-                        target_node.set_parent(new_root_page_index);
-                        target_node.set_next(Some(LeafNodeId::new(new_node_index)));
+                        target_node.set_links(
+                            Some(new_root_page_id),
+                            target_node.reader().previous(),
+                            Some(new_node_id),
+                        );
                     })?;
 
                     transaction.write_header(|header| header.root = new_root_page_index)?;
-
-                    Ok(())
                 }
+
+                transaction.insert_reserved(new_node_reservation, Page::from_data(*new_node))?;
+
+                Ok(())
             }
         }
     }
@@ -421,11 +442,13 @@ mod test {
         let storage = TestStorage::new(InMemoryStorage::new(), page_count.clone());
         let mut tree = Tree::new(storage, size_of::<usize>(), size_of::<usize>()).unwrap();
 
-        // 3 pages mean there's been a node split
         // TODO: find a more explicit way of counting nodes
         let mut i = 0usize;
-        while page_count.load(Ordering::Relaxed) < 3 {
-            tree.insert(&i.to_le_bytes(), &(usize::max_value() - i).to_le_bytes())
+
+        // 10 pages should give us a resonable number of node splits to assume that the basic logic
+        //    works
+        while page_count.load(Ordering::Relaxed) < 10 {
+            tree.insert(&i.to_be_bytes(), &(usize::max_value() - i).to_be_bytes())
                 .unwrap();
 
             i += 1;
@@ -437,8 +460,8 @@ mod test {
             assert!(i < entry_count);
             let (key, value) = item.unwrap();
 
-            let key: usize = usize::from_le_bytes(key.try_into().unwrap());
-            let value: usize = usize::from_le_bytes(value.try_into().unwrap());
+            let key: usize = usize::from_be_bytes(key.try_into().unwrap());
+            let value: usize = usize::from_be_bytes(value.try_into().unwrap());
 
             assert!(key == i);
             assert!(value == usize::max_value() - i);
