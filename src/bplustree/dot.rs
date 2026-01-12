@@ -1,13 +1,16 @@
+use bytemuck::Pod;
+
 use crate::bplustree::{AnyNodeId, TreeTransaction};
 use crate::{
     bplustree::{Tree, TreeError},
     storage::Storage,
 };
 
-impl<T: Storage> Tree<T> {
+impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
     pub fn into_dot(
         self,
-        stringify_key: impl Fn(&[u8]) -> String,
+        // TODO use display instead of these closures
+        stringify_key: impl Fn(&TKey) -> String,
         stringify_value: impl Fn(&[u8]) -> String,
     ) -> Result<String, TreeError> {
         let mut output = String::new();
@@ -28,9 +31,9 @@ impl<T: Storage> Tree<T> {
     }
 
     fn node_to_dot(
-        transaction: &TreeTransaction<'_, T>,
+        transaction: &TreeTransaction<'_, T, TKey>,
         node_index: AnyNodeId,
-        stringify_key: &impl Fn(&[u8]) -> String,
+        stringify_key: &impl Fn(&TKey) -> String,
         stringify_value: &impl Fn(&[u8]) -> String,
     ) -> Result<String, TreeError> {
         let output = transaction.read_node(node_index, |node| {

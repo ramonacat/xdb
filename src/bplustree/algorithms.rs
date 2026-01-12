@@ -1,3 +1,5 @@
+use bytemuck::Pod;
+
 use crate::{
     bplustree::{
         TreeTransaction,
@@ -7,10 +9,10 @@ use crate::{
 };
 
 // TODO return a Result, remove unwraps
-pub(super) fn leaf_search<TStorage: Storage>(
-    transaction: &TreeTransaction<TStorage>,
+pub(super) fn leaf_search<TStorage: Storage, TKey: Pod + PartialOrd>(
+    transaction: &TreeTransaction<TStorage, TKey>,
     node_index: AnyNodeId,
-    key: &[u8],
+    key: &TKey,
 ) -> LeafNodeId {
     // TODO the closure should just get the node reader as the argument here
     let result = transaction.read_node(node_index, |node| {
@@ -38,8 +40,8 @@ pub(super) fn leaf_search<TStorage: Storage>(
 }
 
 // TODO return a result, don't unwrap
-pub(super) fn first_leaf<TStorage: Storage>(
-    transaction: &TreeTransaction<TStorage>,
+pub(super) fn first_leaf<TStorage: Storage, TKey: Pod + PartialOrd>(
+    transaction: &TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> LeafNodeId {
     transaction

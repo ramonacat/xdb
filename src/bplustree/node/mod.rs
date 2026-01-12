@@ -11,17 +11,21 @@ use bytemuck::{Pod, Zeroable};
 // TODO: keys/values need to be a type parameter that implements Ord, so we can allow e.g. le
 // integers to be stored sensibly
 
-pub(super) trait NodeReader<'node> {
-    fn new(node: &'node Node, key_size: usize, value_size: usize) -> Self;
+pub(super) trait NodeReader<'node, TKey> {
+    fn new(node: &'node Node, value_size: usize) -> Self;
 }
 
-pub(super) trait NodeWriter<'node> {
-    fn new(node: &'node mut Node, key_size: usize, value_size: usize) -> Self;
+pub(super) trait NodeWriter<'node, TKey> {
+    fn new(node: &'node mut Node, value_size: usize) -> Self;
 }
 
 pub(super) trait NodeId: Copy + PartialEq {
-    type Reader<'node>: NodeReader<'node>;
-    type Writer<'node>: NodeWriter<'node>;
+    type Reader<'node, TKey>: NodeReader<'node, TKey>
+    where
+        TKey: Pod + 'node;
+    type Writer<'node, TKey>: NodeWriter<'node, TKey>
+    where
+        TKey: Pod + PartialOrd + 'node;
 
     fn page(&self) -> PageIndex;
 }
@@ -50,8 +54,14 @@ impl AnyNodeId {
 }
 
 impl NodeId for AnyNodeId {
-    type Reader<'node> = AnyNodeReader<'node>;
-    type Writer<'node> = AnyNodeWriter<'node>;
+    type Reader<'node, TKey>
+        = AnyNodeReader<'node, TKey>
+    where
+        TKey: Pod + 'node;
+    type Writer<'node, TKey>
+        = AnyNodeWriter<'node, TKey>
+    where
+        TKey: Pod + PartialOrd + 'node;
 
     fn page(&self) -> PageIndex {
         self.0
@@ -79,8 +89,14 @@ impl LeafNodeId {
 }
 
 impl NodeId for LeafNodeId {
-    type Reader<'node> = LeafNodeReader<'node>;
-    type Writer<'node> = LeafNodeWriter<'node>;
+    type Reader<'node, TKey>
+        = LeafNodeReader<'node, TKey>
+    where
+        TKey: Pod + 'node;
+    type Writer<'node, TKey>
+        = LeafNodeWriter<'node, TKey>
+    where
+        TKey: Pod + PartialOrd + 'node;
 
     fn page(&self) -> PageIndex {
         self.0
@@ -100,8 +116,14 @@ impl InteriorNodeId {
 }
 
 impl NodeId for InteriorNodeId {
-    type Reader<'node> = InteriorNodeReader<'node>;
-    type Writer<'node> = InteriorNodeWriter<'node>;
+    type Reader<'node, TKey>
+        = InteriorNodeReader<'node, TKey>
+    where
+        TKey: Pod + 'node;
+    type Writer<'node, TKey>
+        = InteriorNodeWriter<'node, TKey>
+    where
+        TKey: Pod + PartialOrd + 'node;
 
     fn page(&self) -> PageIndex {
         self.0
@@ -186,33 +208,33 @@ impl Node {
     }
 }
 
-pub(super) enum AnyNodeReader<'node> {
-    Interior(InteriorNodeReader<'node>),
-    Leaf(LeafNodeReader<'node>),
+pub(super) enum AnyNodeReader<'node, TKey> {
+    Interior(InteriorNodeReader<'node, TKey>),
+    Leaf(LeafNodeReader<'node, TKey>),
 }
 
-impl<'node> NodeReader<'node> for AnyNodeReader<'node> {
-    fn new(node: &'node Node, key_size: usize, value_size: usize) -> Self {
+impl<'node, TKey: Pod> NodeReader<'node, TKey> for AnyNodeReader<'node, TKey> {
+    fn new(node: &'node Node, value_size: usize) -> Self {
         if node.is_leaf() {
-            Self::Leaf(LeafNodeReader::new(node, key_size, value_size))
+            Self::Leaf(LeafNodeReader::new(node, value_size))
         } else {
-            Self::Interior(InteriorNodeReader::new(node, key_size))
+            Self::Interior(InteriorNodeReader::new(node))
         }
     }
 }
 
 #[allow(unused)] // TODO remove if we really don't need it
-pub(super) enum AnyNodeWriter<'node> {
-    Interior(InteriorNodeWriter<'node>),
-    Leaf(LeafNodeWriter<'node>),
+pub(super) enum AnyNodeWriter<'node, TKey> {
+    Interior(InteriorNodeWriter<'node, TKey>),
+    Leaf(LeafNodeWriter<'node, TKey>),
 }
 
-impl<'node> NodeWriter<'node> for AnyNodeWriter<'node> {
-    fn new(node: &'node mut Node, key_size: usize, value_size: usize) -> Self {
+impl<'node, TKey: Pod + PartialOrd> NodeWriter<'node, TKey> for AnyNodeWriter<'node, TKey> {
+    fn new(node: &'node mut Node, value_size: usize) -> Self {
         if node.is_leaf() {
-            AnyNodeWriter::Leaf(LeafNodeWriter::new(node, key_size, value_size))
+            AnyNodeWriter::Leaf(LeafNodeWriter::new(node, value_size))
         } else {
-            AnyNodeWriter::Interior(InteriorNodeWriter::new(node, key_size))
+            AnyNodeWriter::Interior(InteriorNodeWriter::new(node))
         }
     }
 }

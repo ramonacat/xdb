@@ -1,4 +1,6 @@
-use bytemuck::{Pod, Zeroable, from_bytes, from_bytes_mut};
+use std::marker::PhantomData;
+
+use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, bytes_of, from_bytes, from_bytes_mut};
 
 use crate::{
     bplustree::{
@@ -15,13 +17,13 @@ struct LeafNodeHeader {
     next: PageIndex,
 }
 
-pub(in crate::bplustree) struct LeafNodeEntry<'node> {
-    key: &'node [u8],
+pub(in crate::bplustree) struct LeafNodeEntry<'node, TKey> {
+    key: &'node TKey,
     value: &'node [u8],
 }
 
-impl<'node> LeafNodeEntry<'node> {
-    pub fn key(&self) -> &'node [u8] {
+impl<'node, TKey> LeafNodeEntry<'node, TKey> {
+    pub fn key(&self) -> &'node TKey {
         self.key
     }
 
@@ -30,13 +32,14 @@ impl<'node> LeafNodeEntry<'node> {
     }
 }
 
-struct LeafNodeEntryIterator<'node> {
-    reader: &'node LeafNodeReader<'node>,
+struct LeafNodeEntryIterator<'node, TKey> {
+    reader: &'node LeafNodeReader<'node, TKey>,
     offset: usize,
+    _key: PhantomData<TKey>,
 }
 
-impl<'node> Iterator for LeafNodeEntryIterator<'node> {
-    type Item = LeafNodeEntry<'node>;
+impl<'node, TKey: AnyBitPattern + 'node> Iterator for LeafNodeEntryIterator<'node, TKey> {
+    type Item = LeafNodeEntry<'node, TKey>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.offset >= self.reader.len() {
@@ -49,42 +52,43 @@ impl<'node> Iterator for LeafNodeEntryIterator<'node> {
     }
 }
 
-pub(in crate::bplustree) struct LeafNodeReader<'node> {
-    key_size: usize,
+pub(in crate::bplustree) struct LeafNodeReader<'node, TKey> {
     value_size: usize,
     node: &'node Node,
+    _key: PhantomData<&'node TKey>,
 }
 
-impl<'node> NodeReader<'node> for LeafNodeReader<'node> {
-    fn new(node: &'node Node, key_size: usize, value_size: usize) -> Self {
+impl<'node, TKey> NodeReader<'node, TKey> for LeafNodeReader<'node, TKey> {
+    fn new(node: &'node Node, value_size: usize) -> Self {
         Self {
-            key_size,
             value_size,
             node,
+            _key: PhantomData,
         }
     }
 }
 
-impl<'node> LeafNodeReader<'node> {
-    pub fn new(node: &'node Node, key_size: usize, value_size: usize) -> Self {
+impl<'node, TKey: AnyBitPattern> LeafNodeReader<'node, TKey> {
+    pub fn new(node: &'node Node, value_size: usize) -> Self {
         assert!(node.is_leaf());
 
         // TODO return a result with an error if we can't fit at least two entries
         Self {
-            key_size,
             value_size,
             node,
+            _key: PhantomData,
         }
     }
 
     fn entry_size(&self) -> usize {
-        self.key_size + self.value_size
+        size_of::<TKey>() + self.value_size
     }
 
-    pub fn entries(&'node self) -> impl Iterator<Item = LeafNodeEntry<'node>> {
+    pub fn entries(&'node self) -> impl Iterator<Item = LeafNodeEntry<'node, TKey>> {
         LeafNodeEntryIterator {
             reader: self,
             offset: 0,
+            _key: PhantomData,
         }
     }
 
@@ -92,7 +96,7 @@ impl<'node> LeafNodeReader<'node> {
         usize::from(self.node.header.key_len)
     }
 
-    fn entry(&'node self, index: usize) -> Option<LeafNodeEntry<'node>> {
+    fn entry(&'node self, index: usize) -> Option<LeafNodeEntry<'node, TKey>> {
         if index >= usize::from(self.node.header.key_len) {
             return None;
         }
@@ -100,9 +104,9 @@ impl<'node> LeafNodeReader<'node> {
         let entry_offset = self.entry_offset(index)?;
 
         Some(LeafNodeEntry {
-            key: &self.node.data[entry_offset..entry_offset + self.key_size],
-            value: &self.node.data
-                [entry_offset + self.key_size..entry_offset + self.key_size + self.value_size],
+            key: from_bytes(&self.node.data[entry_offset..entry_offset + size_of::<TKey>()]),
+            value: &self.node.data[entry_offset + size_of::<TKey>()
+                ..entry_offset + size_of::<TKey>() + self.value_size],
         })
     }
 
@@ -148,53 +152,49 @@ impl<'node> LeafNodeReader<'node> {
     }
 }
 
-pub(in crate::bplustree) struct LeafNodeWriter<'node> {
-    key_size: usize,
+pub(in crate::bplustree) struct LeafNodeWriter<'node, TKey> {
     value_size: usize,
     node: &'node mut Node,
+    _key: PhantomData<&'node TKey>,
 }
 
-impl<'node> NodeWriter<'node> for LeafNodeWriter<'node> {
-    fn new(node: &'node mut Node, key_size: usize, value_size: usize) -> Self {
+impl<'node, TKey> NodeWriter<'node, TKey> for LeafNodeWriter<'node, TKey> {
+    fn new(node: &'node mut Node, value_size: usize) -> Self {
         Self {
-            key_size,
             value_size,
             node,
+            _key: PhantomData,
         }
     }
 }
 
 #[must_use]
 #[derive(Debug)]
-pub(in crate::bplustree) enum LeafInsertResult {
+pub(in crate::bplustree) enum LeafInsertResult<TKey> {
     Done,
     Split {
         new_node: Box<Node>,
-        split_key: Vec<u8>,
+        split_key: TKey,
     },
 }
 
-impl<'node> LeafNodeWriter<'node> {
-    pub fn new(node: &'node mut Node, key_size: usize, value_size: usize) -> Self {
+impl<'node, TKey: AnyBitPattern + PartialOrd + NoUninit + Clone> LeafNodeWriter<'node, TKey> {
+    pub fn new(node: &'node mut Node, value_size: usize) -> Self {
         assert!(node.is_leaf());
 
         // TODO return a result with an error if we can't fit at least two entries
         Self {
-            key_size,
             value_size,
             node,
+            _key: PhantomData,
         }
     }
 
-    pub fn reader(&'node self) -> LeafNodeReader<'node> {
-        LeafNodeReader::new(self.node, self.key_size, self.value_size)
+    pub fn reader(&'node self) -> LeafNodeReader<'node, TKey> {
+        LeafNodeReader::new(self.node, self.value_size)
     }
 
-    pub fn insert(&mut self, key: &[u8], value: &[u8]) -> Result<LeafInsertResult, TreeError> {
-        if key.len() != self.key_size {
-            return Err(TreeError::InvalidKeyLength);
-        }
-
+    pub fn insert(&mut self, key: TKey, value: &[u8]) -> Result<LeafInsertResult<TKey>, TreeError> {
         if value.len() != self.reader().value_size {
             return Err(TreeError::InvalidValueLength);
         }
@@ -202,7 +202,7 @@ impl<'node> LeafNodeWriter<'node> {
         let mut insert_index = self.reader().len();
 
         for (index, entry) in self.reader().entries().enumerate() {
-            if key < entry.key {
+            if &key < entry.key {
                 insert_index = index;
                 break;
             }
@@ -212,7 +212,7 @@ impl<'node> LeafNodeWriter<'node> {
             let (split_index, split_key, mut new_node) = self.split();
 
             if insert_index > split_index {
-                let result = LeafNodeWriter::new(&mut new_node, self.key_size, self.value_size)
+                let result = LeafNodeWriter::new(&mut new_node, self.value_size)
                     .insert(key, value)
                     .unwrap();
 
@@ -254,7 +254,7 @@ impl<'node> LeafNodeWriter<'node> {
         self.reader().len() + 1 >= self.capacity()
     }
 
-    fn insert_at(&mut self, index: usize, key: &[u8], value: &[u8]) -> Result<(), TreeError> {
+    fn insert_at(&mut self, index: usize, key: TKey, value: &[u8]) -> Result<(), TreeError> {
         assert!(index < self.capacity());
         assert!(!self.is_full());
 
@@ -273,17 +273,18 @@ impl<'node> LeafNodeWriter<'node> {
 
         let entry_offset = self.reader().entry_offset(index).unwrap();
 
-        let key_hole: &mut [u8] = &mut self.node.data[entry_offset..entry_offset + key.len()];
-        key_hole.copy_from_slice(key);
+        let key_hole: &mut [u8] =
+            &mut self.node.data[entry_offset..entry_offset + size_of::<TKey>()];
+        key_hole.copy_from_slice(bytes_of(&key));
 
-        let value_hole =
-            &mut self.node.data[entry_offset + key.len()..entry_offset + key.len() + value.len()];
+        let value_hole = &mut self.node.data
+            [entry_offset + size_of::<TKey>()..entry_offset + size_of::<TKey>() + value.len()];
         value_hole.copy_from_slice(value);
 
         Ok(())
     }
 
-    fn split(&mut self) -> (usize, Vec<u8>, Node) {
+    fn split(&mut self) -> (usize, TKey, Node) {
         let entries_start = self.reader().entries_offset();
 
         let initial_len = self.reader().len();
@@ -314,7 +315,10 @@ impl<'node> LeafNodeWriter<'node> {
 
         (
             entries_to_move,
-            new_node.data[entries_start..entries_start + size_of::<PageIndex>()].to_vec(),
+            from_bytes::<TKey>(
+                &new_node.data[entries_start..entries_start + size_of::<PageIndex>()],
+            )
+            .to_owned(),
             new_node,
         )
     }
