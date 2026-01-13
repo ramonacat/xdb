@@ -395,7 +395,8 @@ mod test {
         // 10 pages should give us a resonable number of node splits to assume that the basic logic
         //    works
         while page_count.load(Ordering::Relaxed) < 10 {
-            tree.insert(i, &(usize::max_value() - i).to_be_bytes())
+            // make the value bigger with repeat so fewer inserts are needed and the test runs faster
+            tree.insert(i, &(usize::max_value() - i).to_be_bytes().repeat(128))
                 .unwrap();
 
             i += 1;
@@ -407,7 +408,9 @@ mod test {
             assert!(i < entry_count);
             let (key, value) = item.unwrap();
 
-            let value: usize = usize::from_be_bytes(value.try_into().unwrap());
+            assert!(value == value[..size_of::<usize>()].repeat(128));
+
+            let value: usize = usize::from_be_bytes(value[0..size_of::<usize>()].try_into().unwrap());
 
             assert!(key == i);
             assert!(value == usize::max_value() - i);
@@ -438,7 +441,9 @@ mod test {
                 1 => &(i as u8).to_be_bytes(),
                 _ => unreachable!(),
             };
-            tree.insert(i, value).unwrap();
+
+            // make the value bigger with repeat so fewer inserts are needed and the test runs faster
+            tree.insert(i, &value.repeat(128)).unwrap();
 
             i += 1;
         }
@@ -450,13 +455,14 @@ mod test {
             let (key, value) = item.unwrap();
 
             let value_matches_expected = match i % 8 {
-                0 | 7 | 6 | 5 => i as u64 == u64::from_be_bytes(value.try_into().unwrap()),
-                4 | 3 => i as u32 == u32::from_be_bytes(value.try_into().unwrap()),
-                2 => i as u16 == u16::from_be_bytes(value.try_into().unwrap()),
-                1 => i as u8 == u8::from_be_bytes(value.try_into().unwrap()),
+                0 | 7 | 6 | 5 => i as u64 == u64::from_be_bytes(value[..size_of::<u64>()].try_into().unwrap()),
+                4 | 3 => i as u32 == u32::from_be_bytes(value[..size_of::<u32>()].try_into().unwrap()),
+                2 => i as u16 == u16::from_be_bytes(value[..size_of::<u16>()].try_into().unwrap()),
+                1 => i as u8 == u8::from_be_bytes(value[..size_of::<u8>()].try_into().unwrap()),
                 _ => unreachable!(),
             };
 
+            assert!(value[..value.len()/128].repeat(128) == value);
             assert!(key == i);
             assert!(value_matches_expected);
         }
