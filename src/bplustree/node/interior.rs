@@ -1,19 +1,59 @@
+use crate::bplustree::node::NodeFlags;
 use std::marker::PhantomData;
 
-use bytemuck::{Pod, Zeroable as _, bytes_of, checked::pod_read_unaligned, from_bytes};
+use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned, from_bytes};
 
 use crate::{
     bplustree::{
-        InteriorNodeId, Node, NodeId,
-        node::{AnyNodeId, NodeReader, NodeWriter},
+        InteriorNodeId, NodeId,
+        node::{AnyNodeId, NODE_DATA_SIZE, NodeHeader, NodeReader, NodeTrait, NodeWriter},
     },
     storage::PageIndex,
 };
 
-struct InteriorNodeKeysIterator<'node, TKey> {
-    node: &'node Node,
+#[derive(Debug, Zeroable, Clone, Copy)]
+#[repr(C, align(8))]
+pub(in crate::bplustree) struct InteriorNode<TKey> where TKey:Pod {
+    header: NodeHeader,
+    data: [u8; NODE_DATA_SIZE],
+    _key: PhantomData<TKey>
+}
+impl<TKey: Pod> InteriorNode<TKey> {
+    pub fn new() -> Self {
+        Self { 
+            header: NodeHeader {
+                key_len: 0,
+                flags: NodeFlags::INTERNAL,
+                _unused2: 0,
+                parent: PageIndex::zeroed(),
+            },
+            data: [0; _],
+            _key: PhantomData
+        }
+    }
+
+    fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
+        self.header.parent = parent.map_or_else(PageIndex::zeroed, |x| x.page());
+    }
+}
+
+// SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
+// automatically if not for the PhantomData
+unsafe impl<TKey: Pod> Pod for InteriorNode<TKey> {}
+
+impl<TKey: Pod> NodeTrait<TKey> for InteriorNode<TKey> {
+    fn parent(&self) -> Option<InteriorNodeId> {
+        self.header.parent()
+    }
+
+    fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
+        self.header.set_parent(parent);
+    }
+}
+
+struct InteriorNodeKeysIterator<'node, TKey: Pod> {
+    node: &'node InteriorNode<TKey>,
     index: usize,
-    _key: PhantomData<&'node TKey>,
 }
 
 impl<'node, TKey: Pod> Iterator for InteriorNodeKeysIterator<'node, TKey> {
@@ -36,25 +76,22 @@ impl<'node, TKey: Pod> Iterator for InteriorNodeKeysIterator<'node, TKey> {
 }
 
 #[derive(Debug)]
-pub(in crate::bplustree) struct InteriorNodeReader<'node, TKey> {
-    node: &'node Node,
-    _key: PhantomData<&'node TKey>,
+pub(in crate::bplustree) struct InteriorNodeReader<'node, TKey: Pod> {
+    node: &'node InteriorNode<TKey>,
 }
 
-impl<'node, TKey> NodeReader<'node, TKey> for InteriorNodeReader<'node, TKey> {
-    fn new(node: &'node Node) -> Self {
+impl<'node, TKey: Pod> NodeReader<'node, InteriorNode<TKey>, TKey> for InteriorNodeReader<'node, TKey> {
+    fn new(node: &'node InteriorNode<TKey>) -> Self {
         Self {
             node,
-            _key: PhantomData,
         }
     }
 }
 
 impl<'node, TKey: Pod> InteriorNodeReader<'node, TKey> {
-    pub(in crate::bplustree) fn new(node: &'node Node) -> Self {
+    pub(in crate::bplustree) fn new(node: &'node InteriorNode<TKey>) -> Self {
         Self {
             node,
-            _key: PhantomData,
         }
     }
 
@@ -62,7 +99,6 @@ impl<'node, TKey: Pod> InteriorNodeReader<'node, TKey> {
         InteriorNodeKeysIterator {
             node: self.node,
             index: 0,
-            _key: PhantomData::<&'node TKey>,
         }
     }
 
@@ -128,41 +164,38 @@ impl<'node, TKey: Pod> InteriorNodeReader<'node, TKey> {
 }
 
 #[must_use]
-pub(in crate::bplustree) enum InteriorInsertResult {
+pub(in crate::bplustree) enum InteriorInsertResult<TKey: Pod> {
     Ok,
-    Split(Box<Node>),
+    Split(Box<InteriorNode<TKey>>),
 }
 
-pub(in crate::bplustree) struct InteriorNodeWriter<'node, TKey> {
-    node: &'node mut Node,
-    _key: PhantomData<&'node TKey>,
+pub(in crate::bplustree) struct InteriorNodeWriter<'node, TKey: Pod> {
+    node: &'node mut InteriorNode<TKey>,
 }
 
-impl<'node, TKey> NodeWriter<'node, TKey> for InteriorNodeWriter<'node, TKey> {
-    fn new(node: &'node mut Node) -> Self {
+impl<'node, TKey: Pod> NodeWriter<'node, InteriorNode<TKey>, TKey> for InteriorNodeWriter<'node, TKey> {
+    fn new(node: &'node mut InteriorNode<TKey>) -> Self {
         Self {
             node,
-            _key: PhantomData,
         }
     }
 }
 
 impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
-    pub(in crate::bplustree) fn new(node: &'node mut Node) -> Self {
+    pub(in crate::bplustree) fn new(node: &'node mut InteriorNode<TKey>) -> Self {
         Self {
             node,
-            _key: PhantomData,
         }
     }
 
-    pub fn create_root(keys: &[&TKey], values: &[AnyNodeId]) -> Node {
+    pub fn create_root(keys: &[&TKey], values: &[AnyNodeId]) -> InteriorNode<TKey> {
         assert!(values.len() == keys.len() + 1);
 
         if values.len() != 2 || keys.len() != 1 {
             todo!();
         }
 
-        let mut node = Node::new_interior();
+        let mut node = InteriorNode::new();
 
         let mut writer: InteriorNodeWriter<'_, TKey> = InteriorNodeWriter::new(&mut node);
 
@@ -218,14 +251,14 @@ impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
         (key_data_to_move, value_data_to_move, first_key)
     }
 
-    pub(crate) fn insert_node(&mut self, key: &TKey, value: AnyNodeId) -> InteriorInsertResult {
+    pub(crate) fn insert_node(&mut self, key: &TKey, value: AnyNodeId) -> InteriorInsertResult<TKey> {
         let mut insert_at = self.reader().key_len();
 
         let key_len = self.reader().key_len();
 
         if key_len + 1 == self.reader().key_capacity() {
             let (new_node_keys, new_node_values, split_key) = self.split();
-            let mut new_node = Node::new_interior();
+            let mut new_node = InteriorNode::new();
 
             if key < &split_key {
                 self.insert_at(insert_at, key, value);
@@ -292,6 +325,6 @@ impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
 
     pub(crate) fn set_parent_id(&mut self, parent: Option<InteriorNodeId>) {
         self.node
-            .set_parent(parent.map_or_else(PageIndex::zeroed, |x| x.page()))
+            .set_parent(parent)
     }
 }

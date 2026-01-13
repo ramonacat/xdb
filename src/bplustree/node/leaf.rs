@@ -4,11 +4,51 @@ use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned, from_bytes,
 
 use crate::{
     bplustree::{
-        LeafNodeId, Node, NodeId, TreeError,
-        node::{InteriorNodeId, NodeFlags, NodeHeader, NodeReader, NodeWriter},
+        LeafNodeId, NodeId, TreeError,
+        node::{InteriorNodeId, NODE_DATA_SIZE, NodeFlags, NodeHeader, NodeReader, NodeTrait, NodeWriter},
     },
     storage::PageIndex,
 };
+
+#[derive(Debug, Zeroable, Clone, Copy)]
+#[repr(C, align(8))]
+pub(in crate::bplustree) struct LeafNode<TKey> where TKey:Pod {
+    header: NodeHeader,
+    data: [u8; NODE_DATA_SIZE],
+    _key: PhantomData<TKey>
+}
+impl<TKey: Pod> LeafNode<TKey> {
+    pub(crate) fn new() -> Self {
+        Self { 
+            header: NodeHeader {
+                key_len: 0,
+                flags: NodeFlags::empty(),
+                _unused2: 0,
+                parent: PageIndex::zeroed(),
+            },
+            data: [0; _],
+            _key: PhantomData
+        }
+    }
+}
+
+// SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
+// automatically if not for the PhantomData
+unsafe impl<TKey: Pod> Pod for LeafNode<TKey> {}
+
+impl<TKey: Pod> NodeTrait<TKey> for LeafNode<TKey> {
+    fn parent(&self) -> Option<InteriorNodeId> {
+        if self.header.parent == PageIndex::zeroed() {
+            None
+        } else {
+            Some(InteriorNodeId::new(self.header.parent))
+        }
+    }
+
+    fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
+        self.header.set_parent(parent);
+    }
+}
 
 #[derive(Zeroable, Pod, Debug, Clone, Copy)]
 #[repr(C, align(8))]
@@ -32,10 +72,9 @@ impl<'node, TKey: Copy> LeafNodeEntry<'node, TKey> {
     }
 }
 
-struct LeafNodeEntryIterator<'node, TKey> {
+struct LeafNodeEntryIterator<'node, TKey: Pod> {
     reader: &'node LeafNodeReader<'node, TKey>,
     offset: usize,
-    _key: PhantomData<TKey>,
 }
 
 impl<'node, TKey: Pod + 'node> Iterator for LeafNodeEntryIterator<'node, TKey> {
@@ -52,28 +91,23 @@ impl<'node, TKey: Pod + 'node> Iterator for LeafNodeEntryIterator<'node, TKey> {
     }
 }
 
-pub(in crate::bplustree) struct LeafNodeReader<'node, TKey> {
-    node: &'node Node,
-    _key: PhantomData<&'node TKey>,
+pub(in crate::bplustree) struct LeafNodeReader<'node, TKey: Pod> {
+    node: &'node LeafNode<TKey>,
 }
 
-impl<'node, TKey> NodeReader<'node, TKey> for LeafNodeReader<'node, TKey> {
-    fn new(node: &'node Node) -> Self {
+impl<'node, TKey: Pod> NodeReader<'node, LeafNode<TKey>, TKey> for LeafNodeReader<'node, TKey> {
+    fn new(node: &'node LeafNode<TKey>) -> Self {
         Self {
             node,
-            _key: PhantomData,
         }
     }
 }
 
 impl<'node, TKey: Pod> LeafNodeReader<'node, TKey> {
-    pub fn new(node: &'node Node) -> Self {
-        assert!(node.is_leaf());
-
+    pub fn new(node: &'node LeafNode<TKey>) -> Self {
         // TODO return a result with an error if we can't fit at least two entries
         Self {
             node,
-            _key: PhantomData,
         }
     }
 
@@ -114,7 +148,6 @@ impl<'node, TKey: Pod> LeafNodeReader<'node, TKey> {
         LeafNodeEntryIterator {
             reader: self,
             offset: 0,
-            _key: PhantomData,
         }
     }
 
@@ -192,38 +225,33 @@ impl<'node, TKey: Pod> LeafNodeReader<'node, TKey> {
     }
 }
 
-pub(in crate::bplustree) struct LeafNodeWriter<'node, TKey> {
-    node: &'node mut Node,
-    _key: PhantomData<&'node TKey>,
+pub(in crate::bplustree) struct LeafNodeWriter<'node, TKey: Pod> {
+    node: &'node mut LeafNode<TKey>,
 }
 
-impl<'node, TKey> NodeWriter<'node, TKey> for LeafNodeWriter<'node, TKey> {
-    fn new(node: &'node mut Node) -> Self {
+impl<'node, TKey: Pod> NodeWriter<'node, LeafNode<TKey>, TKey> for LeafNodeWriter<'node, TKey> {
+    fn new(node: &'node mut LeafNode<TKey>) -> Self {
         Self {
             node,
-            _key: PhantomData,
         }
     }
 }
 
 #[must_use]
 #[derive(Debug)]
-pub(in crate::bplustree) enum LeafInsertResult<TKey> {
+pub(in crate::bplustree) enum LeafInsertResult<TKey: Pod> {
     Done,
     Split {
-        new_node: Box<Node>,
+        new_node: Box<LeafNode<TKey>>,
         split_key: TKey,
     },
 }
 
 impl<'node, TKey: Pod + PartialOrd> LeafNodeWriter<'node, TKey> {
-    pub fn new(node: &'node mut Node) -> Self {
-        assert!(node.is_leaf());
-
+    pub fn new(node: &'node mut LeafNode<TKey>) -> Self {
         // TODO return a result with an error if we can't fit at least two entries
         Self {
             node,
-            _key: PhantomData,
         }
     }
 
@@ -322,7 +350,7 @@ impl<'node, TKey: Pod + PartialOrd> LeafNodeWriter<'node, TKey> {
         Ok(())
     }
 
-    fn split(&mut self) -> (usize, TKey, Node) {
+    fn split(&mut self) -> (usize, TKey, LeafNode<TKey>) {
         let initial_len = self.reader().len();
         assert!(initial_len > 0, "Trying to split an empty node");
 
@@ -340,7 +368,7 @@ impl<'node, TKey: Pod + PartialOrd> LeafNodeWriter<'node, TKey> {
 
         // TODO we should not create the node here at all, and instead just return the data, so the
         // user can construct the new node with the correct links
-        let mut new_node = Node {
+        let mut new_node = LeafNode {
             header: NodeHeader {
                 key_len: entries_to_move as u16,
                 flags: NodeFlags::empty(),
@@ -348,6 +376,7 @@ impl<'node, TKey: Pod + PartialOrd> LeafNodeWriter<'node, TKey> {
                 parent: PageIndex::zeroed(),
             },
             data: [0; _],
+            _key: PhantomData,
         };
 
         new_node.data[entries_start..entries_start + new_node_entries.len()]
@@ -370,7 +399,7 @@ impl<'node, TKey: Pod + PartialOrd> LeafNodeWriter<'node, TKey> {
         self.node
             // TODO replace this and all the other instances of PageIndex::zeroed() with an
             // explicit constructor
-            .set_parent(parent.map_or_else(PageIndex::zeroed, |x| x.page()));
+            .set_parent(parent);
         let header = self.header_mut();
         header.previous = previous.map_or(PageIndex::zeroed(), |x| x.page());
         header.next = next.map_or(PageIndex::zeroed(), |x| x.page())

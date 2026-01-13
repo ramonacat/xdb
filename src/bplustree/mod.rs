@@ -10,13 +10,14 @@ use crate::bplustree::node::AnyNodeId;
 use crate::bplustree::node::AnyNodeReader;
 use crate::bplustree::node::InteriorNodeId;
 use crate::bplustree::node::LeafNodeId;
-use crate::bplustree::node::Node;
 use crate::bplustree::node::NodeId;
 use crate::bplustree::node::NodeReader;
 use crate::bplustree::node::NodeWriter;
+use crate::bplustree::node::interior::InteriorNode;
 use crate::bplustree::node::interior::InteriorNodeReader;
 use crate::bplustree::node::interior::InteriorNodeWriter;
 use crate::bplustree::node::leaf::LeafInsertResult;
+use crate::bplustree::node::leaf::LeafNode;
 use crate::bplustree::node::leaf::LeafNodeReader;
 use crate::bplustree::node::leaf::LeafNodeWriter;
 use crate::page::Page;
@@ -138,7 +139,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + PartialOrd>
         read: impl for<'node> FnOnce(TNodeId::Reader<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self.transaction.read(index.page(), |page| {
-            let reader = <TNodeId::Reader<'_, TKey> as NodeReader<TKey>>::new(page.data());
+            let reader = <TNodeId::Reader<'_, TKey> as NodeReader<_, TKey>>::new(page.data());
 
             read(reader)
         })?)
@@ -150,7 +151,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + PartialOrd>
         write: impl for<'node> FnOnce(TNodeId::Writer<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self.transaction.write(index.page(), |page| {
-            let writer = <TNodeId::Writer<'_, TKey> as NodeWriter<TKey>>::new(page.data_mut());
+            let writer = <TNodeId::Writer<'_, TKey> as NodeWriter<_, TKey>>::new(page.data_mut());
             write(writer)
         })?)
     }
@@ -241,7 +242,7 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                                 // TODO get rid of the direct writes to node.data here, and make
                                 // the node expose some API
                                 let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
-                                let mut new_leaf = Node::new_leaf();
+                                let mut new_leaf = LeafNode::new();
 
                                 LeafNodeWriter::<'_, TKey>::new(&mut new_leaf).set_links(
                                     Some(parent_id),
@@ -267,7 +268,7 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
 
                             let grandparent_id = match grandparent_id {
                                 None => {
-                                    let mut new_grandparent = Node::new_interior();
+                                    let mut new_grandparent = InteriorNode::new();
                                     let new_grandparent_id =
                                         InteriorNodeId::new(new_grandparent_reservation.index());
                                     transaction
@@ -389,7 +390,7 @@ impl TreeData {
         let header_page = transaction.reserve()?;
         assert!(header_page.index() == PageIndex::zeroed());
 
-        let root_index = transaction.insert(Page::from_data(Node::new_leaf()))?;
+        let root_index = transaction.insert(Page::from_data(LeafNode::<usize>::new()))?;
 
         let page = Page::from_data(Self {
             key_size: key_size as u64,
@@ -419,10 +420,10 @@ mod test {
 
     #[test]
     fn node_accessor_entries() {
-        let mut node = Node::zeroed();
+        let mut node = LeafNode::zeroed();
 
         assert!(matches!(
-            LeafNodeReader::<'_, u64>::new(&node).entries().next(),
+            LeafNodeReader::<'_, usize>::new(&node).entries().next(),
             None
         ));
 

@@ -3,28 +3,32 @@ pub(super) mod leaf;
 
 use std::fmt::Display;
 
+use crate::bplustree::node::interior::InteriorNode;
+use crate::bplustree::node::leaf::LeafNode;
 use crate::bplustree::{InteriorNodeWriter, LeafNodeReader, LeafNodeWriter};
 use crate::storage::PageIndex;
 use crate::{bplustree::InteriorNodeReader, page::PAGE_DATA_SIZE};
-use bytemuck::{Pod, Zeroable};
+use bytemuck::{Pod, Zeroable, must_cast_mut, must_cast_ref};
 
 // TODO: should the TKey be Ord, instead of PartialOrd?
 // TODO Integrate the node readers and writers into the Node struct
-pub(super) trait NodeReader<'node, TKey> {
-    fn new(node: &'node Node) -> Self;
+pub(super) trait NodeReader<'node, TNode: NodeTrait<TKey>, TKey> {
+    fn new(node: &'node TNode) -> Self;
 }
 
-pub(super) trait NodeWriter<'node, TKey> {
-    fn new(node: &'node mut Node) -> Self;
+pub(super) trait NodeWriter<'node, TNode: NodeTrait<TKey>, TKey> {
+    fn new(node: &'node mut TNode) -> Self;
 }
 
 pub(super) trait NodeId: Copy + PartialEq {
-    type Reader<'node, TKey>: NodeReader<'node, TKey>
+    type Reader<'node, TKey>: NodeReader<'node, Self::Node<TKey>, TKey>
     where
         TKey: Pod + 'node;
-    type Writer<'node, TKey>: NodeWriter<'node, TKey>
+    type Writer<'node, TKey>: NodeWriter<'node, Self::Node<TKey>, TKey>
     where
         TKey: Pod + PartialOrd + 'node;
+
+    type Node<TKey>: NodeTrait<TKey> where TKey: Pod;
 
     fn page(&self) -> PageIndex;
 }
@@ -68,6 +72,8 @@ impl NodeId for AnyNodeId {
     where
         TKey: Pod + PartialOrd + 'node;
 
+    type Node<TKey> = Node where TKey: Pod;
+
     fn page(&self) -> PageIndex {
         self.0
     }
@@ -103,6 +109,8 @@ impl NodeId for LeafNodeId {
     where
         TKey: Pod + PartialOrd + 'node;
 
+    type Node<TKey> = LeafNode<TKey> where TKey: Pod;
+
     fn page(&self) -> PageIndex {
         self.0
     }
@@ -131,6 +139,8 @@ impl NodeId for InteriorNodeId {
     where
         TKey: Pod + PartialOrd + 'node;
 
+    type Node<TKey> = InteriorNode<TKey> where TKey: Pod;
+
     fn page(&self) -> PageIndex {
         self.0
     }
@@ -157,12 +167,27 @@ pub(super) struct NodeHeader {
     _unused2: u32,
     parent: PageIndex,
 }
+impl NodeHeader {
+    fn parent(&self) -> Option<InteriorNodeId> {
+        if self.parent == PageIndex::zeroed() {
+            None
+        } else {
+            Some(InteriorNodeId::new(self.parent))
+        }
+    }
+
+    fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
+        self.parent = parent.map_or_else(PageIndex::zeroed, |x| x.page());
+    }
+}
 const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>() * 2);
 
 const NODE_DATA_SIZE: usize = PAGE_DATA_SIZE - size_of::<NodeHeader>();
 
 #[derive(Debug, Pod, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
+// TODO rename -> AnyNode
+// TODO keep TKey as PhantomData?
 pub(super) struct Node {
     // TODO make this private once we have a reasonable API for it
     pub(super) header: NodeHeader,
@@ -170,77 +195,60 @@ pub(super) struct Node {
     pub(super) data: [u8; NODE_DATA_SIZE],
 }
 
+// TODO rename -> Node, once the struct with that name is gone
+// TODO see if we can drop Zeroable from the node types & header
+pub(super) trait NodeTrait<TKey> : Pod {
+    const _ASSERT_SIZE: () = assert!(size_of::<Self>() == PAGE_DATA_SIZE);
+
+    fn parent(&self) -> Option<InteriorNodeId>; 
+    fn set_parent(&mut self, parent: Option<InteriorNodeId>);
+}
+
 const _: () = assert!(size_of::<Node>() == PAGE_DATA_SIZE);
 
-impl Node {
-    pub(super) fn new_interior() -> Self {
-        Self {
-            header: NodeHeader {
-                key_len: 0,
-                flags: NodeFlags::INTERNAL,
-                _unused2: 0,
-                parent: PageIndex::zeroed(),
-            },
-            data: [0; _],
-        }
-    }
-
-    pub(super) fn new_leaf() -> Self {
-        Self {
-            header: NodeHeader {
-                key_len: 0,
-                flags: NodeFlags::empty(),
-                _unused2: 0,
-                parent: PageIndex::zeroed(),
-            },
-            data: [0; _],
-        }
-    }
-
-    fn is_leaf(&self) -> bool {
-        !self.header.flags.contains(NodeFlags::INTERNAL)
-    }
-
+impl<TKey> NodeTrait<TKey> for Node {
     fn parent(&self) -> Option<InteriorNodeId> {
-        if self.header.parent == PageIndex::zeroed() {
-            None
-        } else {
-            Some(InteriorNodeId::new(self.header.parent))
-        }
+        self.header.parent()
     }
 
-    pub(crate) fn set_parent(&mut self, parent: PageIndex) {
-        self.header.parent = parent;
+    fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
+        self.header.set_parent(parent);
     }
 }
 
-pub(super) enum AnyNodeReader<'node, TKey> {
+impl Node {
+    fn is_leaf(&self) -> bool {
+        !self.header.flags.contains(NodeFlags::INTERNAL)
+    }
+}
+
+pub(super) enum AnyNodeReader<'node, TKey: Pod> {
     Interior(InteriorNodeReader<'node, TKey>),
     Leaf(LeafNodeReader<'node, TKey>),
 }
 
-impl<'node, TKey: Pod> NodeReader<'node, TKey> for AnyNodeReader<'node, TKey> {
+impl<'node, TKey: Pod> NodeReader<'node, Node, TKey> for AnyNodeReader<'node, TKey> {
     fn new(node: &'node Node) -> Self {
         if node.is_leaf() {
-            Self::Leaf(LeafNodeReader::new(node))
+            Self::Leaf(LeafNodeReader::new(must_cast_ref(node)))
         } else {
-            Self::Interior(InteriorNodeReader::new(node))
+            Self::Interior(InteriorNodeReader::new(must_cast_ref(node)))
         }
     }
 }
 
 #[allow(unused)] // TODO remove if we really don't need it
-pub(super) enum AnyNodeWriter<'node, TKey> {
+pub(super) enum AnyNodeWriter<'node, TKey: Pod> {
     Interior(InteriorNodeWriter<'node, TKey>),
     Leaf(LeafNodeWriter<'node, TKey>),
 }
 
-impl<'node, TKey: Pod + PartialOrd> NodeWriter<'node, TKey> for AnyNodeWriter<'node, TKey> {
+impl<'node, TKey: Pod + PartialOrd> NodeWriter<'node, Node, TKey> for AnyNodeWriter<'node, TKey> {
     fn new(node: &'node mut Node) -> Self {
         if node.is_leaf() {
-            AnyNodeWriter::Leaf(LeafNodeWriter::new(node))
+            AnyNodeWriter::Leaf(LeafNodeWriter::new(must_cast_mut(node)))
         } else {
-            AnyNodeWriter::Interior(InteriorNodeWriter::new(node))
+            AnyNodeWriter::Interior(InteriorNodeWriter::new(must_cast_mut(node)))
         }
     }
 }
