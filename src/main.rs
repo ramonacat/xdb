@@ -1,3 +1,4 @@
+// TODO enable clippy pedantic
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -17,7 +18,7 @@ fn main() {
     let page_count = Arc::new(AtomicUsize::new(0));
 
     let storage = TestStorage::new(InMemoryStorage::new(), page_count.clone());
-    let tree = Tree::new(storage, size_of::<usize>()).unwrap();
+    let tree = Tree::new(storage).unwrap();
 
     // 3 pages mean there's been a node split
     // TODO: find a more explicit way of counting nodes

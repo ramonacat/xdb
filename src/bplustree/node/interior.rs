@@ -42,7 +42,7 @@ pub(in crate::bplustree) struct InteriorNodeReader<'node, TKey> {
 }
 
 impl<'node, TKey> NodeReader<'node, TKey> for InteriorNodeReader<'node, TKey> {
-    fn new(node: &'node Node, _value_size: usize) -> Self {
+    fn new(node: &'node Node) -> Self {
         Self {
             node,
             _key: PhantomData,
@@ -126,7 +126,7 @@ pub(in crate::bplustree) struct InteriorNodeWriter<'node, TKey> {
 }
 
 impl<'node, TKey> NodeWriter<'node, TKey> for InteriorNodeWriter<'node, TKey> {
-    fn new(node: &'node mut Node, _value_size: usize) -> Self {
+    fn new(node: &'node mut Node) -> Self {
         Self {
             node,
             _key: PhantomData,

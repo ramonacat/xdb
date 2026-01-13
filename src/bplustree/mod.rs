@@ -30,7 +30,7 @@ use thiserror::Error;
 
 use crate::page::PAGE_DATA_SIZE;
 
-const ROOT_NODE_TAIL_SIZE: usize = PAGE_DATA_SIZE - size_of::<u64>() * 2 - size_of::<PageIndex>();
+const ROOT_NODE_TAIL_SIZE: usize = PAGE_DATA_SIZE - size_of::<u64>() - size_of::<PageIndex>();
 
 struct TreeIterator<'tree, T: Storage, TKey> {
     transaction: TreeTransaction<'tree, T, TKey>,
@@ -72,7 +72,7 @@ impl<'tree, T: Storage, TKey: Pod + PartialOrd> Iterator for TreeIterator<'tree,
                 match reader.entries().nth(self.index) {
                     Some(entry) => {
                         self.index += 1;
-                        IteratorResult::Value(Ok((*entry.key(), entry.value().to_vec())))
+                        IteratorResult::Value(Ok((entry.key(), entry.value().to_vec())))
                     }
                     None => {
                         if let Some(next_leaf) = reader.next() {
@@ -96,10 +96,10 @@ impl<'tree, T: Storage, TKey: Pod + PartialOrd> Iterator for TreeIterator<'tree,
     }
 }
 
+// TODO Tree and TreeStorage should become one
 #[derive(Debug)]
 pub struct Tree<T: Storage, TKey> {
     storage: T,
-    value_size: usize,
     _key: PhantomData<TKey>,
 }
 
@@ -108,10 +108,6 @@ where
     Self: 'storage,
 {
     transaction: TStorage::Transaction<'storage>,
-
-    // TODO figure something out so we don't have to pass those around everywhere
-    value_size: usize,
-
     _key: PhantomData<&'storage TKey>,
 }
 
@@ -142,8 +138,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + PartialOrd>
         read: impl for<'node> FnOnce(TNodeId::Reader<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self.transaction.read(index.page(), |page| {
-            let reader =
-                <TNodeId::Reader<'_, TKey> as NodeReader<TKey>>::new(page.data(), self.value_size);
+            let reader = <TNodeId::Reader<'_, TKey> as NodeReader<TKey>>::new(page.data());
 
             read(reader)
         })?)
@@ -155,10 +150,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + PartialOrd>
         write: impl for<'node> FnOnce(TNodeId::Writer<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self.transaction.write(index.page(), |page| {
-            let writer = <TNodeId::Writer<'_, TKey> as NodeWriter<TKey>>::new(
-                page.data_mut(),
-                self.value_size,
-            );
+            let writer = <TNodeId::Writer<'_, TKey> as NodeWriter<TKey>>::new(page.data_mut());
             write(writer)
         })?)
     }
@@ -188,16 +180,15 @@ type TreeIteratorItem<TKey> = Result<(TKey, Vec<u8>), TreeError>;
 impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
     // TODO also create a "new_read" method, or something like that (that reads a tree that already
     // exists from storage)
-    pub fn new(mut storage: T, value_size: usize) -> Result<Self, TreeError> {
+    pub fn new(mut storage: T) -> Result<Self, TreeError> {
         // TODO assert that the storage is empty, and that the header get's the 0th page, as we
         // depend on that invariant (i.e. PageIndex=0 must always refer to the TreeData and not to
         // a node)!
 
-        TreeData::new_in(&mut storage, size_of::<TKey>(), value_size)?;
+        TreeData::new_in(&mut storage, size_of::<TKey>())?;
 
         Ok(Self {
             storage,
-            value_size,
             _key: PhantomData,
         })
     }
@@ -206,7 +197,6 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
     pub fn insert(&self, key: TKey, value: &[u8]) -> Result<(), TreeError> {
         let transaction = TreeTransaction::<'_, T, TKey> {
             transaction: self.storage.transaction()?,
-            value_size: self.value_size,
             _key: PhantomData,
         };
 
@@ -232,7 +222,7 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                 let new_node_id = LeafNodeId::new(new_node_reservation.index());
 
                 let mut new_node_writer: LeafNodeWriter<'_, TKey> =
-                    LeafNodeWriter::new(&mut new_node, self.value_size);
+                    LeafNodeWriter::new(&mut new_node);
 
                 let next = transaction.read_node(target_node_id, |reader| reader.next())?;
 
@@ -289,7 +279,6 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
     fn transaction(&self) -> Result<TreeTransaction<'_, T, TKey>, TreeError> {
         Ok(TreeTransaction::<T, TKey> {
             transaction: self.storage.transaction()?,
-            value_size: self.value_size,
             _key: PhantomData,
         })
     }
@@ -299,7 +288,6 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
 #[repr(C)]
 struct TreeData {
     key_size: u64,
-    value_size: u64,
     root: PageIndex,
     _unused: [u8; ROOT_NODE_TAIL_SIZE],
 }
@@ -311,18 +299,12 @@ const _: () = assert!(
 
 #[derive(Debug, Error)]
 pub enum TreeError {
-    #[error("The provided value's length does not match the one defined in the tree")]
-    InvalidValueLength,
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
 }
 
 impl TreeData {
-    pub fn new_in<T: Storage>(
-        storage: &mut T,
-        key_size: usize,
-        value_size: usize,
-    ) -> Result<(), TreeError> {
+    pub fn new_in<T: Storage>(storage: &mut T, key_size: usize) -> Result<(), TreeError> {
         let transaction = storage.transaction()?;
 
         let header_page = transaction.reserve()?;
@@ -332,7 +314,6 @@ impl TreeData {
 
         let page = Page::from_data(Self {
             key_size: key_size as u64,
-            value_size: value_size as u64,
             root: root_index,
             _unused: [0; _],
         });
@@ -356,67 +337,57 @@ mod test {
     use super::*;
 
     #[test]
-    fn insert() {
-        let mut node = Node::zeroed();
-        let mut accessor = LeafNodeWriter::new(&mut node, 8);
-
-        assert!(matches!(
-            accessor.insert(0u64, &[0; 9]),
-            Err(TreeError::InvalidValueLength)
-        ));
-    }
-
-    #[test]
     fn node_accessor_entries() {
         let mut node = Node::zeroed();
 
         assert!(matches!(
-            LeafNodeReader::<'_, u64>::new(&node, 16).entries().next(),
+            LeafNodeReader::<'_, u64>::new(&node).entries().next(),
             None
         ));
 
-        let insert_result = LeafNodeWriter::new(&mut node, 16)
+        let insert_result = LeafNodeWriter::new(&mut node)
             .insert(1usize, &[2; 16])
             .unwrap();
 
         assert!(matches!(insert_result, LeafInsertResult::Done));
 
-        let reader = LeafNodeReader::<'_, usize>::new(&node, 16);
+        let reader = LeafNodeReader::<'_, usize>::new(&node);
         let mut iter = reader.entries();
         let first = iter.next().unwrap();
-        assert!(*first.key() == 1);
+        assert!(first.key() == 1);
         assert!(first.value() == &[2; 16]);
 
         assert!(matches!(iter.next(), None));
 
         drop(iter);
 
-        let insert_result = LeafNodeWriter::new(&mut node, 16)
+        let insert_result = LeafNodeWriter::new(&mut node)
             .insert(2usize, &[1; 16])
             .unwrap();
 
         assert!(matches!(insert_result, LeafInsertResult::Done));
 
-        let reader = LeafNodeReader::<'_, usize>::new(&node, 16);
+        let reader = LeafNodeReader::<'_, usize>::new(&node);
         let mut iter = reader.entries();
 
         let first = iter.next().unwrap();
-        assert!(*first.key() == 1);
-        assert!(dbg!(first.value()) == &[2; 16]);
+        assert!(first.key() == 1);
+        assert!(first.value() == &[2; 16]);
 
         let second = iter.next().unwrap();
-        assert!(*second.key() == 2);
+        assert!(second.key() == 2);
         assert!(second.value() == &[1; 16]);
 
         assert!(matches!(iter.next(), None));
     }
 
     #[test]
+    // TODO optimize this test
     fn insert_multiple_nodes() {
         let page_count = Arc::new(AtomicUsize::new(0));
 
         let storage = TestStorage::new(InMemoryStorage::new(), page_count.clone());
-        let tree = Tree::<_, usize>::new(storage, size_of::<usize>()).unwrap();
+        let tree = Tree::<_, usize>::new(storage).unwrap();
 
         // TODO: find a more explicit way of counting nodes
         let mut i = 0usize;
@@ -444,5 +415,50 @@ mod test {
 
         // TODO iterate the tree and ensure that all the keys are there, in correct order with
         // correct values
+    }
+
+    #[test]
+    // TODO optimize this test
+    fn variable_sized_keys() {
+        let page_count = Arc::new(AtomicUsize::new(0));
+
+        let storage = TestStorage::new(InMemoryStorage::new(), page_count.clone());
+        let tree = Tree::<_, usize>::new(storage).unwrap();
+
+        // TODO: find a more explicit way of counting nodes
+        let mut i = 0usize;
+
+        // 10 pages should give us a resonable number of node splits to assume that the basic logic
+        //    works
+        while page_count.load(Ordering::Relaxed) < 10 {
+            let value: &[u8] = match i % 8 {
+                0 | 7 | 6 | 5 => &(i as u64).to_be_bytes(),
+                4 | 3 => &(i as u32).to_be_bytes(),
+                2 => &(i as u16).to_be_bytes(),
+                1 => &(i as u8).to_be_bytes(),
+                _ => unreachable!(),
+            };
+            tree.insert(i, value).unwrap();
+
+            i += 1;
+        }
+
+        let entry_count = i;
+
+        for (i, item) in tree.iter().unwrap().enumerate() {
+            assert!(i < entry_count);
+            let (key, value) = item.unwrap();
+
+            let value_matches_expected = match i % 8 {
+                0 | 7 | 6 | 5 => i as u64 == u64::from_be_bytes(value.try_into().unwrap()),
+                4 | 3 => i as u32 == u32::from_be_bytes(value.try_into().unwrap()),
+                2 => i as u16 == u16::from_be_bytes(value.try_into().unwrap()),
+                1 => i as u8 == u8::from_be_bytes(value.try_into().unwrap()),
+                _ => unreachable!(),
+            };
+
+            assert!(key == i);
+            assert!(value_matches_expected);
+        }
     }
 }

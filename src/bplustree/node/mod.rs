@@ -9,12 +9,13 @@ use crate::{bplustree::InteriorNodeReader, page::PAGE_DATA_SIZE};
 use bytemuck::{Pod, Zeroable};
 
 // TODO: should the TKey be Ord, instead of PartialOrd?
+// TODO Integrate the node readers and writers into the Node struct
 pub(super) trait NodeReader<'node, TKey> {
-    fn new(node: &'node Node, value_size: usize) -> Self;
+    fn new(node: &'node Node) -> Self;
 }
 
 pub(super) trait NodeWriter<'node, TKey> {
-    fn new(node: &'node mut Node, value_size: usize) -> Self;
+    fn new(node: &'node mut Node) -> Self;
 }
 
 pub(super) trait NodeId: Copy + PartialEq {
@@ -118,6 +119,7 @@ impl NodeId for InteriorNodeId {
         = InteriorNodeReader<'node, TKey>
     where
         TKey: Pod + 'node;
+
     type Writer<'node, TKey>
         = InteriorNodeWriter<'node, TKey>
     where
@@ -142,6 +144,7 @@ bitflags::bitflags! {
 #[derive(Debug, Pod, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
 pub(super) struct NodeHeader {
+    // TODO rename -> key_count
     key_len: u16,
     flags: NodeFlags,
     _unused2: u32,
@@ -210,9 +213,9 @@ pub(super) enum AnyNodeReader<'node, TKey> {
 }
 
 impl<'node, TKey: Pod> NodeReader<'node, TKey> for AnyNodeReader<'node, TKey> {
-    fn new(node: &'node Node, value_size: usize) -> Self {
+    fn new(node: &'node Node) -> Self {
         if node.is_leaf() {
-            Self::Leaf(LeafNodeReader::new(node, value_size))
+            Self::Leaf(LeafNodeReader::new(node))
         } else {
             Self::Interior(InteriorNodeReader::new(node))
         }
@@ -226,9 +229,9 @@ pub(super) enum AnyNodeWriter<'node, TKey> {
 }
 
 impl<'node, TKey: Pod + PartialOrd> NodeWriter<'node, TKey> for AnyNodeWriter<'node, TKey> {
-    fn new(node: &'node mut Node, value_size: usize) -> Self {
+    fn new(node: &'node mut Node) -> Self {
         if node.is_leaf() {
-            AnyNodeWriter::Leaf(LeafNodeWriter::new(node, value_size))
+            AnyNodeWriter::Leaf(LeafNodeWriter::new(node))
         } else {
             AnyNodeWriter::Interior(InteriorNodeWriter::new(node))
         }
