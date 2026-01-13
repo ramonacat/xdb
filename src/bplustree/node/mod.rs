@@ -23,12 +23,14 @@ pub(super) trait NodeWriter<'node, TNode: NodeTrait<TKey>, TKey> {
 pub(super) trait NodeId: Copy + PartialEq {
     type Reader<'node, TKey>: NodeReader<'node, Self::Node<TKey>, TKey>
     where
-        TKey: Pod + 'node;
+        TKey: Pod + PartialOrd + 'node;
     type Writer<'node, TKey>: NodeWriter<'node, Self::Node<TKey>, TKey>
     where
         TKey: Pod + PartialOrd + 'node;
 
-    type Node<TKey>: NodeTrait<TKey> where TKey: Pod;
+    type Node<TKey>: NodeTrait<TKey>
+    where
+        TKey: Pod;
 
     fn page(&self) -> PageIndex;
 }
@@ -66,13 +68,16 @@ impl NodeId for AnyNodeId {
     type Reader<'node, TKey>
         = AnyNodeReader<'node, TKey>
     where
-        TKey: Pod + 'node;
+        TKey: Pod + PartialOrd + 'node;
     type Writer<'node, TKey>
         = AnyNodeWriter<'node, TKey>
     where
         TKey: Pod + PartialOrd + 'node;
 
-    type Node<TKey> = Node where TKey: Pod;
+    type Node<TKey>
+        = Node
+    where
+        TKey: Pod;
 
     fn page(&self) -> PageIndex {
         self.0
@@ -103,13 +108,16 @@ impl NodeId for LeafNodeId {
     type Reader<'node, TKey>
         = LeafNodeReader<'node, TKey>
     where
-        TKey: Pod + 'node;
+        TKey: Pod + PartialOrd + 'node;
     type Writer<'node, TKey>
         = LeafNodeWriter<'node, TKey>
     where
         TKey: Pod + PartialOrd + 'node;
 
-    type Node<TKey> = LeafNode<TKey> where TKey: Pod;
+    type Node<TKey>
+        = LeafNode<TKey>
+    where
+        TKey: Pod;
 
     fn page(&self) -> PageIndex {
         self.0
@@ -132,14 +140,17 @@ impl NodeId for InteriorNodeId {
     type Reader<'node, TKey>
         = InteriorNodeReader<'node, TKey>
     where
-        TKey: Pod + 'node;
+        TKey: Pod + PartialOrd + 'node;
 
     type Writer<'node, TKey>
         = InteriorNodeWriter<'node, TKey>
     where
         TKey: Pod + PartialOrd + 'node;
 
-    type Node<TKey> = InteriorNode<TKey> where TKey: Pod;
+    type Node<TKey>
+        = InteriorNode<TKey>
+    where
+        TKey: Pod;
 
     fn page(&self) -> PageIndex {
         self.0
@@ -197,10 +208,10 @@ pub(super) struct Node {
 
 // TODO rename -> Node, once the struct with that name is gone
 // TODO see if we can drop Zeroable from the node types & header
-pub(super) trait NodeTrait<TKey> : Pod {
+pub(super) trait NodeTrait<TKey>: Pod {
     const _ASSERT_SIZE: () = assert!(size_of::<Self>() == PAGE_DATA_SIZE);
 
-    fn parent(&self) -> Option<InteriorNodeId>; 
+    fn parent(&self) -> Option<InteriorNodeId>;
     fn set_parent(&mut self, parent: Option<InteriorNodeId>);
 }
 
@@ -227,7 +238,7 @@ pub(super) enum AnyNodeReader<'node, TKey: Pod> {
     Leaf(LeafNodeReader<'node, TKey>),
 }
 
-impl<'node, TKey: Pod> NodeReader<'node, Node, TKey> for AnyNodeReader<'node, TKey> {
+impl<'node, TKey: Pod + PartialOrd> NodeReader<'node, Node, TKey> for AnyNodeReader<'node, TKey> {
     fn new(node: &'node Node) -> Self {
         if node.is_leaf() {
             Self::Leaf(LeafNodeReader::new(must_cast_ref(node)))

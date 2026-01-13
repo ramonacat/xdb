@@ -34,7 +34,7 @@ impl<T: Storage, TKey: Pod + PartialOrd + Display> Tree<T, TKey> {
                 super::AnyNodeReader::Interior(reader) => {
                     let mut label: Vec<String> = vec![format!("index: {node_index}")];
 
-                    for key in reader.keys() {
+                    for key in reader.node.keys() {
                         label.push(key.to_string());
                     }
 
@@ -51,15 +51,15 @@ impl<T: Storage, TKey: Pod + PartialOrd + Display> Tree<T, TKey> {
                 super::AnyNodeReader::Leaf(reader) => {
                     let mut label: Vec<String> = vec![format!("index: {node_index}")];
 
-                    if let Some(previous) = reader.previous() {
+                    if let Some(previous) = reader.node.previous() {
                         label.push(format!("previous: {previous}"));
                     }
 
-                    if let Some(next) = reader.next() {
+                    if let Some(next) = reader.node.next() {
                         label.push(format!("next: {next}"));
                     }
 
-                    for entry in reader.entries() {
+                    for entry in reader.node.entries() {
                         label.push(format!(
                             "{}/{}",
                             entry.key(),
