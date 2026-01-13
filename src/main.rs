@@ -22,15 +22,15 @@ fn main() {
 
     // 3 pages mean there's been a node split
     // TODO: find a more explicit way of counting nodes
-    let mut i = 0usize;
+    let mut i = 0;
     while page_count.load(Ordering::Relaxed) < 10 {
-        tree.insert(i, &(usize::MAX - i).to_be_bytes()).unwrap();
+        tree.insert(i, &(u16::MAX - i).to_be_bytes().repeat(128)).unwrap();
 
         i += 1;
     }
 
     let dot = tree
-        .into_dot(|v| usize::from_be_bytes(v.try_into().unwrap()).to_string())
+        .into_dot(|v| u16::from_be_bytes(v[..v.len()/128].try_into().unwrap()).to_string())
         .unwrap();
     println!("{dot}");
 }

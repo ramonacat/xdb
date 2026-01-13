@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use bytemuck::{Pod, Zeroable as _, bytes_of, from_bytes};
+use bytemuck::{Pod, Zeroable as _, bytes_of, checked::pod_read_unaligned, from_bytes};
 
 use crate::{
     bplustree::{
@@ -94,7 +94,7 @@ impl<'node, TKey: Pod> InteriorNodeReader<'node, TKey> {
         let value_start = self.values_offset() + (index * size_of::<PageIndex>());
 
         let value: PageIndex =
-            *from_bytes(&self.node.data[value_start..value_start + size_of::<PageIndex>()]);
+            pod_read_unaligned(&self.node.data[value_start..value_start + size_of::<PageIndex>()]);
 
         assert!(value != PageIndex::zeroed());
 
