@@ -4,7 +4,7 @@ use bytemuck::{Pod, Zeroable as _, bytes_of, checked::pod_read_unaligned, from_b
 
 use crate::{
     bplustree::{
-        Node, NodeId,
+        InteriorNodeId, Node, NodeId,
         node::{AnyNodeId, NodeReader, NodeWriter},
     },
     storage::PageIndex,
@@ -82,7 +82,8 @@ impl<'node, TKey: Pod> InteriorNodeReader<'node, TKey> {
             / (size_of::<TKey>() + size_of::<PageIndex>())
     }
 
-    fn values_offset(&self) -> usize {
+    // TODO make this private
+    pub(in crate::bplustree) fn values_offset(&self) -> usize {
         self.key_capacity() * size_of::<TKey>()
     }
 
@@ -112,12 +113,24 @@ impl<'node, TKey: Pod> InteriorNodeReader<'node, TKey> {
     pub(crate) fn values(&self) -> impl Iterator<Item = AnyNodeId> {
         (0..(self.key_len() + 1)).map(|x| self.value_at(x).unwrap())
     }
+
+    pub(crate) fn parent(&self) -> Option<InteriorNodeId> {
+        self.node.parent()
+    }
+
+    pub(crate) fn first_key(&self) -> Option<TKey> {
+        if self.key_len() == 0 {
+            return None;
+        }
+
+        Some(pod_read_unaligned(&self.node.data[..size_of::<TKey>()]))
+    }
 }
 
 #[must_use]
 pub(in crate::bplustree) enum InteriorInsertResult {
     Ok,
-    Split,
+    Split(Box<Node>),
 }
 
 pub(in crate::bplustree) struct InteriorNodeWriter<'node, TKey> {
@@ -156,7 +169,7 @@ impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
         writer.set_first_pointer(values[0]);
         match writer.insert_node(keys[0], values[1]) {
             InteriorInsertResult::Ok => {}
-            InteriorInsertResult::Split => todo!(),
+            InteriorInsertResult::Split(_) => todo!(),
         }
 
         node
@@ -173,8 +186,67 @@ impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
             .copy_from_slice(bytes_of(&index.page()));
     }
 
+    // TODO should this whole struct be also generic over TValue? (it will have to do some magic
+    // around node IDs to type them right though)
+    // TODO create a struct for the return type
+    fn split(&mut self) -> (Vec<u8>, Vec<u8>, TKey) {
+        let key_len = self.reader().key_len();
+        assert!(
+            key_len > 1,
+            "A node must have more than one key to be split."
+        );
+
+        let keys_to_leave = key_len.div_ceil(2);
+        let keys_to_move = key_len - keys_to_leave;
+
+        let values_to_leave = keys_to_leave + 1;
+        let values_to_move = keys_to_move;
+
+        let key_data_to_move_start = keys_to_leave * size_of::<TKey>();
+        let value_data_to_move_start =
+            self.reader().values_offset() + values_to_leave * size_of::<PageIndex>();
+
+        let key_data_to_move = self.node.data
+            [key_data_to_move_start..key_data_to_move_start + keys_to_move * size_of::<TKey>()]
+            .to_vec();
+        let value_data_to_move = self.node.data[value_data_to_move_start
+            ..value_data_to_move_start + values_to_move * size_of::<PageIndex>()]
+            .to_vec();
+
+        let first_key = pod_read_unaligned(&key_data_to_move[..size_of::<TKey>()]);
+
+        (key_data_to_move, value_data_to_move, first_key)
+    }
+
     pub(crate) fn insert_node(&mut self, key: &TKey, value: AnyNodeId) -> InteriorInsertResult {
         let mut insert_at = self.reader().key_len();
+
+        let key_len = self.reader().key_len();
+
+        if key_len + 1 == self.reader().key_capacity() {
+            let (new_node_keys, new_node_values, split_key) = self.split();
+            let mut new_node = Node::new_interior();
+
+            if key < &split_key {
+                self.insert_at(insert_at, key, value);
+            } else {
+                new_node.data[..new_node_keys.len()].copy_from_slice(&new_node_keys);
+
+                let values_offset = InteriorNodeReader::<'_, TKey>::new(&new_node).values_offset()
+                    + size_of::<PageIndex>();
+                new_node.data[values_offset..values_offset + new_node_values.len()]
+                    .copy_from_slice(&new_node_values);
+
+                new_node.header.key_len = (new_node_keys.len() / size_of::<TKey>()) as u16;
+
+                match InteriorNodeWriter::new(&mut new_node).insert_node(key, value) {
+                    InteriorInsertResult::Ok => {}
+                    InteriorInsertResult::Split(_) => todo!(),
+                }
+            }
+
+            return InteriorInsertResult::Split(Box::new(new_node));
+        }
 
         for (index, current_key) in self.reader().keys().enumerate() {
             if current_key > key {
@@ -183,15 +255,14 @@ impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
             }
         }
 
-        self.insert_at(insert_at, key, value)
+        self.insert_at(insert_at, key, value);
+
+        InteriorInsertResult::Ok
     }
 
-    fn insert_at(&mut self, index: usize, key: &TKey, value: AnyNodeId) -> InteriorInsertResult {
+    fn insert_at(&mut self, index: usize, key: &TKey, value: AnyNodeId) {
         let key_len = self.reader().key_len();
-
-        if key_len + 1 == self.reader().key_capacity() {
-            return InteriorInsertResult::Split;
-        }
+        assert!(key_len < self.reader().key_capacity());
 
         debug_assert!(bytes_of(key) != vec![0; size_of::<TKey>()]);
 
@@ -217,7 +288,10 @@ impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
         self.node.data[key_offset..key_offset + size_of::<TKey>()].copy_from_slice(bytes_of(key));
         self.node.data[value_offset..value_offset + size_of::<PageIndex>()]
             .copy_from_slice(bytes_of(&value.page()));
+    }
 
-        InteriorInsertResult::Ok
+    pub(crate) fn set_parent_id(&mut self, parent: Option<InteriorNodeId>) {
+        self.node
+            .set_parent(parent.map_or_else(PageIndex::zeroed, |x| x.page()))
     }
 }

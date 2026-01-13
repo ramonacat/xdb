@@ -227,22 +227,101 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                 let next = transaction.read_node(target_node_id, |reader| reader.next())?;
 
                 if let Some(parent_id) = parent_index {
-                    transaction.write_node(parent_id, |mut writer| {
+                    let new_leaf_reservation = transaction.reserve_node().unwrap();
+                    let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
+
+                    let grandparent_id =
+                        transaction.read_node(parent_id, |reader| reader.parent())?;
+                    let new_grandparent_reservation = transaction.reserve_node()?;
+
+                    let split_node = transaction.write_node(parent_id, |mut writer| {
                         match writer.insert_node(&split_key, new_node_id.into()) {
-                            node::interior::InteriorInsertResult::Ok => {}
-                            node::interior::InteriorInsertResult::Split => todo!(),
+                            node::interior::InteriorInsertResult::Ok => None,
+                            node::interior::InteriorInsertResult::Split(mut new_node) => {
+                                // TODO get rid of the direct writes to node.data here, and make
+                                // the node expose some API
+                                let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
+                                let mut new_leaf = Node::new_leaf();
+
+                                LeafNodeWriter::<'_, TKey>::new(&mut new_leaf).set_links(
+                                    Some(parent_id),
+                                    Some(new_leaf_id),
+                                    next,
+                                );
+
+                                let mut node_writer =
+                                    InteriorNodeWriter::<'_, TKey>::new(&mut new_node);
+                                node_writer.set_first_pointer(new_leaf_id.into());
+                                node_writer.set_parent_id(grandparent_id);
+
+                                Some((new_leaf, new_node))
+                            }
                         }
                     })?;
 
-                    transaction.write_node(target_node_id, |mut target_node| {
-                        target_node.set_links(
-                            target_node.reader().parent(),
-                            target_node.reader().previous(),
-                            Some(new_node_id),
-                        );
-                    })?;
+                    match split_node {
+                        Some((new_leaf, mut new_interior)) => {
+                            let new_interior_reservation = transaction.reserve_node()?;
+                            let new_interior_id =
+                                InteriorNodeId::new(new_interior_reservation.index());
 
-                    new_node_writer.set_links(Some(parent_id), Some(target_node_id), next);
+                            let grandparent_id = match grandparent_id {
+                                None => {
+                                    let mut new_grandparent = Node::new_interior();
+                                    let new_grandparent_id =
+                                        InteriorNodeId::new(new_grandparent_reservation.index());
+                                    transaction
+                                        .write_header(|h| h.root = new_grandparent_id.page())?;
+
+                                    let mut writer: InteriorNodeWriter<'_, TKey> =
+                                        InteriorNodeWriter::new(&mut new_grandparent);
+                                    writer.set_first_pointer(parent_id.into());
+
+                                    transaction.insert_reserved(
+                                        new_grandparent_reservation,
+                                        Page::from_data(new_grandparent),
+                                    )?;
+
+                                    new_grandparent_id
+                                }
+                                Some(x) => x,
+                            };
+
+                            transaction.write_node(grandparent_id, |mut writer| {
+                                let grandparent_insert_result = writer.insert_node(
+                                    &InteriorNodeReader::<'_, TKey>::new(&new_interior)
+                                        .first_key()
+                                        .unwrap(),
+                                    new_interior_id.into(),
+                                );
+                                match grandparent_insert_result {
+                                    node::interior::InteriorInsertResult::Ok => {}
+                                    node::interior::InteriorInsertResult::Split(_) => todo!(),
+                                }
+                            })?;
+
+                            InteriorNodeWriter::<'_, TKey>::new(&mut new_interior)
+                                .set_first_pointer(new_leaf_id.into());
+
+                            transaction
+                                .insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
+                            transaction.insert_reserved(
+                                new_interior_reservation,
+                                Page::from_data(*new_interior),
+                            )?;
+                        }
+                        None => {
+                            transaction.write_node(target_node_id, |mut target_node| {
+                                target_node.set_links(
+                                    target_node.reader().parent(),
+                                    target_node.reader().previous(),
+                                    Some(new_node_id),
+                                );
+                            })?;
+
+                            new_node_writer.set_links(Some(parent_id), Some(target_node_id), next);
+                        }
+                    }
                 } else {
                     let new_root_page = Page::from_data(InteriorNodeWriter::create_root(
                         &[&split_key],
@@ -336,6 +415,8 @@ mod test {
 
     use super::*;
 
+    // TODO assert on properties of the tree (balanced, etc.) where it makes sense
+
     #[test]
     fn node_accessor_entries() {
         let mut node = Node::zeroed();
@@ -394,7 +475,7 @@ mod test {
 
         // 10 pages should give us a resonable number of node splits to assume that the basic logic
         //    works
-        while page_count.load(Ordering::Relaxed) < 10 {
+        while page_count.load(Ordering::Relaxed) < 1024 {
             // make the value bigger with repeat so fewer inserts are needed and the test runs faster
             tree.insert(i, &(usize::max_value() - i).to_be_bytes().repeat(128))
                 .unwrap();
@@ -410,7 +491,8 @@ mod test {
 
             assert!(value == value[..size_of::<usize>()].repeat(128));
 
-            let value: usize = usize::from_be_bytes(value[0..size_of::<usize>()].try_into().unwrap());
+            let value: usize =
+                usize::from_be_bytes(value[0..size_of::<usize>()].try_into().unwrap());
 
             assert!(key == i);
             assert!(value == usize::max_value() - i);
@@ -455,14 +537,18 @@ mod test {
             let (key, value) = item.unwrap();
 
             let value_matches_expected = match i % 8 {
-                0 | 7 | 6 | 5 => i as u64 == u64::from_be_bytes(value[..size_of::<u64>()].try_into().unwrap()),
-                4 | 3 => i as u32 == u32::from_be_bytes(value[..size_of::<u32>()].try_into().unwrap()),
+                0 | 7 | 6 | 5 => {
+                    i as u64 == u64::from_be_bytes(value[..size_of::<u64>()].try_into().unwrap())
+                }
+                4 | 3 => {
+                    i as u32 == u32::from_be_bytes(value[..size_of::<u32>()].try_into().unwrap())
+                }
                 2 => i as u16 == u16::from_be_bytes(value[..size_of::<u16>()].try_into().unwrap()),
                 1 => i as u8 == u8::from_be_bytes(value[..size_of::<u8>()].try_into().unwrap()),
                 _ => unreachable!(),
             };
 
-            assert!(value[..value.len()/128].repeat(128) == value);
+            assert!(value[..value.len() / 128].repeat(128) == value);
             assert!(key == i);
             assert!(value_matches_expected);
         }

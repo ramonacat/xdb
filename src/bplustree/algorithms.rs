@@ -24,7 +24,7 @@ pub(super) fn leaf_search<TStorage: Storage, TKey: Pod + PartialOrd>(
         };
 
         for (key_index, node_key) in reader.keys().enumerate() {
-            if node_key > key {
+            if key < node_key {
                 let child_page = reader.value_at(key_index).unwrap();
 
                 return leaf_search(transaction, child_page, key);
