@@ -5,10 +5,7 @@ use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned, from_bytes,
 use crate::{
     bplustree::{
         LeafNodeId, NodeId, TreeError,
-        node::{
-            InteriorNodeId, NODE_DATA_SIZE, NodeFlags, NodeHeader, NodeReader, NodeTrait,
-            NodeWriter,
-        },
+        node::{InteriorNodeId, NODE_DATA_SIZE, NodeFlags, NodeHeader, NodeTrait},
     },
     storage::PageIndex,
 };
@@ -269,6 +266,25 @@ impl<TKey: Pod + PartialOrd> LeafNode<TKey> {
             new_node,
         )
     }
+
+    pub fn set_links(
+        &mut self,
+        parent: Option<InteriorNodeId>,
+        previous: Option<LeafNodeId>,
+        next: Option<LeafNodeId>,
+    ) {
+        self
+            // TODO replace this and all the other instances of PageIndex::zeroed() with an
+            // explicit constructor
+            .set_parent(parent);
+        let header = self.header_mut();
+        header.previous = previous.map_or(PageIndex::zeroed(), |x| x.page());
+        header.next = next.map_or(PageIndex::zeroed(), |x| x.page())
+    }
+
+    fn header_mut(&mut self) -> &mut LeafNodeHeader {
+        from_bytes_mut(&mut self.data[0..size_of::<LeafNodeHeader>()])
+    }
 }
 
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
@@ -330,35 +346,6 @@ impl<'node, TKey: Pod + PartialOrd + 'node> Iterator for LeafNodeEntryIterator<'
     }
 }
 
-pub(in crate::bplustree) struct LeafNodeReader<'node, TKey: Pod> {
-    // TODO make private
-    pub node: &'node LeafNode<TKey>,
-}
-
-impl<'node, TKey: Pod> NodeReader<'node, LeafNode<TKey>, TKey> for LeafNodeReader<'node, TKey> {
-    fn new(node: &'node LeafNode<TKey>) -> Self {
-        Self { node }
-    }
-}
-
-impl<'node, TKey: Pod> LeafNodeReader<'node, TKey> {
-    pub fn new(node: &'node LeafNode<TKey>) -> Self {
-        // TODO return a result with an error if we can't fit at least two entries
-        Self { node }
-    }
-}
-
-pub(in crate::bplustree) struct LeafNodeWriter<'node, TKey: Pod> {
-    // TODO make private
-    pub node: &'node mut LeafNode<TKey>,
-}
-
-impl<'node, TKey: Pod> NodeWriter<'node, LeafNode<TKey>, TKey> for LeafNodeWriter<'node, TKey> {
-    fn new(node: &'node mut LeafNode<TKey>) -> Self {
-        Self { node }
-    }
-}
-
 #[must_use]
 #[derive(Debug)]
 pub(in crate::bplustree) enum LeafInsertResult<TKey: Pod> {
@@ -367,30 +354,4 @@ pub(in crate::bplustree) enum LeafInsertResult<TKey: Pod> {
         new_node: Box<LeafNode<TKey>>,
         split_key: TKey,
     },
-}
-
-impl<'node, TKey: Pod + PartialOrd> LeafNodeWriter<'node, TKey> {
-    pub fn new(node: &'node mut LeafNode<TKey>) -> Self {
-        // TODO return a result with an error if we can't fit at least two entries
-        Self { node }
-    }
-
-    pub fn set_links(
-        &mut self,
-        parent: Option<InteriorNodeId>,
-        previous: Option<LeafNodeId>,
-        next: Option<LeafNodeId>,
-    ) {
-        self.node
-            // TODO replace this and all the other instances of PageIndex::zeroed() with an
-            // explicit constructor
-            .set_parent(parent);
-        let header = self.header_mut();
-        header.previous = previous.map_or(PageIndex::zeroed(), |x| x.page());
-        header.next = next.map_or(PageIndex::zeroed(), |x| x.page())
-    }
-
-    fn header_mut(&mut self) -> &mut LeafNodeHeader {
-        from_bytes_mut(&mut self.node.data[0..size_of::<LeafNodeHeader>()])
-    }
 }

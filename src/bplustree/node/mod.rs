@@ -5,29 +5,13 @@ use std::fmt::Display;
 
 use crate::bplustree::node::interior::InteriorNode;
 use crate::bplustree::node::leaf::LeafNode;
-use crate::bplustree::{InteriorNodeWriter, LeafNodeReader, LeafNodeWriter};
+use crate::page::PAGE_DATA_SIZE;
 use crate::storage::PageIndex;
-use crate::{bplustree::InteriorNodeReader, page::PAGE_DATA_SIZE};
-use bytemuck::{Pod, Zeroable, must_cast_mut, must_cast_ref};
+use bytemuck::{Pod, Zeroable, must_cast_ref};
 
 // TODO: should the TKey be Ord, instead of PartialOrd?
-// TODO Integrate the node readers and writers into the Node struct
-pub(super) trait NodeReader<'node, TNode: NodeTrait<TKey>, TKey> {
-    fn new(node: &'node TNode) -> Self;
-}
-
-pub(super) trait NodeWriter<'node, TNode: NodeTrait<TKey>, TKey> {
-    fn new(node: &'node mut TNode) -> Self;
-}
 
 pub(super) trait NodeId: Copy + PartialEq {
-    type Reader<'node, TKey>: NodeReader<'node, Self::Node<TKey>, TKey>
-    where
-        TKey: Pod + PartialOrd + 'node;
-    type Writer<'node, TKey>: NodeWriter<'node, Self::Node<TKey>, TKey>
-    where
-        TKey: Pod + PartialOrd + 'node;
-
     type Node<TKey>: NodeTrait<TKey>
     where
         TKey: Pod;
@@ -65,15 +49,6 @@ impl AnyNodeId {
 }
 
 impl NodeId for AnyNodeId {
-    type Reader<'node, TKey>
-        = AnyNodeReader<'node, TKey>
-    where
-        TKey: Pod + PartialOrd + 'node;
-    type Writer<'node, TKey>
-        = AnyNodeWriter<'node, TKey>
-    where
-        TKey: Pod + PartialOrd + 'node;
-
     type Node<TKey>
         = Node
     where
@@ -105,15 +80,6 @@ impl LeafNodeId {
 }
 
 impl NodeId for LeafNodeId {
-    type Reader<'node, TKey>
-        = LeafNodeReader<'node, TKey>
-    where
-        TKey: Pod + PartialOrd + 'node;
-    type Writer<'node, TKey>
-        = LeafNodeWriter<'node, TKey>
-    where
-        TKey: Pod + PartialOrd + 'node;
-
     type Node<TKey>
         = LeafNode<TKey>
     where
@@ -137,16 +103,6 @@ impl InteriorNodeId {
 }
 
 impl NodeId for InteriorNodeId {
-    type Reader<'node, TKey>
-        = InteriorNodeReader<'node, TKey>
-    where
-        TKey: Pod + PartialOrd + 'node;
-
-    type Writer<'node, TKey>
-        = InteriorNodeWriter<'node, TKey>
-    where
-        TKey: Pod + PartialOrd + 'node;
-
     type Node<TKey>
         = InteriorNode<TKey>
     where
@@ -227,39 +183,21 @@ impl<TKey> NodeTrait<TKey> for Node {
     }
 }
 
+pub(super) enum AnyNode<'node, TKey: Pod> {
+    Interior(&'node InteriorNode<TKey>),
+    Leaf(&'node LeafNode<TKey>),
+}
+
 impl Node {
     fn is_leaf(&self) -> bool {
         !self.header.flags.contains(NodeFlags::INTERNAL)
     }
-}
 
-pub(super) enum AnyNodeReader<'node, TKey: Pod> {
-    Interior(InteriorNodeReader<'node, TKey>),
-    Leaf(LeafNodeReader<'node, TKey>),
-}
-
-impl<'node, TKey: Pod + PartialOrd> NodeReader<'node, Node, TKey> for AnyNodeReader<'node, TKey> {
-    fn new(node: &'node Node) -> Self {
-        if node.is_leaf() {
-            Self::Leaf(LeafNodeReader::new(must_cast_ref(node)))
+    pub(crate) fn as_any<TKey: Pod>(&self) -> AnyNode<'_, TKey> {
+        if self.is_leaf() {
+            AnyNode::Leaf(must_cast_ref(self))
         } else {
-            Self::Interior(InteriorNodeReader::new(must_cast_ref(node)))
-        }
-    }
-}
-
-#[allow(unused)] // TODO remove if we really don't need it
-pub(super) enum AnyNodeWriter<'node, TKey: Pod> {
-    Interior(InteriorNodeWriter<'node, TKey>),
-    Leaf(LeafNodeWriter<'node, TKey>),
-}
-
-impl<'node, TKey: Pod + PartialOrd> NodeWriter<'node, Node, TKey> for AnyNodeWriter<'node, TKey> {
-    fn new(node: &'node mut Node) -> Self {
-        if node.is_leaf() {
-            AnyNodeWriter::Leaf(LeafNodeWriter::new(must_cast_mut(node)))
-        } else {
-            AnyNodeWriter::Interior(InteriorNodeWriter::new(must_cast_mut(node)))
+            AnyNode::Interior(must_cast_ref(self))
         }
     }
 }

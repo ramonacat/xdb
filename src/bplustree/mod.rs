@@ -7,20 +7,13 @@ use std::marker::PhantomData;
 use crate::bplustree::algorithms::first_leaf;
 use crate::bplustree::algorithms::leaf_search;
 use crate::bplustree::node::AnyNodeId;
-use crate::bplustree::node::AnyNodeReader;
 use crate::bplustree::node::InteriorNodeId;
 use crate::bplustree::node::LeafNodeId;
 use crate::bplustree::node::NodeId;
-use crate::bplustree::node::NodeReader;
-use crate::bplustree::node::NodeTrait as _;
-use crate::bplustree::node::NodeWriter;
+use crate::bplustree::node::NodeTrait;
 use crate::bplustree::node::interior::InteriorNode;
-use crate::bplustree::node::interior::InteriorNodeReader;
-use crate::bplustree::node::interior::InteriorNodeWriter;
 use crate::bplustree::node::leaf::LeafInsertResult;
 use crate::bplustree::node::leaf::LeafNode;
-use crate::bplustree::node::leaf::LeafNodeReader;
-use crate::bplustree::node::leaf::LeafNodeWriter;
 use crate::page::Page;
 use crate::storage::PageIndex;
 use crate::storage::PageReservation;
@@ -70,14 +63,14 @@ impl<'tree, T: Storage, TKey: Pod + PartialOrd> Iterator for TreeIterator<'tree,
     fn next(&mut self) -> Option<Self::Item> {
         let read_result = self
             .transaction
-            .read_node(self.current_leaf, |reader| {
-                match reader.node.entries().nth(self.index) {
+            .read_node(self.current_leaf, |node| {
+                match node.entries().nth(self.index) {
                     Some(entry) => {
                         self.index += 1;
                         IteratorResult::Value(Ok((entry.key(), entry.value().to_vec())))
                     }
                     None => {
-                        if let Some(next_leaf) = reader.node.next() {
+                        if let Some(next_leaf) = node.next() {
                             self.current_leaf = next_leaf;
                             self.index = 0;
 
@@ -137,24 +130,21 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + PartialOrd>
     fn read_node<TReturn, TNodeId: NodeId>(
         &self,
         index: TNodeId,
-        read: impl for<'node> FnOnce(TNodeId::Reader<'node, TKey>) -> TReturn,
+        read: impl for<'node> FnOnce(&TNodeId::Node<TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        Ok(self.transaction.read(index.page(), |page| {
-            let reader = <TNodeId::Reader<'_, TKey> as NodeReader<_, TKey>>::new(page.data());
-
-            read(reader)
-        })?)
+        Ok(self
+            .transaction
+            .read(index.page(), |page| read(page.data()))?)
     }
 
     fn write_node<TReturn, TNodeId: NodeId>(
         &self,
         index: TNodeId,
-        write: impl for<'node> FnOnce(TNodeId::Writer<'node, TKey>) -> TReturn,
+        write: impl for<'node> FnOnce(&mut TNodeId::Node<TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        Ok(self.transaction.write(index.page(), |page| {
-            let writer = <TNodeId::Writer<'_, TKey> as NodeWriter<_, TKey>>::new(page.data_mut());
-            write(writer)
-        })?)
+        Ok(self
+            .transaction
+            .write(index.page(), |page| write(page.data_mut()))?)
     }
 
     fn reserve_node(&self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
@@ -205,10 +195,10 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
         let root_index = AnyNodeId::new(transaction.read_header(|h| h.root)?);
         let target_node_id = leaf_search(&transaction, root_index, &key)?;
 
-        let (parent_index, insert_result) = transaction.write_node(target_node_id, |writer| {
+        let (parent_index, insert_result) = transaction.write_node(target_node_id, |node| {
             // TODO parent_index should be a part of insert_result
-            let parent_index = writer.node.parent();
-            let insert_result = writer.node.insert(key, value);
+            let parent_index = node.parent();
+            let insert_result = node.insert(key, value);
             (parent_index, insert_result)
         })?;
         let insert_result = insert_result?;
@@ -222,10 +212,7 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                 let new_node_reservation = transaction.reserve_node()?;
                 let new_node_id = LeafNodeId::new(new_node_reservation.index());
 
-                let mut new_node_writer: LeafNodeWriter<'_, TKey> =
-                    LeafNodeWriter::new(&mut new_node);
-
-                let next = transaction.read_node(target_node_id, |reader| reader.node.next())?;
+                let next = transaction.read_node(target_node_id, |node| node.next())?;
 
                 if let Some(parent_id) = parent_index {
                     let new_leaf_reservation = transaction.reserve_node().unwrap();
@@ -235,20 +222,16 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                         transaction.read_node(parent_id, |reader| reader.parent())?;
                     let new_grandparent_reservation = transaction.reserve_node()?;
 
-                    let split_node = transaction.write_node(parent_id, |writer| {
-                        match writer.node.insert_node(&split_key, new_node_id.into()) {
+                    let split_node = transaction.write_node(parent_id, |node| {
+                        match node.insert_node(&split_key, new_node_id.into()) {
                             node::interior::InteriorInsertResult::Ok => None,
                             node::interior::InteriorInsertResult::Split(mut new_node) => {
                                 // TODO get rid of the direct writes to node.data here, and make
                                 // the node expose some API
                                 let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
-                                let mut new_leaf = LeafNode::new();
+                                let mut new_leaf = LeafNode::<TKey>::new();
 
-                                LeafNodeWriter::<'_, TKey>::new(&mut new_leaf).set_links(
-                                    Some(parent_id),
-                                    Some(new_leaf_id),
-                                    next,
-                                );
+                                new_leaf.set_links(Some(parent_id), Some(new_leaf_id), next);
 
                                 new_node.set_first_pointer(new_leaf_id.into());
                                 new_node.set_parent(grandparent_id);
@@ -284,8 +267,8 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                                 Some(x) => x,
                             };
 
-                            transaction.write_node(grandparent_id, |writer| {
-                                let grandparent_insert_result = writer.node.insert_node(
+                            transaction.write_node(grandparent_id, |node| {
+                                let grandparent_insert_result = node.insert_node(
                                     &new_interior.first_key().unwrap(),
                                     new_interior_id.into(),
                                 );
@@ -305,15 +288,15 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                             )?;
                         }
                         None => {
-                            transaction.write_node(target_node_id, |mut target_node| {
+                            transaction.write_node(target_node_id, |target_node| {
                                 target_node.set_links(
-                                    target_node.node.parent(),
-                                    target_node.node.previous(),
+                                    target_node.parent(),
+                                    target_node.previous(),
                                     Some(new_node_id),
                                 );
                             })?;
 
-                            new_node_writer.set_links(Some(parent_id), Some(target_node_id), next);
+                            new_node.set_links(Some(parent_id), Some(target_node_id), next);
                         }
                     }
                 } else {
@@ -324,12 +307,12 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
                     let new_root_page_index = transaction.insert(new_root_page)?;
                     let new_root_page_id = InteriorNodeId::new(new_root_page_index);
 
-                    new_node_writer.set_links(Some(new_root_page_id), Some(target_node_id), next);
+                    new_node.set_links(Some(new_root_page_id), Some(target_node_id), next);
 
-                    transaction.write_node(target_node_id, |mut target_node| {
+                    transaction.write_node(target_node_id, |target_node| {
                         target_node.set_links(
                             Some(new_root_page_id),
-                            target_node.node.previous(),
+                            target_node.previous(),
                             Some(new_node_id),
                         );
                     })?;

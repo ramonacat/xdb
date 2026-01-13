@@ -6,7 +6,7 @@ use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned, from_bytes}
 use crate::{
     bplustree::{
         InteriorNodeId, NodeId,
-        node::{AnyNodeId, NODE_DATA_SIZE, NodeHeader, NodeReader, NodeTrait, NodeWriter},
+        node::{AnyNodeId, NODE_DATA_SIZE, NodeHeader, NodeTrait},
     },
     storage::PageIndex,
 };
@@ -204,6 +204,33 @@ impl<TKey: Pod + PartialOrd> InteriorNode<TKey> {
         self.data[value_offset..value_offset + size_of::<PageIndex>()]
             .copy_from_slice(bytes_of(&value.page()));
     }
+
+    pub(in crate::bplustree) fn value_at(&self, index: usize) -> Option<AnyNodeId> {
+        if index > self.key_len() {
+            return None;
+        }
+
+        let value_start = self.values_offset() + (index * size_of::<PageIndex>());
+
+        let value: PageIndex =
+            pod_read_unaligned(&self.data[value_start..value_start + size_of::<PageIndex>()]);
+
+        assert!(value != PageIndex::zeroed());
+
+        Some(AnyNodeId::new(value))
+    }
+
+    pub(crate) fn first_value(&self) -> Option<AnyNodeId> {
+        self.value_at(0)
+    }
+
+    pub(crate) fn last_value(&self) -> Option<AnyNodeId> {
+        self.value_at(self.key_len())
+    }
+
+    pub(crate) fn values(&self) -> impl Iterator<Item = AnyNodeId> {
+        (0..(self.key_len() + 1)).map(|x| self.value_at(x).unwrap())
+    }
 }
 
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
@@ -242,82 +269,8 @@ impl<'node, TKey: Pod + PartialOrd> Iterator for InteriorNodeKeysIterator<'node,
     }
 }
 
-#[derive(Debug)]
-pub(in crate::bplustree) struct InteriorNodeReader<'node, TKey: Pod> {
-    // TODO make private
-    pub node: &'node InteriorNode<TKey>,
-}
-
-impl<'node, TKey: Pod> NodeReader<'node, InteriorNode<TKey>, TKey>
-    for InteriorNodeReader<'node, TKey>
-{
-    fn new(node: &'node InteriorNode<TKey>) -> Self {
-        Self { node }
-    }
-}
-
-impl<'node, TKey: Pod + PartialOrd> InteriorNodeReader<'node, TKey> {
-    pub(in crate::bplustree) fn new(node: &'node InteriorNode<TKey>) -> Self {
-        Self { node }
-    }
-
-    fn key_len(&self) -> usize {
-        self.node.header.key_len as usize
-    }
-
-    pub(in crate::bplustree) fn value_at(&self, index: usize) -> Option<AnyNodeId> {
-        if index > self.key_len() {
-            return None;
-        }
-
-        let value_start = self.node.values_offset() + (index * size_of::<PageIndex>());
-
-        let value: PageIndex =
-            pod_read_unaligned(&self.node.data[value_start..value_start + size_of::<PageIndex>()]);
-
-        assert!(value != PageIndex::zeroed());
-
-        Some(AnyNodeId::new(value))
-    }
-
-    pub(crate) fn first_value(&self) -> Option<AnyNodeId> {
-        self.value_at(0)
-    }
-
-    pub(crate) fn last_value(&self) -> Option<AnyNodeId> {
-        self.value_at(self.key_len())
-    }
-
-    pub(crate) fn values(&self) -> impl Iterator<Item = AnyNodeId> {
-        (0..(self.key_len() + 1)).map(|x| self.value_at(x).unwrap())
-    }
-
-    pub(crate) fn parent(&self) -> Option<InteriorNodeId> {
-        self.node.parent()
-    }
-}
-
 #[must_use]
 pub(in crate::bplustree) enum InteriorInsertResult<TKey: Pod> {
     Ok,
     Split(Box<InteriorNode<TKey>>),
-}
-
-pub(in crate::bplustree) struct InteriorNodeWriter<'node, TKey: Pod> {
-    // TODO make private
-    pub node: &'node mut InteriorNode<TKey>,
-}
-
-impl<'node, TKey: Pod> NodeWriter<'node, InteriorNode<TKey>, TKey>
-    for InteriorNodeWriter<'node, TKey>
-{
-    fn new(node: &'node mut InteriorNode<TKey>) -> Self {
-        Self { node }
-    }
-}
-
-impl<'node, TKey: Pod + PartialOrd> InteriorNodeWriter<'node, TKey> {
-    pub(in crate::bplustree) fn new(node: &'node mut InteriorNode<TKey>) -> Self {
-        Self { node }
-    }
 }

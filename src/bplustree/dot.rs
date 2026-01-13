@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use bytemuck::Pod;
 
+use crate::bplustree::node::AnyNode;
 use crate::bplustree::{AnyNodeId, TreeTransaction};
 use crate::{
     bplustree::{Tree, TreeError},
@@ -30,11 +31,11 @@ impl<T: Storage, TKey: Pod + PartialOrd + Display> Tree<T, TKey> {
         let output = transaction.read_node(node_index, |node| {
             let mut output = String::new();
 
-            match node {
-                super::AnyNodeReader::Interior(reader) => {
+            match node.as_any::<TKey>() {
+                AnyNode::Interior(node) => {
                     let mut label: Vec<String> = vec![format!("index: {node_index}")];
 
-                    for key in reader.node.keys() {
+                    for key in node.keys() {
                         label.push(key.to_string());
                     }
 
@@ -42,24 +43,24 @@ impl<T: Storage, TKey: Pod + PartialOrd + Display> Tree<T, TKey> {
 
                     output += &format!("N{node_index}[label=\"{label}\"];\n");
 
-                    for (index, value) in reader.values().enumerate() {
+                    for (index, value) in node.values().enumerate() {
                         output += &format!("N{node_index} -> N{value}[label=\"{index}\"];\n");
 
                         output += &Self::node_to_dot(transaction, value, stringify_value)?;
                     }
                 }
-                super::AnyNodeReader::Leaf(reader) => {
+                AnyNode::Leaf(node) => {
                     let mut label: Vec<String> = vec![format!("index: {node_index}")];
 
-                    if let Some(previous) = reader.node.previous() {
+                    if let Some(previous) = node.previous() {
                         label.push(format!("previous: {previous}"));
                     }
 
-                    if let Some(next) = reader.node.next() {
+                    if let Some(next) = node.next() {
                         label.push(format!("next: {next}"));
                     }
 
-                    for entry in reader.node.entries() {
+                    for entry in node.entries() {
                         label.push(format!(
                             "{}/{}",
                             entry.key(),
