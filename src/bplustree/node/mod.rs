@@ -110,8 +110,6 @@ impl NodeId for InteriorNodeId {
     }
 }
 
-// TODO Support variable-sized keys?
-
 bitflags::bitflags! {
     #[derive(Debug, Pod, Zeroable, Clone, Copy)]
     #[repr(transparent)]

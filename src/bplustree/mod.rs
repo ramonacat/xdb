@@ -202,10 +202,7 @@ impl<T: Storage, TKey: Pod + Ord> Tree<T, TKey> {
 
         match insert_result {
             LeafInsertResult::Done => Ok(()),
-            LeafInsertResult::Split {
-                mut new_node,
-                split_key,
-            } => {
+            LeafInsertResult::Split { mut new_node } => {
                 let new_node_reservation = transaction.reserve_node()?;
                 let new_node_id = LeafNodeId::new(new_node_reservation.index());
 
@@ -220,7 +217,7 @@ impl<T: Storage, TKey: Pod + Ord> Tree<T, TKey> {
                     let new_grandparent_reservation = transaction.reserve_node()?;
 
                     let split_node = transaction.write_node(parent_id, |node| {
-                        match node.insert_node(&split_key, new_node_id.into()) {
+                        match node.insert_node(&new_node.first_key().unwrap(), new_node_id.into()) {
                             node::interior::InteriorInsertResult::Ok => None,
                             node::interior::InteriorInsertResult::Split(mut new_node) => {
                                 // TODO get rid of the direct writes to node.data here, and make
@@ -298,7 +295,7 @@ impl<T: Storage, TKey: Pod + Ord> Tree<T, TKey> {
                     }
                 } else {
                     let new_root_page = Page::from_data(InteriorNode::create_root(
-                        &[&split_key],
+                        &[&new_node.first_key().unwrap()],
                         &[root_index, new_node_id.into()],
                     ));
                     let new_root_page_index = transaction.insert(new_root_page)?;

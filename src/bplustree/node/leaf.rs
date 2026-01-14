@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned, from_bytes, from_bytes_mut};
+use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned};
 
 use crate::{
     bplustree::{
@@ -17,7 +17,8 @@ where
     TKey: Pod,
 {
     header: NodeHeader,
-    data: [u8; NODE_DATA_SIZE],
+    leaf_header: LeafNodeHeader,
+    data: [u8; NODE_DATA_SIZE - size_of::<LeafNodeHeader>()],
     _key: PhantomData<TKey>,
 }
 
@@ -30,6 +31,10 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
                 _unused2: 0,
                 parent: PageIndex::zero(),
             },
+            leaf_header: LeafNodeHeader {
+                previous: PageIndex::zero(),
+                next: PageIndex::zero(),
+            },
             data: [0; _],
             _key: PhantomData,
         }
@@ -37,8 +42,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 
     pub fn from_raw_entries(entry_count: usize, entries: &[u8]) -> Self {
         let mut node = Self::new();
-        let entries_offset = node.entries_offset();
-        node.data[entries_offset..entries_offset + entries.len()].copy_from_slice(entries);
+        node.data[..entries.len()].copy_from_slice(entries);
         node.header.key_count = entry_count as u16;
 
         node
@@ -73,7 +77,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
             return None;
         }
 
-        let mut offset = self.entries_offset();
+        let mut offset = 0;
 
         for i in 0..index {
             offset += self.entry_size(i).unwrap();
@@ -83,16 +87,12 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         Some(offset)
     }
 
-    fn entries_offset(&self) -> usize {
-        size_of::<LeafNodeHeader>()
-    }
-
     fn entry_size(&self, index: usize) -> Option<usize> {
         if index >= self.len() {
             return None;
         }
 
-        let mut offset = self.entries_offset();
+        let mut offset = 0;
         for _i in 0..index {
             let value_start = offset + size_of::<TKey>();
 
@@ -126,13 +126,8 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         }
     }
 
-    // TODO make this a field instead
-    fn header(&self) -> &LeafNodeHeader {
-        from_bytes(&self.data[..size_of::<LeafNodeHeader>()])
-    }
-
     pub fn previous(&self) -> Option<LeafNodeId> {
-        let previous = self.header().previous;
+        let previous = self.leaf_header.previous;
 
         if previous == PageIndex::zero() {
             None
@@ -142,7 +137,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     }
 
     pub fn next(&self) -> Option<LeafNodeId> {
-        let next = self.header().next;
+        let next = self.leaf_header.next;
 
         if next == PageIndex::zero() {
             None
@@ -162,33 +157,26 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         }
 
         if !self.can_fit(value.len()) {
-            let (split_index, split_key, mut new_node) = self.split();
+            let (split_index, mut new_node) = self.split();
 
             if insert_index > split_index {
                 let result = new_node.insert(key, value).unwrap();
 
                 match result {
                     LeafInsertResult::Done => {}
-                    LeafInsertResult::Split {
-                        new_node: _,
-                        split_key: _,
-                    } => todo!(),
+                    LeafInsertResult::Split { new_node: _ } => todo!(),
                 }
             } else {
                 let result = self.insert(key, value).unwrap();
 
                 match result {
                     LeafInsertResult::Done => {}
-                    LeafInsertResult::Split {
-                        new_node: _,
-                        split_key: _,
-                    } => todo!(),
+                    LeafInsertResult::Split { new_node: _ } => todo!(),
                 }
             }
 
             Ok(LeafInsertResult::Split {
                 new_node: Box::new(new_node),
-                split_key,
             })
         } else {
             self.insert_at(insert_index, key, value)?;
@@ -233,10 +221,10 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 
     fn can_fit(&self, value_size: usize) -> bool {
         self.entry_offset(self.len()).unwrap() + self.entry_size_for_value_size(value_size)
-            < (self.data.len() - self.entries_offset())
+            < (self.data.len())
     }
 
-    fn split(&mut self) -> (usize, TKey, LeafNode<TKey>) {
+    fn split(&mut self) -> (usize, LeafNode<TKey>) {
         let initial_len = self.len();
         assert!(initial_len > 0, "Trying to split an empty node");
 
@@ -254,12 +242,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         // of a LeafNode in an invalid state
         let new_node = LeafNode::from_raw_entries(entries_to_move, new_node_entries);
 
-        (
-            entries_to_move,
-            // TODO no need to return the key here
-            new_node.first_key().unwrap(),
-            new_node,
-        )
+        (entries_to_move, new_node)
     }
 
     pub fn set_links(
@@ -269,16 +252,11 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         next: Option<LeafNodeId>,
     ) {
         self.set_parent(parent);
-        let header = self.header_mut();
-        header.previous = previous.map_or(PageIndex::zero(), |x| x.page());
-        header.next = next.map_or(PageIndex::zero(), |x| x.page())
+        self.leaf_header.previous = previous.map_or(PageIndex::zero(), |x| x.page());
+        self.leaf_header.next = next.map_or(PageIndex::zero(), |x| x.page())
     }
 
-    fn header_mut(&mut self) -> &mut LeafNodeHeader {
-        from_bytes_mut(&mut self.data[0..size_of::<LeafNodeHeader>()])
-    }
-
-    fn first_key(&self) -> Option<TKey> {
+    pub(in crate::bplustree) fn first_key(&self) -> Option<TKey> {
         self.entry(0).map(|x| x.key)
     }
 }
@@ -346,8 +324,5 @@ impl<'node, TKey: Pod + Ord + 'node> Iterator for LeafNodeEntryIterator<'node, T
 #[derive(Debug)]
 pub(in crate::bplustree) enum LeafInsertResult<TKey: Pod> {
     Done,
-    Split {
-        new_node: Box<LeafNode<TKey>>,
-        split_key: TKey,
-    },
+    Split { new_node: Box<LeafNode<TKey>> },
 }
