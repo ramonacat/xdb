@@ -52,6 +52,18 @@ pub(super) fn first_leaf<TStorage: Storage, TKey: Pod + Ord>(
     })?
 }
 
+pub(super) fn last_leaf<TStorage: Storage, TKey: Pod + Ord>(
+    transaction: &TreeTransaction<TStorage, TKey>,
+    root: AnyNodeId,
+) -> Result<LeafNodeId, TreeError> {
+    transaction.read_node(root, |node| match node.as_any() {
+        AnyNodeKind::Interior(interior_node_reader) => {
+            first_leaf(transaction, interior_node_reader.last_value().unwrap())
+        }
+        AnyNodeKind::Leaf(_) => Ok(LeafNodeId::from_any(root)),
+    })?
+}
+
 fn insert_split_interior_node<'storage, TStorage: Storage, TKey: Pod + Ord>(
     transaction: &TreeTransaction<'storage, TStorage, TKey>,
     split_node_id: LeafNodeId,

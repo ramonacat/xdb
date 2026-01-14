@@ -5,6 +5,7 @@ mod node;
 use std::marker::PhantomData;
 
 use crate::bplustree::algorithms::first_leaf;
+use crate::bplustree::algorithms::last_leaf;
 use crate::bplustree::node::AnyNodeId;
 use crate::bplustree::node::InteriorNodeId;
 use crate::bplustree::node::LeafNodeId;
@@ -26,24 +27,28 @@ use crate::page::PAGE_DATA_SIZE;
 
 const ROOT_NODE_TAIL_SIZE: usize = PAGE_DATA_SIZE - size_of::<u64>() - size_of::<PageIndex>();
 
-struct TreeIterator<'tree, T: Storage, TKey> {
+struct TreeIterator<'tree, T: Storage, TKey, const REVERSE: bool> {
     transaction: TreeTransaction<'tree, T, TKey>,
     current_leaf: LeafNodeId,
     index: usize,
-    _key: PhantomData<TKey>,
 }
 
-impl<'tree, T: Storage, TKey: Pod + Ord> TreeIterator<'tree, T, TKey> {
+impl<'tree, T: Storage, TKey: Pod + Ord, const REVERSE: bool>
+    TreeIterator<'tree, T, TKey, REVERSE>
+{
     fn new(transaction: TreeTransaction<'tree, T, TKey>) -> Result<Self, TreeError> {
         // TODO introduce some better/more abstract API for reading the header?
         let root = transaction.read_header(|h| AnyNodeId::new(h.root))?;
-        let first_leaf = first_leaf(&transaction, root)?;
+        let starting_leaf = if !REVERSE {
+            first_leaf(&transaction, root)?
+        } else {
+            last_leaf(&transaction, root)?
+        };
 
         Ok(Self {
             transaction,
-            current_leaf: first_leaf,
+            current_leaf: starting_leaf,
             index: 0,
-            _key: PhantomData,
         })
     }
 }
@@ -54,7 +59,9 @@ enum IteratorResult<TKey> {
     None,
 }
 
-impl<'tree, T: Storage, TKey: Pod + Ord> Iterator for TreeIterator<'tree, T, TKey> {
+impl<'tree, T: Storage, TKey: Pod + Ord, const REVERSE: bool> Iterator
+    for TreeIterator<'tree, T, TKey, REVERSE>
+{
     type Item = Result<(TKey, Vec<u8>), TreeError>;
 
     // TODO get rid of all the unwraps!
@@ -62,13 +69,30 @@ impl<'tree, T: Storage, TKey: Pod + Ord> Iterator for TreeIterator<'tree, T, TKe
         let read_result = self
             .transaction
             .read_node(self.current_leaf, |node| {
-                match node.entries().nth(self.index) {
+                // TODO expose an API on node that will allow us to avoid collecting all the
+                // entries here
+                let entries = node.entries().collect::<Vec<_>>();
+
+                let entry = if !REVERSE {
+                    entries.get(self.index)
+                } else if entries.is_empty() || self.index >= entries.len() {
+                    None
+                } else {
+                    Some(&entries[entries.len() - self.index - 1])
+                };
+
+                match entry {
                     Some(entry) => {
                         self.index += 1;
+
                         IteratorResult::Value(Ok((entry.key(), entry.value().to_vec())))
                     }
                     None => {
-                        if let Some(next_leaf) = node.next() {
+                        if let Some(next_leaf) = if !REVERSE {
+                            node.next()
+                        } else {
+                            node.previous()
+                        } {
                             self.current_leaf = next_leaf;
                             self.index = 0;
 
@@ -183,7 +207,12 @@ impl<T: Storage, TKey: Pod + Ord> Tree<T, TKey> {
 
     #[allow(unused)]
     fn iter(&self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
-        TreeIterator::new(self.transaction()?)
+        TreeIterator::<_, _, false>::new(self.transaction()?)
+    }
+
+    #[allow(unused)]
+    fn iter_reverse(&self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
+        TreeIterator::<_, _, true>::new(self.transaction()?)
     }
 
     pub fn transaction(&self) -> Result<TreeTransaction<'_, T, TKey>, TreeError> {
@@ -287,6 +316,7 @@ mod test {
         assert!(matches!(iter.next(), None));
     }
 
+    // TODO the below two tests are mostly copy-paste, refactor some sorta abstraction over them
     #[test]
     // TODO optimize this test
     fn insert_multiple_nodes() {
@@ -314,7 +344,30 @@ mod test {
 
         let entry_count = i;
 
+        // TODO
+        #[allow(unused)]
+        let mut final_i = 0;
+
         for (i, item) in tree.iter().unwrap().enumerate() {
+            assert!(i < entry_count);
+            let (key, value) = item.unwrap();
+
+            assert!(value == value[..size_of::<usize>()].repeat(128));
+
+            let value: usize =
+                usize::from_be_bytes(value[0..size_of::<usize>()].try_into().unwrap());
+
+            assert!(key == i);
+            assert!(value == usize::max_value() - i);
+
+            final_i = i;
+        }
+
+        // TODO assert!(final_i == entry_count - 1);
+
+        for (i, item) in tree.iter_reverse().unwrap().enumerate() {
+            let i = entry_count - i - 1;
+
             assert!(i < entry_count);
             let (key, value) = item.unwrap();
 
