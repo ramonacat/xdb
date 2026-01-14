@@ -9,7 +9,7 @@ use crate::{
     storage::Storage,
 };
 
-impl<T: Storage, TKey: Pod + PartialOrd + Display> Tree<T, TKey> {
+impl<T: Storage, TKey: Pod + Ord + Display> Tree<T, TKey> {
     pub fn into_dot(self, stringify_value: impl Fn(&[u8]) -> String) -> Result<String, TreeError> {
         let mut output = String::new();
 

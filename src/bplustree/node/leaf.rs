@@ -21,7 +21,7 @@ where
     _key: PhantomData<TKey>,
 }
 
-impl<TKey: Pod + PartialOrd> LeafNode<TKey> {
+impl<TKey: Pod + Ord> LeafNode<TKey> {
     pub(crate) fn new() -> Self {
         Self {
             header: NodeHeader {
@@ -332,7 +332,7 @@ struct LeafNodeEntryIterator<'node, TKey: Pod> {
     offset: usize,
 }
 
-impl<'node, TKey: Pod + PartialOrd + 'node> Iterator for LeafNodeEntryIterator<'node, TKey> {
+impl<'node, TKey: Pod + Ord + 'node> Iterator for LeafNodeEntryIterator<'node, TKey> {
     type Item = LeafNodeEntry<'node, TKey>;
 
     fn next(&mut self) -> Option<Self::Item> {

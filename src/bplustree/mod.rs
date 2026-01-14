@@ -34,7 +34,7 @@ struct TreeIterator<'tree, T: Storage, TKey> {
     _key: PhantomData<TKey>,
 }
 
-impl<'tree, T: Storage, TKey: Pod + PartialOrd> TreeIterator<'tree, T, TKey> {
+impl<'tree, T: Storage, TKey: Pod + Ord> TreeIterator<'tree, T, TKey> {
     fn new(transaction: TreeTransaction<'tree, T, TKey>) -> Result<Self, TreeError> {
         // TODO introduce some better/more abstract API for reading the header?
         let root = transaction.read_header(|h| AnyNodeId::new(h.root))?;
@@ -55,8 +55,7 @@ enum IteratorResult<TKey> {
     None,
 }
 
-impl<'tree, T: Storage, TKey: Pod + PartialOrd> Iterator for TreeIterator<'tree, T, TKey> {
-    // TODO we should use references here instead of copying into Vecs
+impl<'tree, T: Storage, TKey: Pod + Ord> Iterator for TreeIterator<'tree, T, TKey> {
     type Item = Result<(TKey, Vec<u8>), TreeError>;
 
     // TODO get rid of all the unwraps!
@@ -91,7 +90,6 @@ impl<'tree, T: Storage, TKey: Pod + PartialOrd> Iterator for TreeIterator<'tree,
     }
 }
 
-// TODO Tree and TreeStorage should become one
 #[derive(Debug)]
 pub struct Tree<T: Storage, TKey> {
     storage: T,
@@ -106,12 +104,12 @@ where
     _key: PhantomData<&'storage TKey>,
 }
 
-impl<'storage, TStorage: Storage + 'storage, TKey: Pod + PartialOrd>
+impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
     TreeTransaction<'storage, TStorage, TKey>
 {
     fn read_header<TReturn>(
         &self,
-        read: impl FnOnce(&TreeData) -> TReturn,
+        read: impl FnOnce(&TreeHeader) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
@@ -120,7 +118,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + PartialOrd>
 
     fn write_header<TReturn>(
         &self,
-        write: impl FnOnce(&mut TreeData) -> TReturn,
+        write: impl FnOnce(&mut TreeHeader) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
@@ -166,10 +164,9 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + PartialOrd>
     }
 }
 
-// TODO this should be by reference not by copy perhaps?
 type TreeIteratorItem<TKey> = Result<(TKey, Vec<u8>), TreeError>;
 
-impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
+impl<T: Storage, TKey: Pod + Ord> Tree<T, TKey> {
     // TODO also create a "new_read" method, or something like that (that reads a tree that already
     // exists from storage)
     pub fn new(mut storage: T) -> Result<Self, TreeError> {
@@ -177,7 +174,7 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
         // depend on that invariant (i.e. PageIndex=0 must always refer to the TreeData and not to
         // a node)!
 
-        TreeData::new_in(&mut storage, size_of::<TKey>())?;
+        TreeHeader::new_in(&mut storage, size_of::<TKey>())?;
 
         Ok(Self {
             storage,
@@ -342,14 +339,14 @@ impl<T: Storage, TKey: Pod + PartialOrd> Tree<T, TKey> {
 
 #[derive(Debug, Pod, Zeroable, Clone, Copy)]
 #[repr(C)]
-struct TreeData {
+struct TreeHeader {
     key_size: u64,
     root: PageIndex,
     _unused: [u8; ROOT_NODE_TAIL_SIZE],
 }
 
 const _: () = assert!(
-    size_of::<TreeData>() == PAGE_DATA_SIZE,
+    size_of::<TreeHeader>() == PAGE_DATA_SIZE,
     "The Tree descriptor must have size of exactly one page"
 );
 
@@ -359,7 +356,7 @@ pub enum TreeError {
     StorageError(#[from] StorageError),
 }
 
-impl TreeData {
+impl TreeHeader {
     pub fn new_in<T: Storage>(storage: &mut T, key_size: usize) -> Result<(), TreeError> {
         let transaction = storage.transaction()?;
 

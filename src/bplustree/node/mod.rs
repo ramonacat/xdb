@@ -9,8 +9,6 @@ use crate::page::PAGE_DATA_SIZE;
 use crate::storage::PageIndex;
 use bytemuck::{Pod, Zeroable, must_cast_ref};
 
-// TODO: should the TKey be Ord, instead of PartialOrd?
-
 pub(super) trait NodeId: Copy + PartialEq {
     type Node<TKey>: NodeTrait<TKey>
     where

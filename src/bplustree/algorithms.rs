@@ -9,7 +9,7 @@ use crate::{
     storage::Storage,
 };
 
-pub(super) fn leaf_search<TStorage: Storage, TKey: Pod + PartialOrd>(
+pub(super) fn leaf_search<TStorage: Storage, TKey: Pod + Ord>(
     transaction: &TreeTransaction<TStorage, TKey>,
     node_index: AnyNodeId,
     key: &TKey,
@@ -36,7 +36,7 @@ pub(super) fn leaf_search<TStorage: Storage, TKey: Pod + PartialOrd>(
     })?
 }
 
-pub(super) fn first_leaf<TStorage: Storage, TKey: Pod + PartialOrd>(
+pub(super) fn first_leaf<TStorage: Storage, TKey: Pod + Ord>(
     transaction: &TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> Result<LeafNodeId, TreeError> {

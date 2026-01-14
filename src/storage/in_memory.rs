@@ -36,9 +36,10 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         index: PageIndex,
         write: impl FnOnce(&mut Page) -> T,
     ) -> Result<T, StorageError> {
-        // TODO kill unwraps
         let mut storage = self.storage.pages.write().unwrap();
-        let page = storage.get_mut(index.0 as usize).unwrap();
+        let page = storage
+            .get_mut(index.0 as usize)
+            .ok_or(StorageError::PageNotFound(index))?;
 
         Ok(write(page))
     }
@@ -49,7 +50,9 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         read: impl FnOnce(&Page) -> TReturn,
     ) -> Result<TReturn, StorageError> {
         let storage = self.storage.pages.read().unwrap();
-        let page = storage.get(index.0 as usize).unwrap();
+        let page = storage
+            .get(index.0 as usize)
+            .ok_or(StorageError::PageNotFound(index))?;
 
         Ok(read(page))
     }
@@ -80,7 +83,9 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     ) -> Result<(), StorageError> {
         let mut storage = self.storage.pages.write().unwrap();
 
-        *storage.get_mut(reservation.index.0 as usize).unwrap() = page;
+        *storage
+            .get_mut(reservation.index.0 as usize)
+            .ok_or_else(|| StorageError::PageNotFound(reservation.index()))? = page;
 
         Ok(())
     }

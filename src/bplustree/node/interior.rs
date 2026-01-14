@@ -22,7 +22,7 @@ where
     _key: PhantomData<TKey>,
 }
 
-impl<TKey: Pod + PartialOrd> InteriorNode<TKey> {
+impl<TKey: Pod + Ord> InteriorNode<TKey> {
     pub fn create_root(keys: &[&TKey], values: &[AnyNodeId]) -> InteriorNode<TKey> {
         assert!(values.len() == keys.len() + 1);
 
@@ -252,7 +252,7 @@ struct InteriorNodeKeysIterator<'node, TKey: Pod> {
     index: usize,
 }
 
-impl<'node, TKey: Pod + PartialOrd> Iterator for InteriorNodeKeysIterator<'node, TKey> {
+impl<'node, TKey: Pod + Ord> Iterator for InteriorNodeKeysIterator<'node, TKey> {
     type Item = &'node TKey;
 
     fn next(&mut self) -> Option<Self::Item> {
