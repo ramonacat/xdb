@@ -1,11 +1,10 @@
-mod algorithms;
+pub mod algorithms;
 pub mod dot;
 mod node;
 
 use std::marker::PhantomData;
 
 use crate::bplustree::algorithms::first_leaf;
-use crate::bplustree::algorithms::leaf_search;
 use crate::bplustree::node::AnyNodeId;
 use crate::bplustree::node::InteriorNodeId;
 use crate::bplustree::node::LeafNodeId;
@@ -96,7 +95,7 @@ pub struct Tree<T: Storage, TKey> {
     _key: PhantomData<TKey>,
 }
 
-struct TreeTransaction<'storage, TStorage: Storage + 'storage, TKey>
+pub struct TreeTransaction<'storage, TStorage: Storage + 'storage, TKey>
 where
     Self: 'storage,
 {
@@ -182,151 +181,12 @@ impl<T: Storage, TKey: Pod + Ord> Tree<T, TKey> {
         })
     }
 
-    // TODO move out into algorithms?
-    pub fn insert(&self, key: TKey, value: &[u8]) -> Result<(), TreeError> {
-        let transaction = TreeTransaction::<'_, T, TKey> {
-            transaction: self.storage.transaction()?,
-            _key: PhantomData,
-        };
-
-        let root_index = AnyNodeId::new(transaction.read_header(|h| h.root)?);
-        let target_node_id = leaf_search(&transaction, root_index, &key)?;
-
-        let (parent_index, insert_result) = transaction.write_node(target_node_id, |node| {
-            // TODO parent_index should be a part of insert_result
-            let parent_index = node.parent();
-            let insert_result = node.insert(key, value);
-            (parent_index, insert_result)
-        })?;
-        let insert_result = insert_result?;
-
-        match insert_result {
-            LeafInsertResult::Done => Ok(()),
-            LeafInsertResult::Split { mut new_node } => {
-                let new_node_reservation = transaction.reserve_node()?;
-                let new_node_id = LeafNodeId::new(new_node_reservation.index());
-
-                let next = transaction.read_node(target_node_id, |node| node.next())?;
-
-                if let Some(parent_id) = parent_index {
-                    let new_leaf_reservation = transaction.reserve_node().unwrap();
-                    let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
-
-                    let grandparent_id =
-                        transaction.read_node(parent_id, |reader| reader.parent())?;
-                    let new_grandparent_reservation = transaction.reserve_node()?;
-
-                    let split_node = transaction.write_node(parent_id, |node| {
-                        match node.insert_node(&new_node.first_key().unwrap(), new_node_id.into()) {
-                            node::interior::InteriorInsertResult::Ok => None,
-                            node::interior::InteriorInsertResult::Split(mut new_node) => {
-                                // TODO get rid of the direct writes to node.data here, and make
-                                // the node expose some API
-                                let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
-                                let mut new_leaf = LeafNode::<TKey>::new();
-
-                                new_leaf.set_links(Some(parent_id), Some(new_leaf_id), next);
-
-                                new_node.set_first_pointer(new_leaf_id.into());
-                                new_node.set_parent(grandparent_id);
-
-                                Some((new_leaf, new_node))
-                            }
-                        }
-                    })?;
-
-                    match split_node {
-                        Some((new_leaf, mut new_interior)) => {
-                            let new_interior_reservation = transaction.reserve_node()?;
-                            let new_interior_id =
-                                InteriorNodeId::new(new_interior_reservation.index());
-
-                            let grandparent_id = match grandparent_id {
-                                None => {
-                                    let mut new_grandparent = InteriorNode::<TKey>::new();
-                                    let new_grandparent_id =
-                                        InteriorNodeId::new(new_grandparent_reservation.index());
-                                    transaction
-                                        .write_header(|h| h.root = new_grandparent_id.page())?;
-
-                                    new_grandparent.set_first_pointer(parent_id.into());
-
-                                    transaction.insert_reserved(
-                                        new_grandparent_reservation,
-                                        Page::from_data(new_grandparent),
-                                    )?;
-
-                                    new_grandparent_id
-                                }
-                                Some(x) => x,
-                            };
-
-                            transaction.write_node(grandparent_id, |node| {
-                                let grandparent_insert_result = node.insert_node(
-                                    &new_interior.first_key().unwrap(),
-                                    new_interior_id.into(),
-                                );
-                                match grandparent_insert_result {
-                                    node::interior::InteriorInsertResult::Ok => {}
-                                    node::interior::InteriorInsertResult::Split(_) => todo!(),
-                                }
-                            })?;
-
-                            new_interior.set_first_pointer(new_leaf_id.into());
-
-                            transaction
-                                .insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
-                            transaction.insert_reserved(
-                                new_interior_reservation,
-                                Page::from_data(*new_interior),
-                            )?;
-                        }
-                        None => {
-                            transaction.write_node(target_node_id, |target_node| {
-                                target_node.set_links(
-                                    target_node.parent(),
-                                    target_node.previous(),
-                                    Some(new_node_id),
-                                );
-                            })?;
-
-                            new_node.set_links(Some(parent_id), Some(target_node_id), next);
-                        }
-                    }
-                } else {
-                    let new_root_page = Page::from_data(InteriorNode::create_root(
-                        &[&new_node.first_key().unwrap()],
-                        &[root_index, new_node_id.into()],
-                    ));
-                    let new_root_page_index = transaction.insert(new_root_page)?;
-                    let new_root_page_id = InteriorNodeId::new(new_root_page_index);
-
-                    new_node.set_links(Some(new_root_page_id), Some(target_node_id), next);
-
-                    transaction.write_node(target_node_id, |target_node| {
-                        target_node.set_links(
-                            Some(new_root_page_id),
-                            target_node.previous(),
-                            Some(new_node_id),
-                        );
-                    })?;
-
-                    transaction.write_header(|header| header.root = new_root_page_index)?;
-                }
-
-                transaction.insert_reserved(new_node_reservation, Page::from_data(*new_node))?;
-
-                Ok(())
-            }
-        }
-    }
-
     #[allow(unused)]
     fn iter(&self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
         TreeIterator::new(self.transaction()?)
     }
 
-    fn transaction(&self) -> Result<TreeTransaction<'_, T, TKey>, TreeError> {
+    pub fn transaction(&self) -> Result<TreeTransaction<'_, T, TKey>, TreeError> {
         Ok(TreeTransaction::<T, TKey> {
             transaction: self.storage.transaction()?,
             _key: PhantomData,
@@ -382,7 +242,10 @@ mod test {
         atomic::{AtomicUsize, Ordering},
     };
 
-    use crate::storage::in_memory::{InMemoryStorage, test::TestStorage};
+    use crate::{
+        bplustree::algorithms::insert,
+        storage::in_memory::{InMemoryStorage, test::TestStorage},
+    };
 
     use super::*;
 
@@ -435,12 +298,16 @@ mod test {
         // TODO: find a more explicit way of counting nodes
         let mut i = 0usize;
 
-        // 10 pages should give us a resonable number of node splits to assume that the basic logic
-        //    works
+        let tree_transaction = tree.transaction().unwrap();
+
         while page_count.load(Ordering::Relaxed) < 1024 {
             // make the value bigger with repeat so fewer inserts are needed and the test runs faster
-            tree.insert(i, &(usize::max_value() - i).to_be_bytes().repeat(128))
-                .unwrap();
+            insert(
+                &tree_transaction,
+                i,
+                &(usize::max_value() - i).to_be_bytes().repeat(128),
+            )
+            .unwrap();
 
             i += 1;
         }
@@ -475,6 +342,8 @@ mod test {
         // TODO: find a more explicit way of counting nodes
         let mut i = 0usize;
 
+        let transaction = tree.transaction().unwrap();
+
         // 10 pages should give us a resonable number of node splits to assume that the basic logic
         //    works
         while page_count.load(Ordering::Relaxed) < 10 {
@@ -487,7 +356,7 @@ mod test {
             };
 
             // make the value bigger with repeat so fewer inserts are needed and the test runs faster
-            tree.insert(i, &value.repeat(128)).unwrap();
+            insert(&transaction, i, &value.repeat(128)).unwrap();
 
             i += 1;
         }

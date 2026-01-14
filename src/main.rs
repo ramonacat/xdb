@@ -5,7 +5,7 @@ use std::sync::{
 };
 
 use crate::{
-    bplustree::Tree,
+    bplustree::{Tree, algorithms::insert},
     storage::in_memory::{InMemoryStorage, test::TestStorage},
 };
 
@@ -20,12 +20,13 @@ fn main() {
     let storage = TestStorage::new(InMemoryStorage::new(), page_count.clone());
     let tree = Tree::new(storage).unwrap();
 
+    let transaction = tree.transaction().unwrap();
+
     // 3 pages mean there's been a node split
     // TODO: find a more explicit way of counting nodes
     let mut i = 0;
     while page_count.load(Ordering::Relaxed) < 1024 {
-        tree.insert(i, &(u16::MAX - i).to_be_bytes().repeat(128))
-            .unwrap();
+        insert(&transaction, i, &(u16::MAX - i).to_be_bytes().repeat(128)).unwrap();
 
         i += 1;
     }
