@@ -168,7 +168,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     fn insert_at(&mut self, index: usize, key: TKey, value: &[u8]) -> Result<(), TreeError> {
         assert!(self.can_fit(value.len()));
 
-        if let Some(move_start_offset) = self.entry_offset(index + 1) {
+        if let Some(move_start_offset) = self.entry_offset(index) {
             let move_end_offset = self.entry_offset(self.len()).unwrap();
 
             let data_to_move = self.data[move_start_offset..move_end_offset].to_vec();
@@ -303,4 +303,21 @@ impl<'node, TKey: Pod + Ord + 'node> Iterator for LeafNodeEntryIterator<'node, T
 pub(in crate::bplustree) enum LeafInsertResult {
     Done,
     Split,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn insert_reverse() {
+        let mut node = LeafNode::new();
+        let _ = node.insert(1, &[0]).unwrap();
+        let _ = node.insert(0, &[0]).unwrap();
+
+        let result = node.entries().map(|x| (x.key, x.value.to_vec())).collect::<Vec<_>>();
+        dbg!(&result);
+        assert!(&result == &[(0, vec![0]), (1, vec![0])]);
+
+    }
 }

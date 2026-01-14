@@ -45,8 +45,6 @@ impl<'tree, T: Storage, TKey: Pod + Ord, const REVERSE: bool>
             last_leaf(&transaction, root)?
         };
 
-        dbg!(starting_leaf);
-
         Ok(Self {
             transaction,
             current_leaf: starting_leaf,
@@ -269,6 +267,9 @@ mod test {
         atomic::{AtomicUsize, Ordering},
     };
 
+    use quickcheck::TestResult;
+    use quickcheck_macros::quickcheck;
+
     use crate::{
         bplustree::algorithms::insert,
         storage::in_memory::{InMemoryStorage, test::TestStorage},
@@ -358,7 +359,6 @@ mod test {
             final_i = i;
         }
 
-        dbg!(final_i, entry_count);
         assert!(final_i == entry_count - 1);
 
         for (i, item) in tree.iter_reverse().unwrap().enumerate() {
@@ -371,7 +371,6 @@ mod test {
 
             let value = u16::from_be_bytes(value[0..size_of::<u16>()].try_into().unwrap());
 
-            dbg!(key, i);
             assert!(key == i);
             assert!(value == u16::max_value() - i as u16);
         }
@@ -432,5 +431,40 @@ mod test {
             assert!(key == i);
             assert!(value_matches_expected);
         }
+    }
+
+    #[test]
+    fn insert_reverse() {
+        let storage = InMemoryStorage::new();
+        let tree = Tree::new(storage).unwrap();
+        let transaction = tree.transaction().unwrap();
+
+        insert(&transaction, 1, &[0]).unwrap();
+        insert(&transaction, 0, &[0]).unwrap();
+
+        let result = tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>();
+
+        assert!(result == &[(0, vec![0]), (1, vec![0])]);
+    }
+
+    #[quickcheck]
+    fn always_sorted(values: Vec<(u64, Vec<u8>)>) -> TestResult {
+        let storage = InMemoryStorage::new();
+        let tree = Tree::new(storage).unwrap();
+        let transaction = tree.transaction().unwrap();
+
+        for (key, value) in &values {
+            if value.is_empty() {
+                return TestResult::discard();
+            }
+
+            insert(&transaction, *key, value).unwrap();
+        }
+
+        let mut sorted_values = values.clone();
+        sorted_values.sort_by_key(|x| x.0);
+
+        // TODO also test iter_reverse
+        TestResult::from_bool(tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>() == sorted_values)
     }
 }
