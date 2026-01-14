@@ -146,7 +146,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         }
     }
 
-    pub fn insert(&mut self, key: TKey, value: &[u8]) -> Result<LeafInsertResult<TKey>, TreeError> {
+    pub fn insert(&mut self, key: TKey, value: &[u8]) -> Result<LeafInsertResult, TreeError> {
         let mut insert_index = self.len();
 
         for (index, entry) in self.entries().enumerate() {
@@ -157,25 +157,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         }
 
         if !self.can_fit(value.len()) {
-            let (split_index, mut new_node) = self.split();
-
-            if insert_index > split_index {
-                let result = new_node.insert(key, value).unwrap();
-
-                match result {
-                    LeafInsertResult::Done => {}
-                    LeafInsertResult::Split(_) => todo!(),
-                }
-            } else {
-                let result = self.insert(key, value).unwrap();
-
-                match result {
-                    LeafInsertResult::Done => {}
-                    LeafInsertResult::Split(_) => todo!(),
-                }
-            }
-
-            Ok(LeafInsertResult::Split(Box::new(new_node)))
+            Ok(LeafInsertResult::Split)
         } else {
             self.insert_at(insert_index, key, value)?;
 
@@ -222,7 +204,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
             < (self.data.len())
     }
 
-    fn split(&mut self) -> (usize, LeafNode<TKey>) {
+    pub fn split(&mut self) -> LeafNode<TKey> {
         let initial_len = self.len();
         assert!(initial_len > 0, "Trying to split an empty node");
 
@@ -238,9 +220,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 
         // TODO introduce some sort of "NodeMissingTopology" type that we can return here instead
         // of a LeafNode in an invalid state
-        let new_node = LeafNode::from_raw_entries(entries_to_move, new_node_entries);
-
-        (entries_to_move, new_node)
+        LeafNode::from_raw_entries(entries_to_move, new_node_entries)
     }
 
     pub fn set_links(
@@ -320,7 +300,7 @@ impl<'node, TKey: Pod + Ord + 'node> Iterator for LeafNodeEntryIterator<'node, T
 
 #[must_use]
 #[derive(Debug)]
-pub(in crate::bplustree) enum LeafInsertResult<TKey: Pod> {
+pub(in crate::bplustree) enum LeafInsertResult {
     Done,
-    Split(Box<LeafNode<TKey>>),
+    Split,
 }

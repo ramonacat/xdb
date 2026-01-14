@@ -91,6 +91,12 @@ impl NodeId for LeafNodeId {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct InteriorNodeId(PageIndex);
 
+impl Display for InteriorNodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl InteriorNodeId {
     pub(crate) fn new(index: PageIndex) -> Self {
         assert!(index != PageIndex::zero());

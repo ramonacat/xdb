@@ -3,7 +3,7 @@ use std::fmt::Display;
 use bytemuck::Pod;
 
 use crate::bplustree::node::AnyNodeKind;
-use crate::bplustree::{AnyNodeId, TreeTransaction};
+use crate::bplustree::{AnyNodeId, Node, TreeTransaction};
 use crate::{
     bplustree::{Tree, TreeError},
     storage::Storage,
@@ -33,7 +33,14 @@ impl<T: Storage, TKey: Pod + Ord + Display> Tree<T, TKey> {
 
             match node.as_any() {
                 AnyNodeKind::Interior(node) => {
-                    let mut label: Vec<String> = vec![format!("index: {node_index}")];
+                    let mut label: Vec<String> = vec![
+                        format!("index: {node_index}"),
+                        format!(
+                            "parent: {}",
+                            node.parent()
+                                .map_or_else(|| "none".to_string(), |x| x.to_string())
+                        ),
+                    ];
 
                     for key in node.keys() {
                         label.push(key.to_string());
@@ -50,7 +57,14 @@ impl<T: Storage, TKey: Pod + Ord + Display> Tree<T, TKey> {
                     }
                 }
                 AnyNodeKind::Leaf(node) => {
-                    let mut label: Vec<String> = vec![format!("index: {node_index}")];
+                    let mut label: Vec<String> = vec![
+                        format!("index: {node_index}"),
+                        format!(
+                            "parent: {}",
+                            node.parent()
+                                .map_or_else(|| "none".to_string(), |x| x.to_string())
+                        ),
+                    ];
 
                     if let Some(previous) = node.previous() {
                         label.push(format!("previous: {previous}"));

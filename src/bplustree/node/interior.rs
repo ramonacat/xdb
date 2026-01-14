@@ -23,24 +23,6 @@ where
 }
 
 impl<TKey: Pod + Ord> InteriorNode<TKey> {
-    pub fn create_root(keys: &[&TKey], values: &[AnyNodeId]) -> InteriorNode<TKey> {
-        assert!(values.len() == keys.len() + 1);
-
-        if values.len() != 2 || keys.len() != 1 {
-            todo!();
-        }
-
-        let mut node = InteriorNode::new();
-
-        node.set_first_pointer(values[0]);
-        match node.insert_node(keys[0], values[1]) {
-            InteriorInsertResult::Ok => {}
-            InteriorInsertResult::Split(_) => todo!(),
-        }
-
-        node
-    }
-
     pub fn new() -> Self {
         Self {
             header: NodeHeader {
@@ -84,51 +66,19 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         }
     }
 
-    pub(crate) fn first_key(&self) -> Option<TKey> {
-        if self.key_count() == 0 {
-            return None;
-        }
-
-        Some(pod_read_unaligned(&self.data[..size_of::<TKey>()]))
-    }
-
     pub(crate) fn set_first_pointer(&mut self, index: AnyNodeId) {
         let offset = self.values_offset();
 
         self.data[offset..offset + size_of::<PageIndex>()].copy_from_slice(bytes_of(&index.page()));
     }
 
-    pub(crate) fn insert_node(
-        &mut self,
-        key: &TKey,
-        value: AnyNodeId,
-    ) -> InteriorInsertResult<TKey> {
+    pub(crate) fn insert_node(&mut self, key: &TKey, value: AnyNodeId) -> InteriorInsertResult {
         let mut insert_at = self.key_count();
 
         let key_len = self.key_count();
 
         if key_len + 1 == self.key_capacity() {
-            let (new_node_keys, new_node_values, split_key) = self.split();
-            let mut new_node = InteriorNode::new();
-
-            if key < &split_key {
-                self.insert_at(insert_at, key, value);
-            } else {
-                new_node.data[..new_node_keys.len()].copy_from_slice(&new_node_keys);
-
-                let values_offset = new_node.values_offset() + size_of::<PageIndex>();
-                new_node.data[values_offset..values_offset + new_node_values.len()]
-                    .copy_from_slice(&new_node_values);
-
-                new_node.header.key_count = (new_node_keys.len() / size_of::<TKey>()) as u16;
-
-                match new_node.insert_node(key, value) {
-                    InteriorInsertResult::Ok => {}
-                    InteriorInsertResult::Split(_) => todo!(),
-                }
-            }
-
-            return InteriorInsertResult::Split(Box::new(new_node));
+            return InteriorInsertResult::Split;
         }
 
         for (index, current_key) in self.keys().enumerate() {
@@ -143,9 +93,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         InteriorInsertResult::Ok
     }
 
-    // TODO create a struct for the return type
-    // TODO return an InteriorNode here instead of the raw data
-    fn split(&mut self) -> (Vec<u8>, Vec<u8>, TKey) {
+    pub fn split(&mut self) -> (TKey, InteriorNode<TKey>) {
         let key_len = self.key_count();
         assert!(
             key_len > 1,
@@ -153,10 +101,10 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         );
 
         let keys_to_leave = key_len.div_ceil(2);
-        let keys_to_move = key_len - keys_to_leave;
+        let keys_to_move = key_len - keys_to_leave - 1;
 
         let values_to_leave = keys_to_leave + 1;
-        let values_to_move = keys_to_move;
+        let values_to_move = (key_len + 1) - values_to_leave;
 
         let key_data_to_move_start = keys_to_leave * size_of::<TKey>();
         let value_data_to_move_start =
@@ -169,9 +117,25 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
             ..value_data_to_move_start + values_to_move * size_of::<PageIndex>()]
             .to_vec();
 
-        let first_key = pod_read_unaligned(&key_data_to_move[..size_of::<TKey>()]);
+        self.header.key_count = keys_to_leave as u16;
 
-        (key_data_to_move, value_data_to_move, first_key)
+        let mut split_node = InteriorNode::new();
+        let split_node_values_offset = split_node.values_offset();
+
+        // TODO The first key here is not set, as that child must be created, enforce this via the
+        // type system!
+        split_node.set_parent(self.parent());
+        split_node.data[..key_data_to_move.len()].copy_from_slice(&key_data_to_move);
+        split_node.data
+            [split_node_values_offset..split_node_values_offset + value_data_to_move.len()]
+            .copy_from_slice(&value_data_to_move);
+        split_node.header.key_count = keys_to_move as u16;
+
+        let split_key_offset = (keys_to_leave + 1) * size_of::<TKey>();
+        (
+            pod_read_unaligned(&self.data[split_key_offset..split_key_offset + size_of::<TKey>()]),
+            split_node,
+        )
     }
 
     fn insert_at(&mut self, index: usize, key: &TKey, value: AnyNodeId) {
@@ -268,7 +232,7 @@ impl<'node, TKey: Pod + Ord> Iterator for InteriorNodeKeysIterator<'node, TKey> 
 }
 
 #[must_use]
-pub(in crate::bplustree) enum InteriorInsertResult<TKey: Pod> {
+pub(in crate::bplustree) enum InteriorInsertResult {
     Ok,
-    Split(Box<InteriorNode<TKey>>),
+    Split,
 }

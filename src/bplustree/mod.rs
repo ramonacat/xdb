@@ -45,6 +45,8 @@ impl<'tree, T: Storage, TKey: Pod + Ord, const REVERSE: bool>
             last_leaf(&transaction, root)?
         };
 
+        dbg!(starting_leaf);
+
         Ok(Self {
             transaction,
             current_leaf: starting_leaf,
@@ -170,10 +172,6 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
 
     fn reserve_node(&self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
         Ok(self.transaction.reserve()?)
-    }
-
-    fn insert(&self, page: Page) -> Result<PageIndex, TreeError> {
-        Ok(self.transaction.insert(page)?)
     }
 
     fn insert_reserved(
@@ -335,7 +333,7 @@ mod test {
             insert(
                 &tree_transaction,
                 i,
-                &(usize::max_value() - i).to_be_bytes().repeat(128),
+                &(u16::max_value() - i as u16).to_be_bytes().repeat(128),
             )
             .unwrap();
 
@@ -344,26 +342,24 @@ mod test {
 
         let entry_count = i;
 
-        // TODO
-        #[allow(unused)]
         let mut final_i = 0;
 
         for (i, item) in tree.iter().unwrap().enumerate() {
             assert!(i < entry_count);
             let (key, value) = item.unwrap();
 
-            assert!(value == value[..size_of::<usize>()].repeat(128));
+            assert!(value == value[..size_of::<u16>()].repeat(128));
 
-            let value: usize =
-                usize::from_be_bytes(value[0..size_of::<usize>()].try_into().unwrap());
+            let value: u16 = u16::from_be_bytes(value[0..size_of::<u16>()].try_into().unwrap());
 
             assert!(key == i);
-            assert!(value == usize::max_value() - i);
+            assert!(value == u16::max_value() - i as u16);
 
             final_i = i;
         }
 
-        // TODO assert!(final_i == entry_count - 1);
+        dbg!(final_i, entry_count);
+        assert!(final_i == entry_count - 1);
 
         for (i, item) in tree.iter_reverse().unwrap().enumerate() {
             let i = entry_count - i - 1;
@@ -371,13 +367,13 @@ mod test {
             assert!(i < entry_count);
             let (key, value) = item.unwrap();
 
-            assert!(value == value[..size_of::<usize>()].repeat(128));
+            assert!(value == value[..size_of::<u16>()].repeat(128));
 
-            let value: usize =
-                usize::from_be_bytes(value[0..size_of::<usize>()].try_into().unwrap());
+            let value = u16::from_be_bytes(value[0..size_of::<u16>()].try_into().unwrap());
 
+            dbg!(key, i);
             assert!(key == i);
-            assert!(value == usize::max_value() - i);
+            assert!(value == u16::max_value() - i as u16);
         }
 
         // TODO iterate the tree and ensure that all the keys are there, in correct order with
