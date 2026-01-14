@@ -22,17 +22,26 @@ where
 }
 
 impl<TKey: Pod + Ord> LeafNode<TKey> {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             header: NodeHeader {
                 key_len: 0,
                 flags: NodeFlags::empty(),
                 _unused2: 0,
-                parent: PageIndex::zeroed(),
+                parent: PageIndex::zero(),
             },
             data: [0; _],
             _key: PhantomData,
         }
+    }
+
+    pub fn from_raw_entries(entry_count: usize, entries: &[u8]) -> Self {
+        let mut node = Self::new();
+        let entries_offset = node.entries_offset();
+        node.data[entries_offset..entries_offset + entries.len()].copy_from_slice(entries);
+        node.header.key_len = entry_count as u16;
+
+        node
     }
 
     fn len(&self) -> usize {
@@ -125,7 +134,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     pub fn previous(&self) -> Option<LeafNodeId> {
         let previous = self.header().previous;
 
-        if previous == PageIndex::zeroed() {
+        if previous == PageIndex::zero() {
             None
         } else {
             Some(LeafNodeId::new(previous))
@@ -135,7 +144,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     pub fn next(&self) -> Option<LeafNodeId> {
         let next = self.header().next;
 
-        if next == PageIndex::zeroed() {
+        if next == PageIndex::zero() {
             None
         } else {
             Some(LeafNodeId::new(next))
@@ -231,8 +240,6 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         let initial_len = self.len();
         assert!(initial_len > 0, "Trying to split an empty node");
 
-        let entries_start = self.entries_offset();
-
         let entries_to_leave = initial_len / 2 + initial_len % 2;
         let entries_to_move = initial_len - entries_to_leave;
 
@@ -243,26 +250,14 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 
         self.header.key_len = entries_to_leave as u16;
 
-        // TODO we should not create the node here at all, and instead just return the data, so the
-        // user can construct the new node with the correct links
-        let mut new_node = LeafNode {
-            header: NodeHeader {
-                key_len: entries_to_move as u16,
-                flags: NodeFlags::empty(),
-                _unused2: 0,
-                parent: PageIndex::zeroed(),
-            },
-            data: [0; _],
-            _key: PhantomData,
-        };
-
-        new_node.data[entries_start..entries_start + new_node_entries.len()]
-            .copy_from_slice(new_node_entries);
+        // TODO introduce some sort of "NodeMissingTopology" type that we can return here instead
+        // of a LeafNode in an invalid state
+        let new_node = LeafNode::from_raw_entries(entries_to_move, new_node_entries);
 
         (
             entries_to_move,
-            from_bytes::<TKey>(&new_node.data[entries_start..entries_start + size_of::<TKey>()])
-                .to_owned(),
+            // TODO no need to return the key here
+            new_node.first_key().unwrap(),
             new_node,
         )
     }
@@ -273,17 +268,18 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         previous: Option<LeafNodeId>,
         next: Option<LeafNodeId>,
     ) {
-        self
-            // TODO replace this and all the other instances of PageIndex::zeroed() with an
-            // explicit constructor
-            .set_parent(parent);
+        self.set_parent(parent);
         let header = self.header_mut();
-        header.previous = previous.map_or(PageIndex::zeroed(), |x| x.page());
-        header.next = next.map_or(PageIndex::zeroed(), |x| x.page())
+        header.previous = previous.map_or(PageIndex::zero(), |x| x.page());
+        header.next = next.map_or(PageIndex::zero(), |x| x.page())
     }
 
     fn header_mut(&mut self) -> &mut LeafNodeHeader {
         from_bytes_mut(&mut self.data[0..size_of::<LeafNodeHeader>()])
+    }
+
+    fn first_key(&self) -> Option<TKey> {
+        self.entry(0).map(|x| x.key)
     }
 }
 
@@ -293,7 +289,7 @@ unsafe impl<TKey: Pod> Pod for LeafNode<TKey> {}
 
 impl<TKey: Pod> NodeTrait<TKey> for LeafNode<TKey> {
     fn parent(&self) -> Option<InteriorNodeId> {
-        if self.header.parent == PageIndex::zeroed() {
+        if self.header.parent == PageIndex::zero() {
             None
         } else {
             Some(InteriorNodeId::new(self.header.parent))

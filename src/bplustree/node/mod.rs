@@ -40,7 +40,7 @@ impl Display for AnyNodeId {
 
 impl AnyNodeId {
     pub fn new(index: PageIndex) -> Self {
-        assert!(index != PageIndex::zeroed());
+        assert!(index != PageIndex::zero());
 
         Self(index)
     }
@@ -94,7 +94,7 @@ pub(super) struct InteriorNodeId(PageIndex);
 
 impl InteriorNodeId {
     pub(crate) fn new(index: PageIndex) -> Self {
-        assert!(index != PageIndex::zeroed());
+        assert!(index != PageIndex::zero());
 
         Self(index)
     }
@@ -134,7 +134,7 @@ pub(super) struct NodeHeader {
 }
 impl NodeHeader {
     fn parent(&self) -> Option<InteriorNodeId> {
-        if self.parent == PageIndex::zeroed() {
+        if self.parent == PageIndex::zero() {
             None
         } else {
             Some(InteriorNodeId::new(self.parent))
@@ -142,7 +142,7 @@ impl NodeHeader {
     }
 
     fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
-        self.parent = parent.map_or_else(PageIndex::zeroed, |x| x.page());
+        self.parent = parent.map_or_else(PageIndex::zero, |x| x.page());
     }
 }
 const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>() * 2);
@@ -161,7 +161,6 @@ pub(super) struct Node {
 }
 
 // TODO rename -> Node, once the struct with that name is gone
-// TODO see if we can drop Zeroable from the node types & header
 pub(super) trait NodeTrait<TKey>: Pod {
     const _ASSERT_SIZE: () = assert!(size_of::<Self>() == PAGE_DATA_SIZE);
 

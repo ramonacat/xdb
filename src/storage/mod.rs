@@ -18,6 +18,12 @@ pub enum StorageError {
 #[repr(transparent)]
 pub struct PageIndex(u64);
 
+impl PageIndex {
+    pub fn zero() -> Self {
+        Self(0)
+    }
+}
+
 impl Display for PageIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)

@@ -47,7 +47,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
                 key_len: 0,
                 flags: NodeFlags::INTERNAL,
                 _unused2: 0,
-                parent: PageIndex::zeroed(),
+                parent: PageIndex::zero(),
             },
             data: [0; _],
             _key: PhantomData,
@@ -55,7 +55,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
     }
 
     pub(in crate::bplustree) fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
-        self.header.parent = parent.map_or_else(PageIndex::zeroed, |x| x.page());
+        self.header.parent = parent.map_or_else(PageIndex::zero, |x| x.page());
     }
 
     // TODO rename -> key_count?
@@ -215,7 +215,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         let value: PageIndex =
             pod_read_unaligned(&self.data[value_start..value_start + size_of::<PageIndex>()]);
 
-        assert!(value != PageIndex::zeroed());
+        assert!(value != PageIndex::zero());
 
         Some(AnyNodeId::new(value))
     }

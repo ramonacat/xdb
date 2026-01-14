@@ -31,8 +31,6 @@ pub struct Page {
 const _: () = assert!(size_of::<Page>() == PAGE_SIZE);
 
 impl Page {
-    // TODO remove all the instances of Page::zeroed, and use this (or other) constructors
-    // everywhere
     pub fn from_data<T: Pod>(data: T) -> Self {
         Self {
             header: PageHeader::zeroed(),
