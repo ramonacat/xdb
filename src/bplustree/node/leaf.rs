@@ -164,20 +164,18 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 
                 match result {
                     LeafInsertResult::Done => {}
-                    LeafInsertResult::Split { new_node: _ } => todo!(),
+                    LeafInsertResult::Split(_) => todo!(),
                 }
             } else {
                 let result = self.insert(key, value).unwrap();
 
                 match result {
                     LeafInsertResult::Done => {}
-                    LeafInsertResult::Split { new_node: _ } => todo!(),
+                    LeafInsertResult::Split(_) => todo!(),
                 }
             }
 
-            Ok(LeafInsertResult::Split {
-                new_node: Box::new(new_node),
-            })
+            Ok(LeafInsertResult::Split(Box::new(new_node)))
         } else {
             self.insert_at(insert_index, key, value)?;
 
@@ -324,5 +322,5 @@ impl<'node, TKey: Pod + Ord + 'node> Iterator for LeafNodeEntryIterator<'node, T
 #[derive(Debug)]
 pub(in crate::bplustree) enum LeafInsertResult<TKey: Pod> {
     Done,
-    Split { new_node: Box<LeafNode<TKey>> },
+    Split(Box<LeafNode<TKey>>),
 }
