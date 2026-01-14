@@ -1,4 +1,4 @@
-use crate::bplustree::node::AnyNode;
+use crate::bplustree::node::AnyNodeKind;
 use bytemuck::Pod;
 
 use crate::{
@@ -16,10 +16,10 @@ pub(super) fn leaf_search<TStorage: Storage, TKey: Pod + Ord>(
 ) -> Result<LeafNodeId, TreeError> {
     transaction.read_node(node_index, |node| {
         let node = match node.as_any() {
-            AnyNode::Interior(reader) => reader,
+            AnyNodeKind::Interior(reader) => reader,
             // TODO this should maybe be held by the reader which would do the conversion so we
             // don't share the `From`???
-            AnyNode::Leaf(_) => {
+            AnyNodeKind::Leaf(_) => {
                 return Ok(LeafNodeId::from_any(node_index));
             }
         };
@@ -40,10 +40,10 @@ pub(super) fn first_leaf<TStorage: Storage, TKey: Pod + Ord>(
     transaction: &TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> Result<LeafNodeId, TreeError> {
-    transaction.read_node(root, |node| match node.as_any::<TKey>() {
-        AnyNode::Interior(interior_node_reader) => {
+    transaction.read_node(root, |node| match node.as_any() {
+        AnyNodeKind::Interior(interior_node_reader) => {
             first_leaf(transaction, interior_node_reader.first_value().unwrap())
         }
-        AnyNode::Leaf(_) => Ok(LeafNodeId::from_any(root)),
+        AnyNodeKind::Leaf(_) => Ok(LeafNodeId::from_any(root)),
     })?
 }

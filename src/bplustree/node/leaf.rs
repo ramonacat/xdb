@@ -5,7 +5,7 @@ use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned, from_bytes,
 use crate::{
     bplustree::{
         LeafNodeId, NodeId, TreeError,
-        node::{InteriorNodeId, NODE_DATA_SIZE, NodeFlags, NodeHeader, NodeTrait},
+        node::{InteriorNodeId, NODE_DATA_SIZE, Node, NodeFlags, NodeHeader},
     },
     storage::PageIndex,
 };
@@ -25,7 +25,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     pub fn new() -> Self {
         Self {
             header: NodeHeader {
-                key_len: 0,
+                key_count: 0,
                 flags: NodeFlags::empty(),
                 _unused2: 0,
                 parent: PageIndex::zero(),
@@ -39,17 +39,17 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         let mut node = Self::new();
         let entries_offset = node.entries_offset();
         node.data[entries_offset..entries_offset + entries.len()].copy_from_slice(entries);
-        node.header.key_len = entry_count as u16;
+        node.header.key_count = entry_count as u16;
 
         node
     }
 
     fn len(&self) -> usize {
-        usize::from(self.header.key_len)
+        usize::from(self.header.key_count)
     }
 
     fn entry(&self, index: usize) -> Option<LeafNodeEntry<'_, TKey>> {
-        if index >= usize::from(self.header.key_len) {
+        if index >= usize::from(self.header.key_count) {
             return None;
         }
 
@@ -226,7 +226,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 
         value_hole.copy_from_slice(value);
 
-        self.header.key_len += 1;
+        self.header.key_count += 1;
 
         Ok(())
     }
@@ -248,7 +248,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 
         let new_node_entries = &self.data[move_start_offset..moved_entries_end];
 
-        self.header.key_len = entries_to_leave as u16;
+        self.header.key_count = entries_to_leave as u16;
 
         // TODO introduce some sort of "NodeMissingTopology" type that we can return here instead
         // of a LeafNode in an invalid state
@@ -287,7 +287,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 // automatically if not for the PhantomData
 unsafe impl<TKey: Pod> Pod for LeafNode<TKey> {}
 
-impl<TKey: Pod> NodeTrait<TKey> for LeafNode<TKey> {
+impl<TKey: Pod> Node<TKey> for LeafNode<TKey> {
     fn parent(&self) -> Option<InteriorNodeId> {
         if self.header.parent == PageIndex::zero() {
             None

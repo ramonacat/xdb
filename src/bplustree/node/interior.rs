@@ -6,7 +6,7 @@ use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned, from_bytes}
 use crate::{
     bplustree::{
         InteriorNodeId, NodeId,
-        node::{AnyNodeId, NODE_DATA_SIZE, NodeHeader, NodeTrait},
+        node::{AnyNodeId, NODE_DATA_SIZE, Node, NodeHeader},
     },
     storage::PageIndex,
 };
@@ -44,7 +44,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
     pub fn new() -> Self {
         Self {
             header: NodeHeader {
-                key_len: 0,
+                key_count: 0,
                 flags: NodeFlags::INTERNAL,
                 _unused2: 0,
                 parent: PageIndex::zero(),
@@ -58,9 +58,8 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         self.header.parent = parent.map_or_else(PageIndex::zero, |x| x.page());
     }
 
-    // TODO rename -> key_count?
-    fn key_len(&self) -> usize {
-        self.header.key_len as usize
+    fn key_count(&self) -> usize {
+        self.header.key_count as usize
     }
 
     fn values_offset(&self) -> usize {
@@ -86,7 +85,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
     }
 
     pub(crate) fn first_key(&self) -> Option<TKey> {
-        if self.key_len() == 0 {
+        if self.key_count() == 0 {
             return None;
         }
 
@@ -104,9 +103,9 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         key: &TKey,
         value: AnyNodeId,
     ) -> InteriorInsertResult<TKey> {
-        let mut insert_at = self.key_len();
+        let mut insert_at = self.key_count();
 
-        let key_len = self.key_len();
+        let key_len = self.key_count();
 
         if key_len + 1 == self.key_capacity() {
             let (new_node_keys, new_node_values, split_key) = self.split();
@@ -121,7 +120,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
                 new_node.data[values_offset..values_offset + new_node_values.len()]
                     .copy_from_slice(&new_node_values);
 
-                new_node.header.key_len = (new_node_keys.len() / size_of::<TKey>()) as u16;
+                new_node.header.key_count = (new_node_keys.len() / size_of::<TKey>()) as u16;
 
                 match new_node.insert_node(key, value) {
                     InteriorInsertResult::Ok => {}
@@ -144,11 +143,10 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         InteriorInsertResult::Ok
     }
 
-    // TODO should this whole struct be also generic over TValue? (it will have to do some magic
-    // around node IDs to type them right though)
     // TODO create a struct for the return type
+    // TODO return an InteriorNode here instead of the raw data
     fn split(&mut self) -> (Vec<u8>, Vec<u8>, TKey) {
-        let key_len = self.key_len();
+        let key_len = self.key_count();
         assert!(
             key_len > 1,
             "A node must have more than one key to be split."
@@ -177,12 +175,12 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
     }
 
     fn insert_at(&mut self, index: usize, key: &TKey, value: AnyNodeId) {
-        let key_len = self.key_len();
+        let key_len = self.key_count();
         assert!(key_len < self.key_capacity());
 
         debug_assert!(bytes_of(key) != vec![0; size_of::<TKey>()]);
 
-        self.header.key_len += 1;
+        self.header.key_count += 1;
 
         let key_offset = size_of::<TKey>() * (index);
         let value_offset = self.values_offset() + size_of::<PageIndex>() * (index + 1);
@@ -206,7 +204,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
     }
 
     pub(in crate::bplustree) fn value_at(&self, index: usize) -> Option<AnyNodeId> {
-        if index > self.key_len() {
+        if index > self.key_count() {
             return None;
         }
 
@@ -225,11 +223,11 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
     }
 
     pub(crate) fn last_value(&self) -> Option<AnyNodeId> {
-        self.value_at(self.key_len())
+        self.value_at(self.key_count())
     }
 
     pub(crate) fn values(&self) -> impl Iterator<Item = AnyNodeId> {
-        (0..(self.key_len() + 1)).map(|x| self.value_at(x).unwrap())
+        (0..(self.key_count() + 1)).map(|x| self.value_at(x).unwrap())
     }
 }
 
@@ -237,7 +235,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
 // automatically if not for the PhantomData
 unsafe impl<TKey: Pod> Pod for InteriorNode<TKey> {}
 
-impl<TKey: Pod> NodeTrait<TKey> for InteriorNode<TKey> {
+impl<TKey: Pod> Node<TKey> for InteriorNode<TKey> {
     fn parent(&self) -> Option<InteriorNodeId> {
         self.header.parent()
     }
@@ -256,7 +254,7 @@ impl<'node, TKey: Pod + Ord> Iterator for InteriorNodeKeysIterator<'node, TKey> 
     type Item = &'node TKey;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index >= self.node.key_len() {
+        if self.index >= self.node.key_count() {
             return None;
         }
 

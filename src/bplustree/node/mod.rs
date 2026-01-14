@@ -1,7 +1,7 @@
 pub(super) mod interior;
 pub(super) mod leaf;
 
-use std::fmt::Display;
+use std::{fmt::Display, marker::PhantomData};
 
 use crate::bplustree::node::interior::InteriorNode;
 use crate::bplustree::node::leaf::LeafNode;
@@ -10,7 +10,7 @@ use crate::storage::PageIndex;
 use bytemuck::{Pod, Zeroable, must_cast_ref};
 
 pub(super) trait NodeId: Copy + PartialEq {
-    type Node<TKey>: NodeTrait<TKey>
+    type Node<TKey>: Node<TKey>
     where
         TKey: Pod;
 
@@ -48,7 +48,7 @@ impl AnyNodeId {
 
 impl NodeId for AnyNodeId {
     type Node<TKey>
-        = Node
+        = AnyNode<TKey>
     where
         TKey: Pod;
 
@@ -89,7 +89,6 @@ impl NodeId for LeafNodeId {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-#[allow(unused)] // TODO remove if we really don't need it
 pub(super) struct InteriorNodeId(PageIndex);
 
 impl InteriorNodeId {
@@ -111,7 +110,6 @@ impl NodeId for InteriorNodeId {
     }
 }
 
-// TODO Support variable-sized values
 // TODO Support variable-sized keys?
 
 bitflags::bitflags! {
@@ -125,13 +123,12 @@ bitflags::bitflags! {
 #[derive(Debug, Pod, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
 pub(super) struct NodeHeader {
-    // TODO rename -> key_count
-    // TODO make private once we have a reasonable API for it
-    pub(super) key_len: u16,
+    key_count: u16,
     flags: NodeFlags,
     _unused2: u32,
     parent: PageIndex,
 }
+
 impl NodeHeader {
     fn parent(&self) -> Option<InteriorNodeId> {
         if self.parent == PageIndex::zero() {
@@ -149,28 +146,27 @@ const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>() * 2);
 
 const NODE_DATA_SIZE: usize = PAGE_DATA_SIZE - size_of::<NodeHeader>();
 
-#[derive(Debug, Pod, Zeroable, Clone, Copy)]
+#[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
-// TODO rename -> AnyNode
-// TODO keep TKey as PhantomData?
-pub(super) struct Node {
-    // TODO make this private once we have a reasonable API for it
-    pub(super) header: NodeHeader,
-    // TODO make this private once we have a reasonable API for it
-    pub(super) data: [u8; NODE_DATA_SIZE],
+pub(super) struct AnyNode<TKey> {
+    header: NodeHeader,
+    data: [u8; NODE_DATA_SIZE],
+    _key: PhantomData<TKey>,
 }
 
-// TODO rename -> Node, once the struct with that name is gone
-pub(super) trait NodeTrait<TKey>: Pod {
+// SAFETY: this struct does not have padding and can be initialized to zero, but can't
+// automatically derive Pod since it contains a PhantomData (which does not actually affect the
+// layout)
+unsafe impl<TKey: Pod> Pod for AnyNode<TKey> {}
+
+pub(super) trait Node<TKey>: Pod {
     const _ASSERT_SIZE: () = assert!(size_of::<Self>() == PAGE_DATA_SIZE);
 
     fn parent(&self) -> Option<InteriorNodeId>;
     fn set_parent(&mut self, parent: Option<InteriorNodeId>);
 }
 
-const _: () = assert!(size_of::<Node>() == PAGE_DATA_SIZE);
-
-impl<TKey> NodeTrait<TKey> for Node {
+impl<TKey: Pod> Node<TKey> for AnyNode<TKey> {
     fn parent(&self) -> Option<InteriorNodeId> {
         self.header.parent()
     }
@@ -180,21 +176,21 @@ impl<TKey> NodeTrait<TKey> for Node {
     }
 }
 
-pub(super) enum AnyNode<'node, TKey: Pod> {
+pub(super) enum AnyNodeKind<'node, TKey: Pod> {
     Interior(&'node InteriorNode<TKey>),
     Leaf(&'node LeafNode<TKey>),
 }
 
-impl Node {
+impl<TKey: Pod> AnyNode<TKey> {
     fn is_leaf(&self) -> bool {
         !self.header.flags.contains(NodeFlags::INTERNAL)
     }
 
-    pub(crate) fn as_any<TKey: Pod>(&self) -> AnyNode<'_, TKey> {
+    pub(crate) fn as_any(&self) -> AnyNodeKind<'_, TKey> {
         if self.is_leaf() {
-            AnyNode::Leaf(must_cast_ref(self))
+            AnyNodeKind::Leaf(must_cast_ref(self))
         } else {
-            AnyNode::Interior(must_cast_ref(self))
+            AnyNodeKind::Interior(must_cast_ref(self))
         }
     }
 }

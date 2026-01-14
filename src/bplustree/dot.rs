@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use bytemuck::Pod;
 
-use crate::bplustree::node::AnyNode;
+use crate::bplustree::node::AnyNodeKind;
 use crate::bplustree::{AnyNodeId, TreeTransaction};
 use crate::{
     bplustree::{Tree, TreeError},
@@ -31,8 +31,8 @@ impl<T: Storage, TKey: Pod + Ord + Display> Tree<T, TKey> {
         let output = transaction.read_node(node_index, |node| {
             let mut output = String::new();
 
-            match node.as_any::<TKey>() {
-                AnyNode::Interior(node) => {
+            match node.as_any() {
+                AnyNodeKind::Interior(node) => {
                     let mut label: Vec<String> = vec![format!("index: {node_index}")];
 
                     for key in node.keys() {
@@ -49,7 +49,7 @@ impl<T: Storage, TKey: Pod + Ord + Display> Tree<T, TKey> {
                         output += &Self::node_to_dot(transaction, value, stringify_value)?;
                     }
                 }
-                AnyNode::Leaf(node) => {
+                AnyNodeKind::Leaf(node) => {
                     let mut label: Vec<String> = vec![format!("index: {node_index}")];
 
                     if let Some(previous) = node.previous() {
