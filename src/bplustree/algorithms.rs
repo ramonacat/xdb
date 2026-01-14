@@ -1,7 +1,7 @@
 use crate::bplustree::node::AnyNodeKind;
 use crate::bplustree::node::interior::InteriorInsertResult;
 use crate::bplustree::{InteriorNode, InteriorNodeId, LeafInsertResult, LeafNode, NodeId as _};
-use crate::storage::PageReservation as _;
+use crate::storage::PageReservation;
 use crate::{bplustree::Node as _, page::Page};
 use bytemuck::Pod;
 
@@ -52,86 +52,87 @@ pub(super) fn first_leaf<TStorage: Storage, TKey: Pod + Ord>(
     })?
 }
 
+fn insert_split_interior_node<'storage, TStorage: Storage, TKey: Pod + Ord>(
+    transaction: &TreeTransaction<'storage, TStorage, TKey>,
+    split_node_id: LeafNodeId,
+    parent_id: InteriorNodeId,
+    mut new_interior: InteriorNode<TKey>,
+) -> Result<(), TreeError> {
+    let grandparent_id = transaction.read_node(parent_id, |reader| reader.parent())?;
+    let new_grandparent_reservation = transaction.reserve_node()?;
+    let new_leaf_reservation = transaction.reserve_node().unwrap();
+    let next = transaction.read_node(split_node_id, |node| node.next())?;
+    let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
+    let mut new_leaf = LeafNode::<TKey>::new();
+
+    new_leaf.set_links(Some(parent_id), Some(new_leaf_id), next);
+    new_interior.set_first_pointer(new_leaf_id.into());
+    new_interior.set_parent(grandparent_id);
+
+    let new_interior_reservation = transaction.reserve_node()?;
+    let new_interior_id = InteriorNodeId::new(new_interior_reservation.index());
+
+    let grandparent_id = match grandparent_id {
+        None => {
+            let mut new_grandparent = InteriorNode::<TKey>::new();
+            let new_grandparent_id = InteriorNodeId::new(new_grandparent_reservation.index());
+            transaction.write_header(|h| h.root = new_grandparent_id.page())?;
+
+            new_grandparent.set_first_pointer(parent_id.into());
+
+            transaction.insert_reserved(
+                new_grandparent_reservation,
+                Page::from_data(new_grandparent),
+            )?;
+
+            new_grandparent_id
+        }
+        Some(x) => x,
+    };
+
+    transaction.write_node(grandparent_id, |node| {
+        let grandparent_insert_result =
+            node.insert_node(&new_interior.first_key().unwrap(), new_interior_id.into());
+        match grandparent_insert_result {
+            InteriorInsertResult::Ok => {}
+            InteriorInsertResult::Split(_) => todo!(),
+        }
+    })?;
+
+    new_interior.set_first_pointer(new_leaf_id.into());
+
+    transaction.insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
+    transaction.insert_reserved(new_interior_reservation, Page::from_data(new_interior))?;
+    Ok(())
+}
+
 fn insert_split_leaf<TStorage: Storage, TKey: Pod + Ord>(
     transaction: &TreeTransaction<TStorage, TKey>,
-    target_node_id: LeafNodeId,
+    split_leaf_id: LeafNodeId,
     parent_index: Option<InteriorNodeId>,
-    mut new_node: LeafNode<TKey>,
-    root_index: AnyNodeId,
+    mut new_leaf: LeafNode<TKey>,
+    root_node_id: AnyNodeId,
 ) -> Result<(), TreeError> {
     let new_node_reservation = transaction.reserve_node()?;
     let new_node_id = LeafNodeId::new(new_node_reservation.index());
 
-    let next = transaction.read_node(target_node_id, |node| node.next())?;
+    let next = transaction.read_node(split_leaf_id, |node| node.next())?;
 
     if let Some(parent_id) = parent_index {
-        let new_leaf_reservation = transaction.reserve_node().unwrap();
-        let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
-
-        let grandparent_id = transaction.read_node(parent_id, |reader| reader.parent())?;
-        let new_grandparent_reservation = transaction.reserve_node()?;
-
-        let split_node = transaction.write_node(parent_id, |node| {
-            match node.insert_node(&new_node.first_key().unwrap(), new_node_id.into()) {
+        let interior_split_result = transaction.write_node(parent_id, |node| {
+            match node.insert_node(&new_leaf.first_key().unwrap(), new_node_id.into()) {
                 InteriorInsertResult::Ok => None,
                 // TODO extract insert_split_interior_node
-                InteriorInsertResult::Split(mut new_node) => {
-                    // TODO get rid of the direct writes to node.data here, and make
-                    // the node expose some API
-                    let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
-                    let mut new_leaf = LeafNode::<TKey>::new();
-
-                    new_leaf.set_links(Some(parent_id), Some(new_leaf_id), next);
-
-                    new_node.set_first_pointer(new_leaf_id.into());
-                    new_node.set_parent(grandparent_id);
-
-                    Some((new_leaf, new_node))
-                }
+                InteriorInsertResult::Split(new_node) => Some(new_node),
             }
         })?;
 
-        match split_node {
-            Some((new_leaf, mut new_interior)) => {
-                let new_interior_reservation = transaction.reserve_node()?;
-                let new_interior_id = InteriorNodeId::new(new_interior_reservation.index());
-
-                let grandparent_id = match grandparent_id {
-                    None => {
-                        let mut new_grandparent = InteriorNode::<TKey>::new();
-                        let new_grandparent_id =
-                            InteriorNodeId::new(new_grandparent_reservation.index());
-                        transaction.write_header(|h| h.root = new_grandparent_id.page())?;
-
-                        new_grandparent.set_first_pointer(parent_id.into());
-
-                        transaction.insert_reserved(
-                            new_grandparent_reservation,
-                            Page::from_data(new_grandparent),
-                        )?;
-
-                        new_grandparent_id
-                    }
-                    Some(x) => x,
-                };
-
-                transaction.write_node(grandparent_id, |node| {
-                    let grandparent_insert_result = node
-                        .insert_node(&new_interior.first_key().unwrap(), new_interior_id.into());
-                    match grandparent_insert_result {
-                        InteriorInsertResult::Ok => {}
-                        InteriorInsertResult::Split(_) => todo!(),
-                    }
-                })?;
-
-                new_interior.set_first_pointer(new_leaf_id.into());
-
-                transaction.insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
-                transaction
-                    .insert_reserved(new_interior_reservation, Page::from_data(*new_interior))?;
+        match interior_split_result {
+            Some(new_interior) => {
+                insert_split_interior_node(transaction, split_leaf_id, parent_id, *new_interior)?;
             }
             None => {
-                transaction.write_node(target_node_id, |target_node| {
+                transaction.write_node(split_leaf_id, |target_node| {
                     target_node.set_links(
                         target_node.parent(),
                         target_node.previous(),
@@ -139,20 +140,20 @@ fn insert_split_leaf<TStorage: Storage, TKey: Pod + Ord>(
                     );
                 })?;
 
-                new_node.set_links(Some(parent_id), Some(target_node_id), next);
+                new_leaf.set_links(Some(parent_id), Some(split_leaf_id), next);
             }
         }
     } else {
         let new_root_page = Page::from_data(InteriorNode::create_root(
-            &[&new_node.first_key().unwrap()],
-            &[root_index, new_node_id.into()],
+            &[&new_leaf.first_key().unwrap()],
+            &[root_node_id, new_node_id.into()],
         ));
         let new_root_page_index = transaction.insert(new_root_page)?;
         let new_root_page_id = InteriorNodeId::new(new_root_page_index);
 
-        new_node.set_links(Some(new_root_page_id), Some(target_node_id), next);
+        new_leaf.set_links(Some(new_root_page_id), Some(split_leaf_id), next);
 
-        transaction.write_node(target_node_id, |target_node| {
+        transaction.write_node(split_leaf_id, |target_node| {
             target_node.set_links(
                 Some(new_root_page_id),
                 target_node.previous(),
@@ -163,7 +164,7 @@ fn insert_split_leaf<TStorage: Storage, TKey: Pod + Ord>(
         transaction.write_header(|header| header.root = new_root_page_index)?;
     }
 
-    transaction.insert_reserved(new_node_reservation, Page::from_data(new_node))?;
+    transaction.insert_reserved(new_node_reservation, Page::from_data(new_leaf))?;
 
     Ok(())
 }
@@ -186,7 +187,6 @@ pub fn insert<TStorage: Storage, TKey: Pod + Ord>(
 
     match insert_result {
         LeafInsertResult::Done => Ok(()),
-        // TODO extract insert_split_leaf()
         LeafInsertResult::Split(new_node) => insert_split_leaf(
             transaction,
             target_node_id,
