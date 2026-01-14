@@ -10,6 +10,5 @@ crc32c = "0.6.8"
 thiserror = "2.0.17"
 
 [dev-dependencies]
-arbitrary = { version = "1.4.2", features = ["derive"] }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.1.0"

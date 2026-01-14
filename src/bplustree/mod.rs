@@ -267,7 +267,7 @@ mod test {
         atomic::{AtomicUsize, Ordering},
     };
 
-    use quickcheck::TestResult;
+    use quickcheck::{Arbitrary, TestResult};
     use quickcheck_macros::quickcheck;
 
     use crate::{
@@ -447,24 +447,46 @@ mod test {
         assert!(result == &[(0, vec![0]), (1, vec![0])]);
     }
 
+    #[derive(Debug, Clone)]
+    struct Value(Vec<u8>);
+
+    impl quickcheck::Arbitrary for Value {
+        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+            let mut result = vec![];
+
+            let count = *g.choose(&(1..512).collect::<Vec<usize>>()).unwrap();
+            for _ in 0..count {
+                result.push(Arbitrary::arbitrary(g));
+            }
+
+            Value(result)
+        }
+
+        fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+            Box::new(self.0.shrink().filter(|x| !x.is_empty()).map(|x| Value(x)))
+        }
+    }
+
     #[quickcheck]
-    fn always_sorted(values: Vec<(u64, Vec<u8>)>) -> TestResult {
+    fn always_sorted(values: Vec<(u64, Value)>) -> TestResult {
         let storage = InMemoryStorage::new();
         let tree = Tree::new(storage).unwrap();
         let transaction = tree.transaction().unwrap();
 
         for (key, value) in &values {
-            if value.is_empty() {
-                return TestResult::discard();
-            }
-
-            insert(&transaction, *key, value).unwrap();
+            insert(&transaction, *key, &value.0).unwrap();
         }
 
-        let mut sorted_values = values.clone();
+        let mut sorted_values = values
+            .iter()
+            .map(|x| (x.0, x.1.0.clone()))
+            .collect::<Vec<_>>()
+            .clone();
         sorted_values.sort_by_key(|x| x.0);
 
         // TODO also test iter_reverse
-        TestResult::from_bool(tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>() == sorted_values)
+        TestResult::from_bool(
+            tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>() == sorted_values,
+        )
     }
 }

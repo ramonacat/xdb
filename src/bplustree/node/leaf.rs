@@ -315,9 +315,11 @@ mod test {
         let _ = node.insert(1, &[0]).unwrap();
         let _ = node.insert(0, &[0]).unwrap();
 
-        let result = node.entries().map(|x| (x.key, x.value.to_vec())).collect::<Vec<_>>();
+        let result = node
+            .entries()
+            .map(|x| (x.key, x.value.to_vec()))
+            .collect::<Vec<_>>();
         dbg!(&result);
         assert!(&result == &[(0, vec![0]), (1, vec![0])]);
-
     }
 }
