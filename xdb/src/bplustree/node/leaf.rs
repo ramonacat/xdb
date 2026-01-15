@@ -339,19 +339,20 @@ pub(in crate::bplustree) enum LeafInsertResult {
 mod test {
     use super::*;
 
+    fn collect_entries<TKey: Pod + Ord>(node: &LeafNode<TKey>) -> Vec<(TKey, Vec<u8>)> {
+        node
+            .entries()
+            .map(|x| (x.key, x.value.to_vec()))
+            .collect::<Vec<_>>()
+    }
+
     #[test]
     fn insert_reverse() {
         let mut node = LeafNode::new();
         let _ = node.insert(1, &[0]).unwrap();
         let _ = node.insert(0, &[0]).unwrap();
 
-        // TODO this is repeated, extract an fn for collecting
-        let result = node
-            .entries()
-            .map(|x| (x.key, x.value.to_vec()))
-            .collect::<Vec<_>>();
-
-        assert!(&result == &[(0, vec![0]), (1, vec![0])]);
+        assert_eq!(collect_entries(&node), &[(0, vec![0]), (1, vec![0])]);
     }
 
     #[test]
@@ -360,12 +361,7 @@ mod test {
         let _ = node.insert(0, &[0]);
         let _ = node.insert(0, &[1]);
 
-        let result = node
-            .entries()
-            .map(|x| (x.key, x.value.to_vec()))
-            .collect::<Vec<_>>();
-
-        assert!(&result == &[(0, vec![1])]);
+        assert_eq!(collect_entries(&node), &[(0, vec![1])]);
     }
 
     #[test]
@@ -375,11 +371,6 @@ mod test {
         let _ = node.insert(2, &[0]);
         let _ = node.insert(1, &[0]);
 
-        let result = node
-            .entries()
-            .map(|x| (x.key, x.value.to_vec()))
-            .collect::<Vec<_>>();
-
-        assert!(&result == &[(1, vec![0]), (2, vec![0])]);
+        assert_eq!(collect_entries(&node), &[(1, vec![0]), (2, vec![0])]);
     }
 }

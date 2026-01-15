@@ -7,7 +7,6 @@ const BIG_KEY_SIZE: usize = 32;
 
 #[derive(Clone, Copy, Pod, Zeroable, Ord, PartialOrd, PartialEq, Eq)]
 #[repr(transparent)]
-// TODO add validation that the data did not get corrupted
 pub struct BigKey([u64; BIG_KEY_SIZE]);
 
 impl Debug for BigKey {
@@ -26,6 +25,8 @@ impl<'a> Arbitrary<'a> for BigKey {
 
 impl Display for BigKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.validate();
+
         write!(f, "{}", self.0[0])
     }
 }
@@ -36,6 +37,12 @@ impl BigKey {
     }
 
     pub fn value(&self) -> u64 {
+        self.validate();
+
         self.0[0]
+    }
+
+    fn validate(&self) {
+        assert!(vec![self.0[0]; self.0.len()] == self.0);
     }
 }

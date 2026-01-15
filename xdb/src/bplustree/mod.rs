@@ -258,7 +258,6 @@ impl TreeHeader {
     }
 }
 
-// TODO: add quickcheck tests: https://rust-fuzz.github.io/book/cargo-fuzz/structure-aware-fuzzing.html
 #[cfg(test)]
 mod test {
     use std::{
@@ -279,6 +278,7 @@ mod test {
     use super::*;
 
     // TODO assert on properties of the tree (balanced, etc.) where it makes sense
+    // TODO print out a .dot file for failed tests
 
     #[test]
     fn node_accessor_entries() {
