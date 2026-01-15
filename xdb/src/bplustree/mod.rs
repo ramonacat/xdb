@@ -269,13 +269,12 @@ mod test {
         },
     };
 
-    use quickcheck::{Arbitrary, TestResult};
-    use quickcheck_macros::quickcheck;
-
     use crate::{
         bplustree::algorithms::insert,
+        debug::BigKey,
         storage::in_memory::{InMemoryStorage, test::TestStorage},
     };
+    use pretty_assertions::assert_eq;
 
     use super::*;
 
@@ -459,55 +458,95 @@ mod test {
         insert(&transaction, 1, &1u8.to_ne_bytes()).unwrap();
 
         let result = tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>();
-        dbg!(&result);
-        assert!(result == vec![(1, 1u8.to_ne_bytes().to_vec())]);
+
+        assert_eq!(result, vec![(1, 1u8.to_ne_bytes().to_vec())]);
     }
 
-    #[derive(Debug, Clone)]
-    struct Value(Vec<u8>);
-
-    impl quickcheck::Arbitrary for Value {
-        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-            let mut result = vec![];
-
-            let count = *g.choose(&(1..512).collect::<Vec<usize>>()).unwrap();
-            for _ in 0..count {
-                result.push(Arbitrary::arbitrary(g));
-            }
-
-            Value(result)
-        }
-
-        fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-            Box::new(self.0.shrink().filter(|x| !x.is_empty()).map(|x| Value(x)))
-        }
-    }
-
-    #[quickcheck]
-    fn always_sorted(values: Vec<(u64, Value)>) -> TestResult {
+    #[test]
+    fn reverse_with_splits() {
         let storage = InMemoryStorage::new();
         let tree = Tree::new(storage).unwrap();
         let transaction = tree.transaction().unwrap();
 
-        for (key, value) in &values {
-            insert(&transaction, *key, &value.0).unwrap();
+        // this case came from fuzzing, hence the slightly unhinged input
+        let to_insert = vec![
+            (BigKey::new(1095228325891), vec![0u8; 2]),
+            (BigKey::new(23552), vec![0u8; 2]),
+            (BigKey::new(749004913038733311), vec![0u8; 1]),
+            (BigKey::new(11730937), vec![0u8; 1]),
+            (BigKey::new(18446735329151090432), vec![0u8; 1]),
+            (BigKey::new(128434), vec![0u8; 2]),
+            (BigKey::new(4160773120), vec![0u8; 2]),
+            (BigKey::new(7277816997842399231), vec![0u8; 1]),
+            (BigKey::new(18446744069414780850), vec![0u8; 2]),
+            (BigKey::new(280375565746354), vec![0u8; 1]),
+            (BigKey::new(45568), vec![0u8; 1]),
+            (BigKey::new(8808972877568), vec![0u8; 1]),
+            (BigKey::new(196530), vec![0u8; 2]),
+            (BigKey::new(272678883712000), vec![0u8; 2]),
+            (BigKey::new(28428972659453951), vec![0u8; 1]),
+            (BigKey::new(18446735294791352064), vec![0u8; 1]),
+            (BigKey::new(193970), vec![0u8; 2]),
+            (BigKey::new(1096776417280), vec![0u8; 2]),
+            (BigKey::new(28428972659453944), vec![0u8; 1]),
+            (BigKey::new(18386508424398700466), vec![0u8; 2]),
+            (BigKey::new(280375565746354), vec![0u8; 1]),
+            (BigKey::new(270479860478464), vec![0u8; 1]),
+            (BigKey::new(227629727488), vec![0u8; 2]),
+            (BigKey::new(2986409983), vec![0u8; 1]),
+            (BigKey::new(866673871104), vec![0u8; 2]),
+            (BigKey::new(749004913038733311), vec![0u8; 1]),
+            (BigKey::new(11730937), vec![0u8; 1]),
+            (BigKey::new(18446735329151090432), vec![0u8; 1]),
+            (BigKey::new(128434), vec![0u8; 2]),
+            (BigKey::new(4160773120), vec![0u8; 2]),
+            (BigKey::new(759169024), vec![0u8; 1]),
+            (BigKey::new(41944653103338), vec![0u8; 1]),
+            (BigKey::new(400308568064), vec![0u8; 1]),
+            (BigKey::new(41956837944524949), vec![0u8; 1]),
+            (BigKey::new(17593749602304), vec![0u8; 1]),
+            (BigKey::new(1563623424), vec![0u8; 1]),
+            (BigKey::new(1560281088), vec![0u8; 1]),
+            (BigKey::new(12813251448442880), vec![0u8; 1]),
+            (BigKey::new(10740950511298543765), vec![0u8; 1]),
+            (BigKey::new(855638016), vec![0u8; 1]),
+            (BigKey::new(17955007290084764969), vec![0u8; 17]),
+            (BigKey::new(327869), vec![0u8; 1]),
+            (BigKey::new(281471419940864), vec![0u8; 1]),
+            (BigKey::new(53198770610748672), vec![0u8; 1]),
+            (BigKey::new(661184721051266345), vec![0u8; 1]),
+            (BigKey::new(8796093034496), vec![0u8; 1]),
+            (BigKey::new(257449567191040), vec![0u8; 1]),
+            (BigKey::new(4194816), vec![0u8; 1]),
+            (BigKey::new(257449567200806), vec![0u8; 1]),
+            (BigKey::new(519695237120), vec![0u8; 1]),
+            (BigKey::new(3255307760466471209), vec![0u8; 1]),
+            (BigKey::new(2522068567888101421), vec![0u8; 1]),
+            (BigKey::new(17955007289400229888), vec![0u8; 1]),
+            (BigKey::new(32768), vec![0u8; 1]),
+            (BigKey::new(70650219154374656), vec![0u8; 1]),
+            (BigKey::new(9884556757906042153), vec![0u8; 1]),
+            (BigKey::new(12288), vec![0u8; 1]),
+            (BigKey::new(1383349474033664), vec![0u8; 1]),
+            (BigKey::new(70136747227152896), vec![0u8; 1]),
+            (BigKey::new(0), vec![0u8; 1]),
+            (BigKey::new(275977418571776), vec![0u8; 1]),
+            (BigKey::new(255), vec![0u8; 1]),
+            (BigKey::new(905955839), vec![0u8; 458]),
+        ];
+
+        let mut rust_tree = BTreeMap::new();
+        for (key, value) in to_insert {
+            insert(&transaction, key, &value).unwrap();
+            rust_tree.insert(key, value);
         }
 
-        let mut sorted_values = values
-            .iter()
-            .map(|x| (x.0, x.1.0.clone()))
-            .collect::<Vec<_>>()
-            .clone();
-        sorted_values.sort_by_key(|x| x.0);
-        let sorted_values = sorted_values
-            .into_iter()
-            .collect::<BTreeMap<u64, Vec<u8>>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-
-        let result = tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>();
-
-        // TODO also test iter_reverse
-        TestResult::from_bool(result == sorted_values)
+        assert_eq!(
+            rust_tree.into_iter().rev().collect::<Vec<_>>(),
+            tree.iter_reverse()
+                .unwrap()
+                .map(|x| x.unwrap())
+                .collect::<Vec<_>>()
+        );
     }
 }

@@ -208,6 +208,11 @@ fn split_leaf<TStorage: Storage, TKey: Pod + Ord>(
 
                 new_leaf
             })?;
+            if let Some(next_leaf) = new_leaf.next() {
+                transaction.write_node(next_leaf, |node| {
+                    node.set_links(node.parent(), Some(new_leaf_id), node.next());
+                })?;
+            }
 
             let split_key = new_leaf.first_key().unwrap();
 

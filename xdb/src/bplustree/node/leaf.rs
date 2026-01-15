@@ -365,7 +365,6 @@ mod test {
             .map(|x| (x.key, x.value.to_vec()))
             .collect::<Vec<_>>();
 
-        dbg!(&result);
         assert!(&result == &[(0, vec![1])]);
     }
 

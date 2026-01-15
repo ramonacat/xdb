@@ -151,13 +151,17 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
 
         let keys_to_move =
             &self.data[key_offset..key_offset + size_of::<TKey>() * (key_len - index)].to_vec();
-        self.data[key_offset + size_of::<TKey>()
-            ..key_offset + size_of::<TKey>() * (key_len - index + 1)]
+
+        self.data
+            [key_offset + size_of::<TKey>()..key_offset + size_of::<TKey>() + keys_to_move.len()]
             .copy_from_slice(keys_to_move);
 
         let values_to_move = &self.data
             [value_offset..value_offset + (key_len - index) * size_of::<PageIndex>()]
             .to_vec();
+
+        assert!(key_offset + size_of::<TKey>() + keys_to_move.len() < self.values_offset());
+
         self.data[value_offset + size_of::<PageIndex>()
             ..value_offset + (key_len - index + 1) * size_of::<PageIndex>()]
             .copy_from_slice(values_to_move);
