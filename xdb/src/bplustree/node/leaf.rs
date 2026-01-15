@@ -149,11 +149,25 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     pub fn insert(&mut self, key: TKey, value: &[u8]) -> Result<LeafInsertResult, TreeError> {
         let mut insert_index = self.len();
 
+        let mut delete_index = None;
+
         for (index, entry) in self.entries().enumerate() {
+            if key == entry.key {
+                // TODO return a different result type for replaced?
+                delete_index = Some(index);
+
+                insert_index = index;
+                break;
+            }
+
             if key < entry.key {
                 insert_index = index;
                 break;
             }
+        }
+
+        if let Some(delete_index) = delete_index {
+            self.delete_at(delete_index);
         }
 
         if !self.can_fit(value.len()) {
@@ -165,17 +179,23 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         }
     }
 
+    fn move_entries(&mut self, start_index: usize, end_index: usize, offset: isize) {
+        let move_start_offset = self.entry_offset(start_index).unwrap();
+        let move_end_offset = self.entry_offset(end_index).unwrap();
+        let data_to_move = self.data[move_start_offset..move_end_offset].to_vec();
+
+        self.data[move_start_offset.strict_add_signed(offset)
+            ..move_end_offset.strict_add_signed(offset)]
+            .copy_from_slice(&data_to_move);
+    }
+
     fn insert_at(&mut self, index: usize, key: TKey, value: &[u8]) -> Result<(), TreeError> {
         assert!(self.can_fit(value.len()));
 
-        if let Some(move_start_offset) = self.entry_offset(index) {
-            let move_end_offset = self.entry_offset(self.len()).unwrap();
-
-            let data_to_move = self.data[move_start_offset..move_end_offset].to_vec();
-
+        if index < self.len() {
             let entry_size = self.entry_size_for_value_size(value.len());
-            self.data[move_start_offset + entry_size..move_end_offset + entry_size]
-                .copy_from_slice(&data_to_move);
+
+            self.move_entries(index, self.len(), entry_size as isize);
         }
 
         let entry_offset = self.entry_offset(index).unwrap();
@@ -197,6 +217,16 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         self.header.key_count += 1;
 
         Ok(())
+    }
+
+    fn delete_at(&mut self, index: usize) {
+        let size = self.entry_size(index).unwrap();
+
+        if index + 1 < self.len() {
+            self.move_entries(index + 1, self.len(), -(size as isize));
+        }
+
+        self.header.key_count -= 1;
     }
 
     fn can_fit(&self, value_size: usize) -> bool {
@@ -315,11 +345,42 @@ mod test {
         let _ = node.insert(1, &[0]).unwrap();
         let _ = node.insert(0, &[0]).unwrap();
 
+        // TODO this is repeated, extract an fn for collecting
         let result = node
             .entries()
             .map(|x| (x.key, x.value.to_vec()))
             .collect::<Vec<_>>();
-        dbg!(&result);
+
         assert!(&result == &[(0, vec![0]), (1, vec![0])]);
+    }
+
+    #[test]
+    fn same_key_overrides() {
+        let mut node = LeafNode::new();
+        let _ = node.insert(0, &[0]);
+        let _ = node.insert(0, &[1]);
+
+        let result = node
+            .entries()
+            .map(|x| (x.key, x.value.to_vec()))
+            .collect::<Vec<_>>();
+
+        dbg!(&result);
+        assert!(&result == &[(0, vec![1])]);
+    }
+
+    #[test]
+    fn same_key_same_overrides_with_intermediate() {
+        let mut node = LeafNode::new();
+        let _ = node.insert(1, &[0]);
+        let _ = node.insert(2, &[0]);
+        let _ = node.insert(1, &[0]);
+
+        let result = node
+            .entries()
+            .map(|x| (x.key, x.value.to_vec()))
+            .collect::<Vec<_>>();
+
+        assert!(&result == &[(1, vec![0]), (2, vec![0])]);
     }
 }

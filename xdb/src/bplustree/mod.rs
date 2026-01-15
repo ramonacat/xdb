@@ -201,13 +201,12 @@ impl<T: Storage, TKey: Pod + Ord> Tree<T, TKey> {
         })
     }
 
-    #[allow(unused)]
-    fn iter(&self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
+    pub fn iter(&self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
         TreeIterator::<_, _, false>::new(self.transaction()?)
     }
 
-    #[allow(unused)]
-    fn iter_reverse(&self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
+    // TODO probably should just use iter with DoubleEndedIterator
+    pub fn iter_reverse(&self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
         TreeIterator::<_, _, true>::new(self.transaction()?)
     }
 
@@ -262,9 +261,12 @@ impl TreeHeader {
 // TODO: add quickcheck tests: https://rust-fuzz.github.io/book/cargo-fuzz/structure-aware-fuzzing.html
 #[cfg(test)]
 mod test {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
+    use std::{
+        collections::BTreeMap,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
     };
 
     use quickcheck::{Arbitrary, TestResult};
@@ -447,6 +449,20 @@ mod test {
         assert!(result == &[(0, vec![0]), (1, vec![0])]);
     }
 
+    #[test]
+    fn same_key_overrides() {
+        let storage = InMemoryStorage::new();
+        let tree = Tree::new(storage).unwrap();
+        let transaction = tree.transaction().unwrap();
+
+        insert(&transaction, 1, &0u8.to_ne_bytes()).unwrap();
+        insert(&transaction, 1, &1u8.to_ne_bytes()).unwrap();
+
+        let result = tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>();
+        dbg!(&result);
+        assert!(result == vec![(1, 1u8.to_ne_bytes().to_vec())]);
+    }
+
     #[derive(Debug, Clone)]
     struct Value(Vec<u8>);
 
@@ -483,10 +499,15 @@ mod test {
             .collect::<Vec<_>>()
             .clone();
         sorted_values.sort_by_key(|x| x.0);
+        let sorted_values = sorted_values
+            .into_iter()
+            .collect::<BTreeMap<u64, Vec<u8>>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        let result = tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>();
 
         // TODO also test iter_reverse
-        TestResult::from_bool(
-            tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>() == sorted_values,
-        )
+        TestResult::from_bool(result == sorted_values)
     }
 }
