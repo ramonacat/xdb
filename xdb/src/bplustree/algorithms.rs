@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::bplustree::node::AnyNodeKind;
 use crate::bplustree::node::interior::InteriorInsertResult;
 use crate::bplustree::{InteriorNode, InteriorNodeId, LeafInsertResult, NodeId};
@@ -185,7 +187,7 @@ fn insert_child<TStorage: Storage, TKey: Pod + Ord>(
     }
 }
 
-fn split_leaf<TStorage: Storage, TKey: Pod + Ord>(
+fn split_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     target_node_id: LeafNodeId,
 ) -> Result<(), TreeError> {
@@ -215,6 +217,10 @@ fn split_leaf<TStorage: Storage, TKey: Pod + Ord>(
             }
 
             let split_key = new_leaf.first_key().unwrap();
+            eprintln!(
+                "split {:?} into {:?} at key {:?}",
+                target_node_id, new_leaf_id, split_key
+            );
 
             transaction.insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
 
@@ -225,7 +231,7 @@ fn split_leaf<TStorage: Storage, TKey: Pod + Ord>(
     Ok(())
 }
 
-pub fn insert<TStorage: Storage, TKey: Pod + Ord>(
+pub fn insert<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     key: TKey,
     value: &[u8],
@@ -237,7 +243,10 @@ pub fn insert<TStorage: Storage, TKey: Pod + Ord>(
     let insert_result = insert_result?;
 
     match insert_result {
-        LeafInsertResult::Done => Ok(()),
+        LeafInsertResult::Done => {
+            eprintln!("inserted {key:?} into {target_node_id:?}");
+            Ok(())
+        }
         LeafInsertResult::Split => {
             split_leaf(transaction, target_node_id)?;
 

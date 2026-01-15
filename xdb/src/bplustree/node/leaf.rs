@@ -238,7 +238,9 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         let initial_len = self.len();
         assert!(initial_len > 0, "Trying to split an empty node");
 
-        let entries_to_leave = initial_len / 2 + initial_len % 2;
+        // TODO this should be based on size and not indices to keep balance in case of unbalanced
+        // values
+        let entries_to_leave = initial_len.div_ceil(2);
         let entries_to_move = initial_len - entries_to_leave;
 
         let move_start_offset = self.entry_offset(entries_to_leave).unwrap();
@@ -340,8 +342,7 @@ mod test {
     use super::*;
 
     fn collect_entries<TKey: Pod + Ord>(node: &LeafNode<TKey>) -> Vec<(TKey, Vec<u8>)> {
-        node
-            .entries()
+        node.entries()
             .map(|x| (x.key, x.value.to_vec()))
             .collect::<Vec<_>>()
     }

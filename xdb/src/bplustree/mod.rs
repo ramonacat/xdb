@@ -262,6 +262,9 @@ impl TreeHeader {
 mod test {
     use std::{
         collections::BTreeMap,
+        fmt::{Debug, Display},
+        io::Write,
+        panic::{RefUnwindSafe, catch_unwind},
         sync::{
             Arc,
             atomic::{AtomicUsize, Ordering},
@@ -274,6 +277,7 @@ mod test {
         storage::in_memory::{InMemoryStorage, test::TestStorage},
     };
     use pretty_assertions::assert_eq;
+    use tempfile::NamedTempFile;
 
     use super::*;
 
@@ -462,12 +466,83 @@ mod test {
         assert_eq!(result, vec![(1, 1u8.to_ne_bytes().to_vec())]);
     }
 
-    #[test]
-    fn reverse_with_splits() {
+    fn test_from_data<TKey: Pod + Ord + Debug + RefUnwindSafe + Display>(
+        data: Vec<(TKey, Vec<u8>)>,
+    ) {
         let storage = InMemoryStorage::new();
         let tree = Tree::new(storage).unwrap();
         let transaction = tree.transaction().unwrap();
 
+        let mut rust_tree = BTreeMap::new();
+        for (key, value) in data {
+            insert(&transaction, key, &value).unwrap();
+            rust_tree.insert(key, value);
+        }
+
+        let result = catch_unwind(|| {
+            assert_eq!(
+                rust_tree.clone().into_iter().rev().collect::<Vec<_>>(),
+                tree.iter_reverse()
+                    .unwrap()
+                    .map(|x| x.unwrap())
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(
+                rust_tree.into_iter().collect::<Vec<_>>(),
+                tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>()
+            );
+        });
+
+        if let Err(_) = result {
+            let dot_data = tree
+                .into_dot(|value| {
+                    let mut last_value_state: Option<(u8, usize)> = None;
+
+                    let mut formatted_value = value.iter().fold(String::new(), |acc, x| {
+                        let mut result = "".to_string();
+                        if let Some((last_value, repeats)) = last_value_state {
+                            if last_value == *x {
+                                last_value_state = Some((last_value, repeats + 1));
+
+                                return acc;
+                            } else {
+                                last_value_state = Some((*x, 1));
+
+                                result += &format!("({repeats})");
+                            }
+                        } else {
+                            last_value_state = Some((*x, 1));
+                        }
+
+                        if !acc.is_empty() {
+                            result += ",";
+                        }
+
+                        format!("{result}{x:#x}")
+                    });
+
+                    if let Some((_, repeats)) = last_value_state
+                        && repeats > 1
+                    {
+                        formatted_value += &format!("({repeats})");
+                    }
+
+                    formatted_value
+                })
+                .unwrap();
+
+            let mut output = NamedTempFile::new().unwrap();
+            output.write_all(dot_data.as_bytes()).unwrap();
+            let output_path = output.keep().unwrap().1;
+
+            eprintln!("dot data written to: {}", output_path.to_string_lossy());
+        }
+
+        result.unwrap();
+    }
+
+    #[test]
+    fn reverse_with_splits() {
         // this case came from fuzzing, hence the slightly unhinged input
         let to_insert = vec![
             (BigKey::new(1095228325891), vec![0u8; 2]),
@@ -535,18 +610,163 @@ mod test {
             (BigKey::new(905955839), vec![0u8; 458]),
         ];
 
-        let mut rust_tree = BTreeMap::new();
-        for (key, value) in to_insert {
-            insert(&transaction, key, &value).unwrap();
-            rust_tree.insert(key, value);
-        }
+        test_from_data(to_insert);
+    }
 
-        assert_eq!(
-            rust_tree.into_iter().rev().collect::<Vec<_>>(),
-            tree.iter_reverse()
-                .unwrap()
-                .map(|x| x.unwrap())
-                .collect::<Vec<_>>()
-        );
+    #[test]
+    fn fuzzer_a() {
+        // this case came from fuzzing, hence the slightly unhinged input
+        let to_insert = vec![
+            (BigKey::new(1095228325891), vec![0u8; 2]),
+            (BigKey::new(3096224743840768), vec![0u8; 2]),
+            (BigKey::new(749004913038733311), vec![0u8; 1]),
+            (BigKey::new(18230289816630788089), vec![0u8; 1]),
+            (BigKey::new(18446735329151090432), vec![0u8; 1]),
+            (BigKey::new(128434), vec![0u8; 2]),
+            (BigKey::new(4294967258), vec![0u8; 2]),
+            (BigKey::new(7277816997842399231), vec![0u8; 1]),
+            (BigKey::new(18446744069414780850), vec![0u8; 2]),
+            (BigKey::new(280375565746354), vec![0u8; 1]),
+            (BigKey::new(45568), vec![0u8; 1]),
+            (BigKey::new(8808972877568), vec![0u8; 1]),
+            (BigKey::new(196530), vec![0u8; 2]),
+            (BigKey::new(272678900451785), vec![0u8; 2]),
+            (BigKey::new(28428972659453951), vec![0u8; 1]),
+            (BigKey::new(18446735294791352064), vec![0u8; 1]),
+            (BigKey::new(193970), vec![0u8; 2]),
+            (BigKey::new(1096776417280), vec![0u8; 2]),
+            (BigKey::new(28428972659453944), vec![0u8; 1]),
+            (BigKey::new(18386508424398700466), vec![0u8; 2]),
+            (BigKey::new(280375565877426), vec![0u8; 1]),
+            (BigKey::new(270479860478464), vec![0u8; 1]),
+            (BigKey::new(219039792896), vec![0u8; 2]),
+            (BigKey::new(2986409983), vec![0u8; 1]),
+            (BigKey::new(866673871104), vec![0u8; 2]),
+            (BigKey::new(749004913038733311), vec![0u8; 1]),
+            (BigKey::new(11730937), vec![0u8; 1]),
+            (BigKey::new(18446735329151090432), vec![0u8; 1]),
+            (BigKey::new(128434), vec![0u8; 2]),
+            (BigKey::new(4160773120), vec![0u8; 2]),
+            (BigKey::new(759169024), vec![0u8; 1]),
+            (BigKey::new(41944653103338), vec![0u8; 1]),
+            (BigKey::new(3773172062810537984), vec![0u8; 1]),
+            (BigKey::new(41956837944524949), vec![0u8; 1]),
+            (BigKey::new(17593749733376), vec![0u8; 1]),
+            (BigKey::new(1563623424), vec![0u8; 1]),
+            (BigKey::new(1560281088), vec![0u8; 1]),
+            (BigKey::new(12813251448442880), vec![0u8; 1]),
+            (BigKey::new(10740950511298543765), vec![0u8; 1]),
+            (BigKey::new(838860800), vec![0u8; 1]),
+            (BigKey::new(491736783624786638), vec![0u8; 17]),
+            (BigKey::new(327869), vec![0u8; 1]),
+            (BigKey::new(281471419940864), vec![0u8; 1]),
+            (BigKey::new(53198770610748672), vec![0u8; 1]),
+            (BigKey::new(661184721051266345), vec![0u8; 1]),
+            (BigKey::new(8796093034496), vec![0u8; 1]),
+            (BigKey::new(268444683468800), vec![0u8; 1]),
+            (BigKey::new(2199027450368), vec![0u8; 1]),
+            (BigKey::new(257449567200806), vec![0u8; 1]),
+            (BigKey::new(519695237120), vec![0u8; 1]),
+            (BigKey::new(3255307760466471209), vec![0u8; 1]),
+            (BigKey::new(2522068567888101421), vec![0u8; 1]),
+            (BigKey::new(1125056745783855), vec![0u8; 5]),
+            (BigKey::new(4863), vec![0u8; 11]),
+            (BigKey::new(848840156512003), vec![0u8; 1]),
+            (BigKey::new(142284501207154471), vec![0u8; 1]),
+            (BigKey::new(15204011600974444839), vec![0u8; 1]),
+            (BigKey::new(217298682054180864), vec![0u8; 1]),
+            (BigKey::new(277076930199551), vec![0u8; 4]),
+            (BigKey::new(17432379), vec![0u8; 1]),
+            (BigKey::new(4863), vec![0u8; 11]),
+            (BigKey::new(47855161267191555), vec![0u8; 1]),
+            (BigKey::new(142284501207154471), vec![0u8; 1]),
+            (BigKey::new(15204011600974444839), vec![0u8; 1]),
+            (BigKey::new(217298682054184960), vec![0u8; 1]),
+            (BigKey::new(4398046511103), vec![0u8; 4]),
+            (BigKey::new(9223372036854775801), vec![0u8; 1]),
+            (BigKey::new(3298534883194), vec![0u8; 4]),
+            (BigKey::new(9223372036854774055), vec![0u8; 1]),
+            (BigKey::new(576460752286590842), vec![0u8; 4]),
+            (BigKey::new(251638629179457535), vec![0u8; 4]),
+            (BigKey::new(30), vec![0u8; 1]),
+            (BigKey::new(3206556144328376103), vec![0u8; 1]),
+            (BigKey::new(4398046511104), vec![0u8; 1]),
+            (BigKey::new(3819055799724934143), vec![0u8; 1]),
+            (BigKey::new(576460752303367975), vec![0u8; 4]),
+            (BigKey::new(289079216299769639), vec![0u8; 1]),
+            (BigKey::new(142284501106491175), vec![0u8; 1]),
+            (BigKey::new(15204011463535491367), vec![0u8; 1]),
+            (BigKey::new(217298686248484864), vec![0u8; 1]),
+            (BigKey::new(1244967), vec![0u8; 1]),
+            (BigKey::new(288231475663273984), vec![0u8; 1]),
+            (BigKey::new(577309575280328703), vec![0u8; 1]),
+            (BigKey::new(18446743523953737721), vec![0u8; 1]),
+            (BigKey::new(3298534883327), vec![0u8; 4]),
+            (BigKey::new(9223372036854774271), vec![0u8; 1]),
+            (BigKey::new(576460752303368058), vec![0u8; 4]),
+            (BigKey::new(251638629179457319), vec![0u8; 4]),
+            (BigKey::new(142284501106360103), vec![0u8; 1]),
+            (BigKey::new(15204010544412490023), vec![0u8; 1]),
+            (BigKey::new(288230376151711744), vec![0u8; 1]),
+            (BigKey::new(3458767829535294463), vec![0u8; 1]),
+            (BigKey::new(576367293815007015), vec![0u8; 4]),
+            (BigKey::new(848840148057895), vec![0u8; 1]),
+            (BigKey::new(142284501106469415), vec![0u8; 1]),
+            (BigKey::new(15204011600974444839), vec![0u8; 1]),
+            (BigKey::new(1095233372169), vec![0u8; 1]),
+            (BigKey::new(9), vec![0u8; 1]),
+            (BigKey::new(5), vec![0u8; 1]),
+            (BigKey::new(15663113), vec![0u8; 1]),
+            (BigKey::new(23817), vec![0u8; 1]),
+            (BigKey::new(262383), vec![0u8; 1]),
+            (BigKey::new(399599728127), vec![0u8; 1]),
+            (BigKey::new(1095216660489), vec![0u8; 1]),
+            (BigKey::new(18374686879271089407), vec![0u8; 61]),
+            (BigKey::new(23817), vec![0u8; 1]),
+            (BigKey::new(262153), vec![0u8; 1]),
+            (BigKey::new(399599728127), vec![0u8; 1]),
+            (BigKey::new(1095216660489), vec![0u8; 1]),
+            (BigKey::new(399599465727), vec![0u8; 1]),
+            (BigKey::new(3989292031), vec![0u8; 1]),
+            (BigKey::new(237), vec![0u8; 10]),
+            (BigKey::new(647714935328997376), vec![0u8; 1]),
+            (BigKey::new(18374961357578502399), vec![0u8; 61]),
+            (BigKey::new(262381), vec![0u8; 1]),
+            (BigKey::new(537038681599), vec![0u8; 1]),
+            (BigKey::new(71776119067901961), vec![0u8; 1]),
+            (BigKey::new(576461151902889215), vec![0u8; 1]),
+            (BigKey::new(3979885823), vec![0u8; 1]),
+            (BigKey::new(237), vec![0u8; 10]),
+            (BigKey::new(71254183025573888), vec![0u8; 1]),
+            (BigKey::new(71106559), vec![0u8; 1]),
+            (BigKey::new(332009393485), vec![0u8; 1]),
+            (BigKey::new(524293), vec![0u8; 1]),
+            (BigKey::new(399447621641), vec![0u8; 1]),
+            (BigKey::new(41956837944524949), vec![0u8; 1]),
+            (BigKey::new(17593749602304), vec![0u8; 1]),
+            (BigKey::new(1563623424), vec![0u8; 1]),
+            (BigKey::new(1560281088), vec![0u8; 1]),
+            (BigKey::new(12813251448442880), vec![0u8; 1]),
+            (BigKey::new(10740950511298543765), vec![0u8; 1]),
+            (BigKey::new(855638016), vec![0u8; 1]),
+            (BigKey::new(12667444087565609), vec![0u8; 1]),
+            (BigKey::new(0), vec![0u8; 1]),
+            (BigKey::new(189), vec![0u8; 1]),
+            (BigKey::new(71776115504447488), vec![0u8; 1]),
+            (BigKey::new(17955007290153970985), vec![0u8; 1]),
+            (BigKey::new(70650219137597440), vec![0u8; 1]),
+            (BigKey::new(53198770610748672), vec![0u8; 1]),
+            (BigKey::new(661184721051266345), vec![0u8; 1]),
+            (BigKey::new(8796093296640), vec![0u8; 1]),
+            (BigKey::new(257449567191040), vec![0u8; 1]),
+            (BigKey::new(4194816), vec![0u8; 1]),
+            (BigKey::new(257449567200806), vec![0u8; 1]),
+            (BigKey::new(1792), vec![0u8; 1]),
+            (BigKey::new(3255307760466471209), vec![0u8; 1]),
+            (BigKey::new(2522068567888101421), vec![0u8; 1]),
+            (BigKey::new(17955007289400229888), vec![0u8; 256]),
+            (BigKey::new(8863083360943013888), vec![0u8; 1024]),
+        ];
+        test_from_data(to_insert);
     }
 }

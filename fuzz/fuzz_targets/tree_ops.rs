@@ -35,28 +35,29 @@ impl<'a> Arbitrary<'a> for Value {
 
 #[derive(Debug, Arbitrary)]
 enum TreeAction {
-    // TODO use some big type for key to encourage more splits, etc.
     Insert { key: BigKey, value: Value },
 }
 
 fuzz_target!(|actions: Vec<TreeAction>| {
-    let mut result = "vec![\n".to_string();
+    #[cfg(true)]
+    {
+        let mut result = "vec![\n".to_string();
 
-    for action in &actions {
-        match action {
-            TreeAction::Insert { key, value } => {
-                result += &format!(
-                    "(BigKey::new({}), vec![0u8; {}]),\n",
-                    key.value(),
-                    value.0.len()
-                )
+        for action in &actions {
+            match action {
+                TreeAction::Insert { key, value } => {
+                    result += &format!(
+                        "(BigKey::new({}), vec![0u8; {}]),\n",
+                        key.value(),
+                        value.0.len()
+                    )
+                }
             }
         }
+
+        result += "];\n";
+        std::fs::write("/tmp/actions", result).unwrap();
     }
-
-    result += "];\n";
-
-    std::fs::write("/tmp/actions", result).unwrap();
 
     let storage = InMemoryStorage::new();
     let tree = Tree::new(storage).unwrap();

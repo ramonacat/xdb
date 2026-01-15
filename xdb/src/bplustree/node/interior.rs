@@ -82,7 +82,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         }
 
         for (index, current_key) in self.keys().enumerate() {
-            if current_key > key {
+            if key < current_key {
                 insert_at = index;
                 break;
             }
@@ -106,7 +106,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         let values_to_leave = keys_to_leave + 1;
         let values_to_move = (key_len + 1) - values_to_leave;
 
-        let key_data_to_move_start = keys_to_leave * size_of::<TKey>();
+        let key_data_to_move_start = (keys_to_leave + 1) * size_of::<TKey>();
         let value_data_to_move_start =
             self.values_offset() + values_to_leave * size_of::<PageIndex>();
 
