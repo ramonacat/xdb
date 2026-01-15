@@ -1,4 +1,4 @@
-/target
+target/
 data.db
 perf.*
 *.dot

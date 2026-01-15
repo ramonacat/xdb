@@ -9,15 +9,10 @@ use std::{
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::{
+use xdb::{
     bplustree::{Tree, algorithms::insert},
     storage::in_memory::{InMemoryStorage, test::TestStorage},
 };
-
-mod bplustree;
-mod checksum;
-mod page;
-mod storage;
 
 #[derive(Debug, Clone, Copy, Pod, Zeroable, Ord, PartialOrd, PartialEq, Eq)]
 #[repr(transparent)]

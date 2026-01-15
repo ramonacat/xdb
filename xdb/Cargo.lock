@@ -250,11 +250,3 @@ dependencies = [
  "quickcheck_macros",
  "thiserror",
 ]
-
-[[package]]
-name = "xdb-cli"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "xdb",
-]
