@@ -99,10 +99,12 @@ fn split_leaf_root<TStorage: Storage, TKey: Pod + Ord>(
     let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
 
     let new_leaf = transaction.write_node(root_id, |root| {
-        let mut new_leaf = root.split();
+        let new_leaf = root
+            .split()
+            .with_topology(Some(new_root_id), Some(root_id), None)
+            .build();
 
         root.set_links(Some(new_root_id), None, Some(new_leaf_id));
-        new_leaf.set_links(Some(new_root_id), Some(root_id), None);
 
         new_leaf
     })?;
@@ -198,13 +200,18 @@ fn split_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
 
     let new_leaf = transaction.write_node(target_node_id, |target_node| {
-        let mut new_leaf = target_node.split();
+        let next = target_node.next();
 
-        new_leaf.set_links(Some(parent), Some(target_node_id), target_node.next());
+        let new_leaf = target_node
+            .split()
+            .with_topology(Some(parent), Some(target_node_id), next)
+            .build();
+
         target_node.set_links(Some(parent), target_node.previous(), Some(new_leaf_id));
 
         new_leaf
     })?;
+
     if let Some(next_leaf) = new_leaf.next() {
         transaction.write_node(next_leaf, |node| {
             node.set_links(node.parent(), Some(new_leaf_id), node.next());

@@ -11,6 +11,12 @@ use crate::{
     storage::PageIndex,
 };
 
+impl From<Option<InteriorNodeId>> for PageIndex {
+    fn from(value: Option<InteriorNodeId>) -> Self {
+        value.map_or_else(PageIndex::zero, |x| x.0)
+    }
+}
+
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
 pub(in crate::bplustree) struct InteriorNode<TKey>

@@ -1,3 +1,5 @@
+pub(in crate::bplustree) mod builder;
+
 use std::marker::PhantomData;
 
 use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned};
@@ -5,10 +7,19 @@ use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned};
 use crate::{
     bplustree::{
         LeafNodeId, NodeId, TreeError,
-        node::{InteriorNodeId, NODE_DATA_SIZE, Node, NodeFlags, NodeHeader},
+        node::{
+            InteriorNodeId, NODE_DATA_SIZE, Node, NodeFlags, NodeHeader,
+            leaf::builder::{LeafNodeBuilder, MaterializedData},
+        },
     },
     storage::PageIndex,
 };
+
+impl From<Option<LeafNodeId>> for PageIndex {
+    fn from(value: Option<LeafNodeId>) -> Self {
+        value.map_or_else(PageIndex::zero, |x| x.0)
+    }
+}
 
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
@@ -38,14 +49,6 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
             data: [0; _],
             _key: PhantomData,
         }
-    }
-
-    pub fn from_raw_entries(entry_count: usize, entries: &[u8]) -> Self {
-        let mut node = Self::new();
-        node.data[..entries.len()].copy_from_slice(entries);
-        node.header.key_count = entry_count as u16;
-
-        node
     }
 
     fn len(&self) -> usize {
@@ -244,7 +247,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         self.used_size() + self.entry_size_for_value_size(value_size) < (self.data.len())
     }
 
-    pub fn split(&mut self) -> LeafNode<TKey> {
+    pub fn split(&'_ mut self) -> LeafNodeBuilder<TKey, (), MaterializedData<'_, TKey>> {
         let initial_len = self.len();
         assert!(initial_len > 0, "Trying to split an empty node");
 
@@ -260,9 +263,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 
         self.header.key_count = entries_to_leave as u16;
 
-        // TODO introduce some sort of "NodeMissingTopology" type that we can return here instead
-        // of a LeafNode in an invalid state
-        LeafNode::from_raw_entries(entries_to_move, new_node_entries)
+        LeafNodeBuilder::new().with_data(MaterializedData::new(entries_to_move, new_node_entries))
     }
 
     pub fn set_links(
