@@ -127,7 +127,17 @@ fn split_leaf_root<TStorage: Storage, TKey: Pod + Ord>(
 fn split_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     target: InteriorNodeId,
-) -> Result<(TKey, InteriorNodeId), TreeError> {
+) -> Result<bool, TreeError> {
+    let parent = transaction.read_node(target, |target_node| target_node.parent())?;
+
+    if let Some(parent) = parent
+        && !transaction.read_node(parent, |x| x.has_spare_capacity())?
+    {
+        let _ = split_interior_node(transaction, parent)?;
+
+        return Ok(false);
+    }
+
     let parent = transaction.read_node(target, |target_node| target_node.parent())?;
 
     let new_node_reservation = transaction.reserve_node()?;
@@ -170,7 +180,7 @@ fn split_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
         }
     };
 
-    Ok((split_key, new_node_id))
+    Ok(true)
 }
 
 fn insert_child<TStorage: Storage, TKey: Pod + Ord + Debug>(
@@ -251,7 +261,7 @@ pub fn insert<TStorage: Storage, TKey: Pod + Ord + Debug>(
     if !can_fit {
         if let Some(parent) = parent {
             if !transaction.read_node(parent, |parent| parent.has_spare_capacity())? {
-                split_interior_node(transaction, parent)?;
+                let _ = split_interior_node(transaction, parent)?;
 
                 return insert(transaction, key, value);
             } else {

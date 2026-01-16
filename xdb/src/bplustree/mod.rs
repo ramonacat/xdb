@@ -264,24 +264,15 @@ mod test {
         fmt::{Debug, Display},
         io::Write,
         panic::{RefUnwindSafe, UnwindSafe, catch_unwind},
-        sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        },
     };
 
     use crate::{
-        bplustree::algorithms::insert,
-        debug::BigKey,
-        storage::in_memory::{InMemoryStorage, test::TestStorage},
+        bplustree::algorithms::insert, debug::BigKey, storage::in_memory::InMemoryStorage,
     };
     use pretty_assertions::assert_eq;
     use tempfile::NamedTempFile;
 
     use super::*;
-
-    // TODO assert on properties of the tree (balanced, etc.) where it makes sense
-    // TODO print out a .dot file for failed tests
 
     #[test]
     fn node_accessor_entries() {
@@ -315,86 +306,26 @@ mod test {
         assert!(matches!(iter.next(), None));
     }
 
-    // TODO the below two tests are mostly copy-paste, refactor some sorta abstraction over them
     #[test]
-    // TODO optimize this test
     fn insert_multiple_nodes() {
-        let page_count = Arc::new(AtomicUsize::new(0));
+        let mut data = vec![];
 
-        let storage = TestStorage::new(InMemoryStorage::new(), page_count.clone());
-        let tree = Tree::<_, usize>::new(storage).unwrap();
-
-        // TODO: find a more explicit way of counting nodes
-        let mut i = 0usize;
-
-        let tree_transaction = tree.transaction().unwrap();
-
-        while page_count.load(Ordering::Relaxed) < 1024 {
+        for i in 0..5000 {
             // make the value bigger with repeat so fewer inserts are needed and the test runs faster
-            insert(
-                &tree_transaction,
-                i,
-                &(u16::max_value() - i as u16).to_be_bytes().repeat(128),
-            )
-            .unwrap();
-
-            i += 1;
+            data.push((
+                BigKey::<usize>::new(i),
+                (u16::max_value() - i as u16).to_be_bytes().repeat(8),
+            ));
         }
 
-        let entry_count = i;
-
-        let mut final_i = 0;
-
-        for (i, item) in tree.iter().unwrap().enumerate() {
-            assert!(i < entry_count);
-            let (key, value) = item.unwrap();
-
-            assert!(value == value[..size_of::<u16>()].repeat(128));
-
-            let value: u16 = u16::from_be_bytes(value[0..size_of::<u16>()].try_into().unwrap());
-
-            assert!(key == i);
-            assert!(value == u16::max_value() - i as u16);
-
-            final_i = i;
-        }
-
-        assert!(final_i == entry_count - 1);
-
-        for (i, item) in tree.iter_reverse().unwrap().enumerate() {
-            let i = entry_count - i - 1;
-
-            assert!(i < entry_count);
-            let (key, value) = item.unwrap();
-
-            assert!(value == value[..size_of::<u16>()].repeat(128));
-
-            let value = u16::from_be_bytes(value[0..size_of::<u16>()].try_into().unwrap());
-
-            assert!(key == i);
-            assert!(value == u16::max_value() - i as u16);
-        }
-
-        // TODO iterate the tree and ensure that all the keys are there, in correct order with
-        // correct values
+        test_from_data(data);
     }
 
     #[test]
-    // TODO optimize this test
     fn variable_sized_keys() {
-        let page_count = Arc::new(AtomicUsize::new(0));
+        let mut data = vec![];
 
-        let storage = TestStorage::new(InMemoryStorage::new(), page_count.clone());
-        let tree = Tree::<_, usize>::new(storage).unwrap();
-
-        // TODO: find a more explicit way of counting nodes
-        let mut i = 0usize;
-
-        let transaction = tree.transaction().unwrap();
-
-        // 10 pages should give us a resonable number of node splits to assume that the basic logic
-        //    works
-        while page_count.load(Ordering::Relaxed) < 10 {
+        for i in 0..5000 {
             let value: &[u8] = match i % 8 {
                 0 | 7 | 6 | 5 => &(i as u64).to_be_bytes(),
                 4 | 3 => &(i as u32).to_be_bytes(),
@@ -403,34 +334,10 @@ mod test {
                 _ => unreachable!(),
             };
 
-            // make the value bigger with repeat so fewer inserts are needed and the test runs faster
-            insert(&transaction, i, &value.repeat(128)).unwrap();
-
-            i += 1;
+            data.push((BigKey::new(i), value.repeat(8)));
         }
 
-        let entry_count = i;
-
-        for (i, item) in tree.iter().unwrap().enumerate() {
-            assert!(i < entry_count);
-            let (key, value) = item.unwrap();
-
-            let value_matches_expected = match i % 8 {
-                0 | 7 | 6 | 5 => {
-                    i as u64 == u64::from_be_bytes(value[..size_of::<u64>()].try_into().unwrap())
-                }
-                4 | 3 => {
-                    i as u32 == u32::from_be_bytes(value[..size_of::<u32>()].try_into().unwrap())
-                }
-                2 => i as u16 == u16::from_be_bytes(value[..size_of::<u16>()].try_into().unwrap()),
-                1 => i as u8 == u8::from_be_bytes(value[..size_of::<u8>()].try_into().unwrap()),
-                _ => unreachable!(),
-            };
-
-            assert!(value[..value.len() / 128].repeat(128) == value);
-            assert!(key == i);
-            assert!(value_matches_expected);
-        }
+        test_from_data(data);
     }
 
     #[test]
@@ -494,6 +401,7 @@ mod test {
                 .into_dot(|value| {
                     let mut last_value_state: Option<(u8, usize)> = None;
 
+                    // TODO extract this formatter into bplustree::debug probably
                     let mut formatted_value = value.iter().fold(String::new(), |acc, x| {
                         let mut result = "".to_string();
                         if let Some((last_value, repeats)) = last_value_state {
