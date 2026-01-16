@@ -1,18 +1,14 @@
-#![no_main]
-
-use std::{collections::BTreeMap, fmt::Debug};
-
 use arbitrary::Arbitrary;
-use libfuzzer_sys::fuzz_target;
-use pretty_assertions::assert_eq;
-use xdb::{
-    bplustree::{Tree, algorithms::insert},
-    debug::BigKey,
-    storage::in_memory::InMemoryStorage,
-};
+use bytemuck::Pod;
+use std::collections::BTreeMap;
+use std::fmt::{Debug, Display};
+use xdb::bplustree::Tree;
+use xdb::bplustree::algorithms::insert;
+use xdb::debug::BigKey;
+use xdb::storage::in_memory::InMemoryStorage;
 
 #[derive(PartialEq, Eq)]
-struct Value(Vec<u8>);
+pub struct Value(pub Vec<u8>);
 
 impl Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -34,16 +30,16 @@ impl<'a> Arbitrary<'a> for Value {
 }
 
 #[derive(Debug, Arbitrary)]
-enum TreeAction {
-    Insert { key: BigKey, value: Value },
+pub enum TreeAction<T: Pod + Display> {
+    Insert { key: BigKey<T>, value: Value },
 }
 
-fuzz_target!(|actions: Vec<TreeAction>| {
+pub fn run_ops<T: Pod + Eq + Display + Ord>(actions: &[TreeAction<T>]) {
     #[cfg(true)]
     {
         let mut result = "vec![\n".to_string();
 
-        for action in &actions {
+        for action in actions {
             match action {
                 TreeAction::Insert { key, value } => {
                     result += &format!(
@@ -68,7 +64,7 @@ fuzz_target!(|actions: Vec<TreeAction>| {
     for action in actions {
         match action {
             TreeAction::Insert { key, value } => {
-                insert(&transaction, key, &value.0).unwrap();
+                insert(&transaction, *key, &value.0).unwrap();
                 rust_btree.insert(key, value);
             }
         };
@@ -77,7 +73,7 @@ fuzz_target!(|actions: Vec<TreeAction>| {
     assert_eq!(
         rust_btree
             .iter()
-            .map(|x| (*x.0, x.1.0.clone()))
+            .map(|x| (**x.0, x.1.0.clone()))
             .collect::<Vec<_>>(),
         tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>()
     );
@@ -86,7 +82,7 @@ fuzz_target!(|actions: Vec<TreeAction>| {
         rust_btree
             .iter()
             .rev()
-            .map(|x| (*x.0, x.1.0.clone()))
+            .map(|x| (**x.0, x.1.0.clone()))
             .map(|x| (x.0, Value(x.1)))
             .collect::<Vec<_>>(),
         tree.iter_reverse()
@@ -95,4 +91,4 @@ fuzz_target!(|actions: Vec<TreeAction>| {
             .map(|x| (x.0, Value(x.1)))
             .collect::<Vec<_>>()
     );
-});
+}

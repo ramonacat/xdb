@@ -542,7 +542,7 @@ mod test {
     fn reverse_with_splits() {
         // this case came from fuzzing, hence the slightly unhinged input
         let to_insert = vec![
-            (BigKey::new(1095228325891), vec![0u8; 2]),
+            (BigKey::<u64>::new(1095228325891), vec![0u8; 2]),
             (BigKey::new(23552), vec![0u8; 2]),
             (BigKey::new(749004913038733311), vec![0u8; 1]),
             (BigKey::new(11730937), vec![0u8; 1]),
@@ -614,7 +614,7 @@ mod test {
     fn fuzzer_a() {
         // this case came from fuzzing, hence the slightly unhinged input
         let to_insert = vec![
-            (BigKey::new(1095228325891), vec![0u8; 2]),
+            (BigKey::<u64>::new(1095228325891), vec![0u8; 2]),
             (BigKey::new(3096224743840768), vec![0u8; 2]),
             (BigKey::new(749004913038733311), vec![0u8; 1]),
             (BigKey::new(18230289816630788089), vec![0u8; 1]),
@@ -770,7 +770,7 @@ mod test {
     #[test]
     fn fuzzer_b() {
         let data = vec![
-            (BigKey::new(1095228325891), vec![0u8; 2]),
+            (BigKey::<u64>::new(1095228325891), vec![0u8; 2]),
             (BigKey::new(3096224743840768), vec![0u8; 2]),
             (BigKey::new(749004913038733311), vec![0u8; 1]),
             (BigKey::new(18230289816630788089), vec![0u8; 1]),

@@ -330,6 +330,7 @@ name = "xdb-fuzz"
 version = "0.0.0"
 dependencies = [
  "arbitrary",
+ "bytemuck",
  "libfuzzer-sys",
  "pretty_assertions",
  "xdb",

@@ -11,13 +11,32 @@ cargo-fuzz = true
 arbitrary = { version = "1.4.2", features = ["derive"] }
 libfuzzer-sys = "0.4"
 pretty_assertions = "1.4.1"
+bytemuck = { version = "1.24.0", features = ["derive", "min_const_generics", "must_cast"] }
 
 [dependencies.xdb]
 path = "../xdb/"
 
 [[bin]]
-name = "tree_ops"
-path = "fuzz_targets/tree_ops.rs"
+name = "tree_ops_u8"
+path = "fuzz_targets/tree_ops_u8.rs"
+test = false
+doc = false
+bench = false
+[[bin]]
+name = "tree_ops_u16"
+path = "fuzz_targets/tree_ops_u16.rs"
+test = false
+doc = false
+bench = false
+[[bin]]
+name = "tree_ops_u32"
+path = "fuzz_targets/tree_ops_u32.rs"
+test = false
+doc = false
+bench = false
+[[bin]]
+name = "tree_ops_u64"
+path = "fuzz_targets/tree_ops_u64.rs"
 test = false
 doc = false
 bench = false

@@ -1,48 +1,53 @@
-use std::fmt::{Debug, Display};
+use std::{
+    fmt::{Debug, Display},
+    marker::PhantomData,
+};
 
 use arbitrary::Arbitrary;
-use bytemuck::{Pod, Zeroable};
-
-const BIG_KEY_SIZE: usize = 32;
+use bytemuck::{Pod, Zeroable, bytes_of, pod_read_unaligned};
 
 #[derive(Clone, Copy, Pod, Zeroable, Ord, PartialOrd, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct BigKey([u64; BIG_KEY_SIZE]);
+pub struct BigKey<T>([u8; 256], PhantomData<T>);
 
-impl Debug for BigKey {
+impl<T: Pod + Display> Debug for BigKey<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BigKey({})", self.0[0])
+        write!(f, "BigKey({})", self.value())
     }
 }
 
-impl<'a> Arbitrary<'a> for BigKey {
+impl<'a, T: Arbitrary<'a> + Pod> Arbitrary<'a> for BigKey<T> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let value: u64 = u.arbitrary()?;
+        let value = u.arbitrary()?;
 
-        Ok(Self(vec![value; BIG_KEY_SIZE].try_into().unwrap()))
+        Ok(Self::new(value))
     }
 }
 
-impl Display for BigKey {
+impl<T: Display + Pod> Display for BigKey<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.validate();
 
-        write!(f, "{}", self.0[0])
+        write!(f, "{}", self.value())
     }
 }
 
-impl BigKey {
-    pub fn new(value: u64) -> Self {
-        Self(vec![value; BIG_KEY_SIZE].try_into().unwrap())
+impl<T: Pod> BigKey<T> {
+    const VALUE_COUNT: usize = size_of::<BigKey<T>>() / size_of::<T>();
+
+    pub fn new(value: T) -> Self {
+        let bytes = bytes_of(&value).repeat(Self::VALUE_COUNT);
+
+        Self(bytes.try_into().unwrap(), PhantomData)
     }
 
-    pub fn value(&self) -> u64 {
+    pub fn value(&self) -> T {
         self.validate();
 
-        self.0[0]
+        pod_read_unaligned(&self.0[0..size_of::<T>()])
     }
 
     fn validate(&self) {
-        assert!(vec![self.0[0]; self.0.len()] == self.0);
+        assert!(self.0 == *self.0[0..size_of::<T>()].repeat(Self::VALUE_COUNT));
     }
 }
