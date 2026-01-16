@@ -177,7 +177,9 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
             }
         }
 
-        let size_increase = value.len().saturating_sub(delete_index.and_then(|x| self.entry_size(x)).unwrap_or(0));
+        let size_increase = value
+            .len()
+            .saturating_sub(delete_index.and_then(|x| self.entry_size(x)).unwrap_or(0));
 
         assert!(
             self.can_fit(size_increase),

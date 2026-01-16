@@ -10,7 +10,6 @@ use crate::page::Page;
 #[derive(Debug, Error)]
 pub enum StorageError {
     #[error("The page at index {0:?} does not exist")]
-    #[allow(unused)] // TODO fix the error handling!
     PageNotFound(PageIndex),
 }
 

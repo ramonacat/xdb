@@ -14,7 +14,7 @@ impl<T: Storage, TKey: Pod + Ord + Display> Tree<T, TKey> {
         let mut output = String::new();
 
         let transaction = self.transaction()?;
-        let root_node_index = AnyNodeId::new(transaction.read_header(|h| h.root)?);
+        let root_node_index = transaction.get_root()?;
 
         output += "digraph {\n";
         output += &Self::node_to_dot(&transaction, root_node_index, &stringify_value)?;

@@ -37,8 +37,7 @@ impl<'tree, T: Storage, TKey: Pod + Ord, const REVERSE: bool>
     TreeIterator<'tree, T, TKey, REVERSE>
 {
     fn new(transaction: TreeTransaction<'tree, T, TKey>) -> Result<Self, TreeError> {
-        // TODO introduce some better/more abstract API for reading the header?
-        let root = transaction.read_header(|h| AnyNodeId::new(h.root))?;
+        let root = transaction.get_root()?;
         let starting_leaf = if !REVERSE {
             first_leaf(&transaction, root)?
         } else {
@@ -130,6 +129,10 @@ where
 impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
     TreeTransaction<'storage, TStorage, TKey>
 {
+    fn get_root(&self) -> Result<AnyNodeId, TreeError> {
+        Ok(AnyNodeId::new(self.read_header(|x| x.root)?))
+    }
+
     fn read_header<TReturn>(
         &self,
         read: impl FnOnce(&TreeHeader) -> TReturn,

@@ -23,11 +23,7 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: Pod + Ord>(
     start_min_key: Option<TKey>,
     start_max_key: Option<TKey>,
 ) {
-    let start_id = start_id.unwrap_or_else(|| {
-        let root_id = transaction.read_header(|header| header.root).unwrap();
-
-        AnyNodeId::new(root_id)
-    });
+    let start_id = start_id.unwrap_or_else(|| transaction.get_root().unwrap());
 
     let limits: Vec<(Option<TKey>, Option<TKey>, AnyNodeId)> = transaction
         .read_node(start_id, |node| {

@@ -186,7 +186,7 @@ pub(super) enum AnyNodeKind<'node, TKey: Pod> {
 }
 
 impl<TKey: Pod> AnyNode<TKey> {
-    fn is_leaf(&self) -> bool {
+    pub fn is_leaf(&self) -> bool {
         !self.header.flags.contains(NodeFlags::INTERNAL)
     }
 

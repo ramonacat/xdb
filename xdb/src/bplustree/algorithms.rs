@@ -89,8 +89,11 @@ fn create_new_root<'storage, TStorage: Storage, TKey: Pod + Ord>(
 fn split_leaf_root<TStorage: Storage, TKey: Pod + Ord>(
     transaction: &TreeTransaction<TStorage, TKey>,
 ) -> Result<(), TreeError> {
-    let root_id = transaction.read_header(|header| header.root)?;
-    let root_id = LeafNodeId::new(root_id);
+    let root_id = transaction.get_root()?;
+
+    assert!(transaction.read_node(root_id, |root| root.is_leaf())?);
+
+    let root_id = LeafNodeId::from_any(root_id);
 
     let new_root_reservation = transaction.reserve_node()?;
     let new_root_id = InteriorNodeId::new(new_root_reservation.index());
@@ -238,7 +241,7 @@ pub fn insert<TStorage: Storage, TKey: Pod + Ord + Debug>(
 ) -> Result<(), TreeError> {
     assert_properties(transaction);
 
-    let root_index = AnyNodeId::new(transaction.read_header(|h| h.root)?);
+    let root_index = transaction.get_root()?;
     let target_node_id = leaf_search(transaction, root_index, &key)?;
 
     let (can_fit, parent) = transaction.read_node(target_node_id, |node| {
