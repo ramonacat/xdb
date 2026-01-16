@@ -72,13 +72,15 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         self.data[offset..offset + size_of::<PageIndex>()].copy_from_slice(bytes_of(&index.page()));
     }
 
-    pub(crate) fn insert_node(&mut self, key: &TKey, value: AnyNodeId) -> InteriorInsertResult {
+    pub fn has_spare_capacity(&self) -> bool {
+        self.key_count() + 1 < self.key_capacity()
+    }
+
+    pub(crate) fn insert_node(&mut self, key: &TKey, value: AnyNodeId) {
         let mut insert_at = self.key_count();
 
-        let key_len = self.key_count();
-
-        if key_len + 1 == self.key_capacity() {
-            return InteriorInsertResult::Split;
+        if !self.has_spare_capacity() {
+            panic!("no capacity for insert, split the node first");
         }
 
         for (index, current_key) in self.keys().enumerate() {
@@ -89,8 +91,6 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         }
 
         self.insert_at(insert_at, key, value);
-
-        InteriorInsertResult::Ok
     }
 
     pub fn split(&mut self) -> (TKey, InteriorNode<TKey>) {
@@ -131,7 +131,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
             .copy_from_slice(&value_data_to_move);
         split_node.header.key_count = keys_to_move as u16;
 
-        let split_key_offset = (keys_to_leave + 1) * size_of::<TKey>();
+        let split_key_offset = (keys_to_leave) * size_of::<TKey>();
         (
             pod_read_unaligned(&self.data[split_key_offset..split_key_offset + size_of::<TKey>()]),
             split_node,
@@ -233,10 +233,4 @@ impl<'node, TKey: Pod + Ord> Iterator for InteriorNodeKeysIterator<'node, TKey> 
 
         Some(from_bytes(key_bytes))
     }
-}
-
-#[must_use]
-pub(in crate::bplustree) enum InteriorInsertResult {
-    Ok,
-    Split,
 }

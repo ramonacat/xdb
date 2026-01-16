@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
+use crate::bplustree::debug::assert_properties;
 use crate::bplustree::node::AnyNodeKind;
-use crate::bplustree::node::interior::InteriorInsertResult;
-use crate::bplustree::{InteriorNode, InteriorNodeId, LeafInsertResult, NodeId};
+use crate::bplustree::{InteriorNode, InteriorNodeId, NodeId};
 use crate::storage::PageReservation;
 use crate::{bplustree::Node as _, page::Page};
 use bytemuck::Pod;
@@ -77,11 +77,7 @@ fn create_new_root<'storage, TStorage: Storage, TKey: Pod + Ord>(
     let mut new_root = InteriorNode::<TKey>::new();
 
     new_root.set_first_pointer(left);
-    match new_root.insert_node(&key, right) {
-        InteriorInsertResult::Ok => {}
-        // TODO this can only happen if the key + 2*leaf_id cannot fit into the node
-        InteriorInsertResult::Split => todo!(),
-    }
+    new_root.insert_node(&key, right);
 
     transaction.insert_reserved(reservation, Page::from_data(new_root))?;
 
@@ -123,7 +119,7 @@ fn split_leaf_root<TStorage: Storage, TKey: Pod + Ord>(
     Ok(())
 }
 
-fn split_interior_node<TStorage: Storage, TKey: Pod + Ord>(
+fn split_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     target: InteriorNodeId,
 ) -> Result<(TKey, InteriorNodeId), TreeError> {
@@ -144,8 +140,12 @@ fn split_interior_node<TStorage: Storage, TKey: Pod + Ord>(
         Some(parent) => {
             eprintln!("split interior node {target:?} into new node {new_node_id:?}");
             insert_child(transaction, parent, split_key, new_node_id.into())?;
+
+            assert_properties(transaction);
         }
         None => {
+            assert_properties(transaction);
+
             let new_root_reservation = transaction.reserve_node()?;
             let new_root_id = InteriorNodeId::new(new_root_reservation.index());
 
@@ -159,74 +159,67 @@ fn split_interior_node<TStorage: Storage, TKey: Pod + Ord>(
                 split_key,
                 new_node_id.into(),
             )?;
+            eprintln!("created new root {new_root_id:?} at split key {split_key:?}");
+
+            assert_properties(transaction);
         }
     };
 
     Ok((split_key, new_node_id))
 }
 
-fn insert_child<TStorage: Storage, TKey: Pod + Ord>(
+fn insert_child<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     target: InteriorNodeId,
     key: TKey,
     child_id: AnyNodeId,
 ) -> Result<(), TreeError> {
-    let insert_node_result =
-        transaction.write_node(target, |node| node.insert_node(&key, child_id))?;
+    assert_properties(transaction);
+
+    transaction.write_node(target, |node| node.insert_node(&key, child_id))?;
     transaction.write_node(child_id, |x| x.set_parent(Some(target)))?;
 
-    match insert_node_result {
-        InteriorInsertResult::Split => {
-            let (split_key, new_node_id) = split_interior_node(transaction, target)?;
-
-            let target = if key < split_key { target } else { new_node_id };
-
-            insert_child(transaction, target, key, child_id)
-        }
-        InteriorInsertResult::Ok => Ok(()),
-    }
+    Ok(())
 }
 
 fn split_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     target_node_id: LeafNodeId,
 ) -> Result<(), TreeError> {
-    let parent = transaction.read_node(target_node_id, |node| node.parent())?;
+    let parent = transaction
+        .read_node(target_node_id, |node| node.parent())?
+        .unwrap();
 
-    match parent {
-        // the leaf is the root
-        None => {
-            split_leaf_root(transaction)?;
-        }
-        Some(parent) => {
-            let new_leaf_reservation = transaction.reserve_node()?;
-            let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
+    let has_spare_capacity = transaction.read_node(parent, |node| node.has_spare_capacity())?;
 
-            let new_leaf = transaction.write_node(target_node_id, |target_node| {
-                let mut new_leaf = target_node.split();
+    assert!(has_spare_capacity);
 
-                new_leaf.set_links(Some(parent), Some(target_node_id), target_node.next());
-                target_node.set_links(Some(parent), target_node.previous(), Some(new_leaf_id));
+    let new_leaf_reservation = transaction.reserve_node()?;
+    let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
 
-                new_leaf
-            })?;
-            if let Some(next_leaf) = new_leaf.next() {
-                transaction.write_node(next_leaf, |node| {
-                    node.set_links(node.parent(), Some(new_leaf_id), node.next());
-                })?;
-            }
+    let new_leaf = transaction.write_node(target_node_id, |target_node| {
+        let mut new_leaf = target_node.split();
 
-            let split_key = new_leaf.first_key().unwrap();
-            eprintln!(
-                "split {:?} into {:?} at key {:?}",
-                target_node_id, new_leaf_id, split_key
-            );
+        new_leaf.set_links(Some(parent), Some(target_node_id), target_node.next());
+        target_node.set_links(Some(parent), target_node.previous(), Some(new_leaf_id));
 
-            transaction.insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
-
-            insert_child(transaction, parent, split_key, new_leaf_id.into())?;
-        }
+        new_leaf
+    })?;
+    if let Some(next_leaf) = new_leaf.next() {
+        transaction.write_node(next_leaf, |node| {
+            node.set_links(node.parent(), Some(new_leaf_id), node.next());
+        })?;
     }
+
+    let split_key = new_leaf.first_key().unwrap();
+    eprintln!(
+        "split {:?} into {:?} at key {:?}",
+        target_node_id, new_leaf_id, split_key
+    );
+
+    transaction.insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
+
+    insert_child(transaction, parent, split_key, new_leaf_id.into())?;
 
     Ok(())
 }
@@ -236,21 +229,40 @@ pub fn insert<TStorage: Storage, TKey: Pod + Ord + Debug>(
     key: TKey,
     value: &[u8],
 ) -> Result<(), TreeError> {
+    assert_properties(transaction);
+
     let root_index = AnyNodeId::new(transaction.read_header(|h| h.root)?);
     let target_node_id = leaf_search(transaction, root_index, &key)?;
 
-    let insert_result = transaction.write_node(target_node_id, |node| node.insert(key, value))?;
-    let insert_result = insert_result?;
+    let (can_fit, parent) = transaction.read_node(target_node_id, |node| {
+        (node.can_fit(value.len()), node.parent())
+    })?;
 
-    match insert_result {
-        LeafInsertResult::Done => {
-            eprintln!("inserted {key:?} into {target_node_id:?}");
-            Ok(())
-        }
-        LeafInsertResult::Split => {
-            split_leaf(transaction, target_node_id)?;
+    if !can_fit {
+        if let Some(parent) = parent {
+            if !transaction.read_node(parent, |parent| parent.has_spare_capacity())? {
+                split_interior_node(transaction, parent)?;
 
-            insert(transaction, key, value)
+                return insert(transaction, key, value);
+            } else {
+                split_leaf(transaction, target_node_id)?;
+
+                return insert(transaction, key, value);
+            }
+        } else {
+            assert!(root_index == target_node_id.into());
+
+            split_leaf_root(transaction)?;
+
+            return insert(transaction, key, value);
         }
     }
+
+    transaction.write_node(target_node_id, |node| node.insert(key, value))??;
+
+    eprintln!("inserted {key:?} into {target_node_id:?}");
+
+    assert_properties(transaction);
+
+    Ok(())
 }

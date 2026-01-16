@@ -146,7 +146,13 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         }
     }
 
-    pub fn insert(&mut self, key: TKey, value: &[u8]) -> Result<LeafInsertResult, TreeError> {
+    pub fn insert(&mut self, key: TKey, value: &[u8]) -> Result<(), TreeError> {
+        // TODO this assert should consider updates, in which case the size of existing node should
+        // be subtracted
+        assert!(
+            self.can_fit(value.len()),
+            "not enough capacity for the value, split node before inserting"
+        );
         let mut insert_index = self.len();
 
         let mut delete_index = None;
@@ -170,13 +176,9 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
             self.delete_at(delete_index);
         }
 
-        if !self.can_fit(value.len()) {
-            Ok(LeafInsertResult::Split)
-        } else {
-            self.insert_at(insert_index, key, value)?;
+        self.insert_at(insert_index, key, value)?;
 
-            Ok(LeafInsertResult::Done)
-        }
+        Ok(())
     }
 
     fn move_entries(&mut self, start_index: usize, end_index: usize, offset: isize) {
@@ -229,7 +231,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         self.header.key_count -= 1;
     }
 
-    fn can_fit(&self, value_size: usize) -> bool {
+    pub fn can_fit(&self, value_size: usize) -> bool {
         self.entry_offset(self.len()).unwrap() + self.entry_size_for_value_size(value_size)
             < (self.data.len())
     }
@@ -328,13 +330,6 @@ impl<'node, TKey: Pod + Ord + 'node> Iterator for LeafNodeEntryIterator<'node, T
 
         self.node.entry(self.offset - 1)
     }
-}
-
-#[must_use]
-#[derive(Debug)]
-pub(in crate::bplustree) enum LeafInsertResult {
-    Done,
-    Split,
 }
 
 #[cfg(test)]
