@@ -158,12 +158,6 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     }
 
     pub fn insert(&mut self, key: TKey, value: &[u8]) -> Result<(), TreeError> {
-        // TODO this assert should consider updates, in which case the size of existing node should
-        // be subtracted
-        assert!(
-            self.can_fit(value.len()),
-            "not enough capacity for the value, split node before inserting"
-        );
         let mut insert_index = self.len();
 
         let mut delete_index = None;
@@ -182,6 +176,13 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
                 break;
             }
         }
+
+        let size_increase = value.len().saturating_sub(delete_index.and_then(|x| self.entry_size(x)).unwrap_or(0));
+
+        assert!(
+            self.can_fit(size_increase),
+            "not enough capacity for the value, split node before inserting"
+        );
 
         if let Some(delete_index) = delete_index {
             self.delete_at(delete_index);
