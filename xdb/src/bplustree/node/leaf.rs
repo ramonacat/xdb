@@ -70,10 +70,8 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         })
     }
 
-    // TODO don't allow one-past access and instead have a `entries_size` method for better
-    // clarity?
     fn entry_offset(&self, index: usize) -> Option<usize> {
-        if index > self.len() {
+        if index >= self.len() {
             return None;
         }
 
@@ -85,6 +83,16 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         }
 
         Some(offset)
+    }
+
+    fn used_size(&self) -> usize {
+        let mut size = 0;
+
+        for i in 0..self.len() {
+            size += self.entry_size(i).unwrap();
+        }
+
+        size
     }
 
     fn entry_size(&self, index: usize) -> Option<usize> {
@@ -181,9 +189,9 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         Ok(())
     }
 
-    fn move_entries(&mut self, start_index: usize, end_index: usize, offset: isize) {
+    fn move_entries(&mut self, start_index: usize, offset: isize) {
         let move_start_offset = self.entry_offset(start_index).unwrap();
-        let move_end_offset = self.entry_offset(end_index).unwrap();
+        let move_end_offset = self.used_size();
         let data_to_move = self.data[move_start_offset..move_end_offset].to_vec();
 
         self.data[move_start_offset.strict_add_signed(offset)
@@ -194,13 +202,14 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     fn insert_at(&mut self, index: usize, key: TKey, value: &[u8]) -> Result<(), TreeError> {
         assert!(self.can_fit(value.len()));
 
-        if index < self.len() {
+        let entry_offset = if index < self.len() {
             let entry_size = self.entry_size_for_value_size(value.len());
 
-            self.move_entries(index, self.len(), entry_size as isize);
-        }
-
-        let entry_offset = self.entry_offset(index).unwrap();
+            self.move_entries(index, entry_size as isize);
+            self.entry_offset(index).unwrap()
+        } else {
+            self.used_size()
+        };
 
         let key_hole: &mut [u8] = &mut self.data[entry_offset..entry_offset + size_of::<TKey>()];
 
@@ -225,15 +234,14 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         let size = self.entry_size(index).unwrap();
 
         if index + 1 < self.len() {
-            self.move_entries(index + 1, self.len(), -(size as isize));
+            self.move_entries(index + 1, -(size as isize));
         }
 
         self.header.key_count -= 1;
     }
 
     pub fn can_fit(&self, value_size: usize) -> bool {
-        self.entry_offset(self.len()).unwrap() + self.entry_size_for_value_size(value_size)
-            < (self.data.len())
+        self.used_size() + self.entry_size_for_value_size(value_size) < (self.data.len())
     }
 
     pub fn split(&mut self) -> LeafNode<TKey> {
@@ -246,7 +254,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         let entries_to_move = initial_len - entries_to_leave;
 
         let move_start_offset = self.entry_offset(entries_to_leave).unwrap();
-        let moved_entries_end = self.entry_offset(initial_len).unwrap();
+        let moved_entries_end = self.used_size();
 
         let new_node_entries = &self.data[move_start_offset..moved_entries_end];
 

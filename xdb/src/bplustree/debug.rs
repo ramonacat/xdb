@@ -13,6 +13,8 @@ pub fn assert_properties<TStorage: Storage, TKey: Pod + Ord>(
     }
 
     assert_keys_lower_than_parent(transaction, None, None, None);
+    // TODO verify the topology
+    // TODO verify the tree is balanced
 }
 
 fn assert_keys_lower_than_parent<TStorage: Storage, TKey: Pod + Ord>(
