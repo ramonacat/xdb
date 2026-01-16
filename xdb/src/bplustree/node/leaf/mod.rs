@@ -40,8 +40,8 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     pub fn new() -> Self {
         Self {
             header: NodeHeader {
-                key_count: 0,
                 flags: NodeFlags::empty(),
+                _unused1: 0,
                 _unused2: 0,
                 parent: PageIndex::zero(),
             },

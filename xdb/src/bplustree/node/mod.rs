@@ -128,8 +128,8 @@ bitflags::bitflags! {
 #[repr(C, align(8))]
 pub(super) struct NodeHeader {
     // TODO remove this field, it's up to the node to store its own size
-    key_count: u16,
     flags: NodeFlags,
+    _unused1: u16,
     _unused2: u32,
     parent: PageIndex,
 }

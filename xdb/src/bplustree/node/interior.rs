@@ -24,7 +24,8 @@ where
     TKey: Pod,
 {
     header: NodeHeader,
-    data: [u8; NODE_DATA_SIZE],
+    key_count: u16,
+    data: [u8; NODE_DATA_SIZE - size_of::<u16>()],
     _key: PhantomData<TKey>,
 }
 
@@ -32,11 +33,12 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
     pub fn new() -> Self {
         Self {
             header: NodeHeader {
-                key_count: 0,
                 flags: NodeFlags::INTERNAL,
+                _unused1: 0,
                 _unused2: 0,
                 parent: PageIndex::zero(),
             },
+            key_count: 0,
             data: [0; _],
             _key: PhantomData,
         }
@@ -47,7 +49,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
     }
 
     fn key_count(&self) -> usize {
-        self.header.key_count as usize
+        self.key_count as usize
     }
 
     fn values_offset(&self) -> usize {
@@ -123,7 +125,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
             ..value_data_to_move_start + values_to_move * size_of::<PageIndex>()]
             .to_vec();
 
-        self.header.key_count = keys_to_leave as u16;
+        self.key_count = keys_to_leave as u16;
 
         let mut split_node = InteriorNode::new();
         let split_node_values_offset = split_node.values_offset();
@@ -135,7 +137,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         split_node.data
             [split_node_values_offset..split_node_values_offset + value_data_to_move.len()]
             .copy_from_slice(&value_data_to_move);
-        split_node.header.key_count = keys_to_move as u16;
+        split_node.key_count = keys_to_move as u16;
 
         let split_key_offset = (keys_to_leave) * size_of::<TKey>();
         (
@@ -150,7 +152,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
 
         debug_assert!(bytes_of(key) != vec![0; size_of::<TKey>()]);
 
-        self.header.key_count += 1;
+        self.key_count += 1;
 
         let key_offset = size_of::<TKey>() * (index);
         let value_offset = self.values_offset() + size_of::<PageIndex>() * (index + 1);

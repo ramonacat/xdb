@@ -123,8 +123,8 @@ impl<'data, TKey: Pod + Ord, TTopology: Topology, TData: Data<'data, TKey>>
     pub fn build(self) -> LeafNode<TKey> {
         LeafNode {
             header: NodeHeader {
-                key_count: 0,
                 flags: NodeFlags::empty(),
+                _unused1: 0,
                 _unused2: 0,
                 parent: self.topology.parent().into(),
             },
