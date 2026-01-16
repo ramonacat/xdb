@@ -1,15 +1,17 @@
 pub(in crate::bplustree) mod builder;
+mod entries;
 
-use std::marker::PhantomData;
-
-use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned};
+use bytemuck::{Pod, Zeroable};
 
 use crate::{
     bplustree::{
         LeafNodeId, NodeId, TreeError,
         node::{
             InteriorNodeId, NODE_DATA_SIZE, Node, NodeFlags, NodeHeader,
-            leaf::builder::{LeafNodeBuilder, MaterializedData},
+            leaf::{
+                builder::{LeafNodeBuilder, MaterializedData},
+                entries::{LeafNodeEntries, LeafNodeEntry},
+            },
         },
     },
     storage::PageIndex,
@@ -21,6 +23,8 @@ impl From<Option<LeafNodeId>> for PageIndex {
     }
 }
 
+const LEAF_NODE_DATA_SIZE: usize = NODE_DATA_SIZE - size_of::<LeafNodeHeader>();
+
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
 pub(in crate::bplustree) struct LeafNode<TKey>
@@ -29,8 +33,7 @@ where
 {
     header: NodeHeader,
     leaf_header: LeafNodeHeader,
-    data: [u8; NODE_DATA_SIZE - size_of::<LeafNodeHeader>()],
-    _key: PhantomData<TKey>,
+    data: LeafNodeEntries<TKey>,
 }
 
 impl<TKey: Pod + Ord> LeafNode<TKey> {
@@ -46,95 +49,16 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
                 previous: PageIndex::zero(),
                 next: PageIndex::zero(),
             },
-            data: [0; _],
-            _key: PhantomData,
+            data: LeafNodeEntries::new(),
         }
-    }
-
-    pub fn len(&self) -> usize {
-        usize::from(self.header.key_count)
-    }
-
-    pub fn entry(&self, index: usize) -> Option<LeafNodeEntry<'_, TKey>> {
-        if index >= usize::from(self.header.key_count) {
-            return None;
-        }
-
-        let entry_offset = self.entry_offset(index)?;
-        let value_size: u64 = pod_read_unaligned(
-            &self.data[entry_offset + size_of::<TKey>()
-                ..entry_offset + size_of::<TKey>() + size_of::<u64>()],
-        );
-
-        Some(LeafNodeEntry {
-            key: pod_read_unaligned(&self.data[entry_offset..entry_offset + size_of::<TKey>()]),
-            value: &self.data[entry_offset + size_of::<TKey>() + size_of::<u64>()
-                ..entry_offset + size_of::<TKey>() + size_of::<u64>() + value_size as usize],
-        })
-    }
-
-    fn entry_offset(&self, index: usize) -> Option<usize> {
-        if index >= self.len() {
-            return None;
-        }
-
-        let mut offset = 0;
-
-        for i in 0..index {
-            offset += self.entry_size(i).unwrap();
-            debug_assert!(offset < self.data.len());
-        }
-
-        Some(offset)
-    }
-
-    fn used_size(&self) -> usize {
-        let mut size = 0;
-
-        for i in 0..self.len() {
-            size += self.entry_size(i).unwrap();
-        }
-
-        size
-    }
-
-    fn entry_size(&self, index: usize) -> Option<usize> {
-        if index >= self.len() {
-            return None;
-        }
-
-        let mut offset = 0;
-        for _i in 0..index {
-            let value_start = offset + size_of::<TKey>();
-
-            // TODO use some sort of a varint encoding for the entry size
-            let value_size = u64::from_le_bytes(
-                self.data[value_start..value_start + size_of::<u64>()]
-                    .try_into()
-                    .unwrap(),
-            ) as usize;
-            debug_assert!(value_size > 0);
-
-            offset += self.entry_size_for_value_size(value_size);
-        }
-
-        let entry_size_start = offset + size_of::<TKey>();
-        let value_size: u64 =
-            pod_read_unaligned(&self.data[entry_size_start..entry_size_start + size_of::<u64>()]);
-        debug_assert!(value_size > 0);
-
-        Some(self.entry_size_for_value_size(value_size as usize))
-    }
-
-    fn entry_size_for_value_size(&self, value_size: usize) -> usize {
-        size_of::<TKey>() + size_of::<u64>() + value_size
     }
 
     pub fn entries(&'_ self) -> impl Iterator<Item = LeafNodeEntry<'_, TKey>> {
-        LeafNodeEntryIterator {
-            node: self,
-            offset: 0,
-        }
+        self.data.entries()
+    }
+
+    pub fn entry(&'_ self, index: usize) -> Option<LeafNodeEntry<'_, TKey>> {
+        self.data.entry(index)
     }
 
     pub fn previous(&self) -> Option<LeafNodeId> {
@@ -158,12 +82,12 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     }
 
     pub fn insert(&mut self, key: TKey, value: &[u8]) -> Result<(), TreeError> {
-        let mut insert_index = self.len();
+        let mut insert_index = self.data.len();
 
         let mut delete_index = None;
 
         for (index, entry) in self.entries().enumerate() {
-            if key == entry.key {
+            if key == entry.key() {
                 // TODO return a different result type for replaced?
                 delete_index = Some(index);
 
@@ -171,87 +95,35 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
                 break;
             }
 
-            if key < entry.key {
+            if key < entry.key() {
                 insert_index = index;
                 break;
             }
         }
 
-        let size_increase = value
-            .len()
-            .saturating_sub(delete_index.and_then(|x| self.entry_size(x)).unwrap_or(0));
+        let size_increase = value.len().saturating_sub(
+            delete_index
+                .and_then(|x| self.data.entry(x))
+                .map(|x| x.total_size())
+                .unwrap_or(0),
+        );
 
         assert!(
-            self.can_fit(size_increase),
+            self.data.can_fit(size_increase),
             "not enough capacity for the value, split node before inserting"
         );
 
         if let Some(delete_index) = delete_index {
-            self.delete_at(delete_index);
+            self.data.delete_at(delete_index);
         }
 
-        self.insert_at(insert_index, key, value)?;
+        self.data.insert_at(insert_index, key, value)?;
 
         Ok(())
-    }
-
-    fn move_entries(&mut self, start_index: usize, offset: isize) {
-        let move_start_offset = self.entry_offset(start_index).unwrap();
-        let move_end_offset = self.used_size();
-        let data_to_move = self.data[move_start_offset..move_end_offset].to_vec();
-
-        self.data[move_start_offset.strict_add_signed(offset)
-            ..move_end_offset.strict_add_signed(offset)]
-            .copy_from_slice(&data_to_move);
-    }
-
-    fn insert_at(&mut self, index: usize, key: TKey, value: &[u8]) -> Result<(), TreeError> {
-        assert!(self.can_fit(value.len()));
-
-        let entry_offset = if index < self.len() {
-            let entry_size = self.entry_size_for_value_size(value.len());
-
-            self.move_entries(index, entry_size as isize);
-            self.entry_offset(index).unwrap()
-        } else {
-            self.used_size()
-        };
-
-        let key_hole: &mut [u8] = &mut self.data[entry_offset..entry_offset + size_of::<TKey>()];
-
-        key_hole.copy_from_slice(bytes_of(&key));
-
-        let value_size_hole = &mut self.data
-            [entry_offset + size_of::<TKey>()..entry_offset + size_of::<TKey>() + size_of::<u64>()];
-
-        value_size_hole.copy_from_slice(bytes_of(&(value.len() as u64)));
-
-        let value_hole = &mut self.data[entry_offset + size_of::<TKey>() + size_of::<u64>()
-            ..entry_offset + size_of::<TKey>() + size_of::<u64>() + value.len()];
-
-        value_hole.copy_from_slice(value);
-
-        self.header.key_count += 1;
-
-        Ok(())
-    }
-
-    fn delete_at(&mut self, index: usize) {
-        let size = self.entry_size(index).unwrap();
-
-        if index + 1 < self.len() {
-            self.move_entries(index + 1, -(size as isize));
-        }
-
-        self.header.key_count -= 1;
-    }
-
-    pub fn can_fit(&self, value_size: usize) -> bool {
-        self.used_size() + self.entry_size_for_value_size(value_size) < (self.data.len())
     }
 
     pub fn split(&'_ mut self) -> LeafNodeBuilder<TKey, (), MaterializedData<'_, TKey>> {
-        let initial_len = self.len();
+        let initial_len = self.data.len();
         assert!(initial_len > 0, "Trying to split an empty node");
 
         // TODO this should be based on size and not indices to keep balance in case of unbalanced
@@ -259,12 +131,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         let entries_to_leave = initial_len.div_ceil(2);
         let entries_to_move = initial_len - entries_to_leave;
 
-        let move_start_offset = self.entry_offset(entries_to_leave).unwrap();
-        let moved_entries_end = self.used_size();
-
-        let new_node_entries = &self.data[move_start_offset..moved_entries_end];
-
-        self.header.key_count = entries_to_leave as u16;
+        let new_node_entries = self.data.split_at(entries_to_leave);
 
         LeafNodeBuilder::new().with_data(MaterializedData::new(entries_to_move, new_node_entries))
     }
@@ -281,7 +148,15 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     }
 
     pub(in crate::bplustree) fn first_key(&self) -> Option<TKey> {
-        self.entry(0).map(|x| x.key)
+        self.entry(0).map(|x| x.key())
+    }
+
+    pub(crate) fn can_fit(&self, value_size: usize) -> bool {
+        self.data.can_fit(value_size)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.data.len()
     }
 }
 
@@ -310,47 +185,13 @@ struct LeafNodeHeader {
     next: PageIndex,
 }
 
-pub(in crate::bplustree) struct LeafNodeEntry<'node, TKey> {
-    key: TKey,
-    value: &'node [u8],
-}
-
-impl<'node, TKey: Copy> LeafNodeEntry<'node, TKey> {
-    pub fn key(&self) -> TKey {
-        self.key
-    }
-
-    pub fn value(&self) -> &'node [u8] {
-        self.value
-    }
-}
-
-struct LeafNodeEntryIterator<'node, TKey: Pod> {
-    node: &'node LeafNode<TKey>,
-    offset: usize,
-}
-
-impl<'node, TKey: Pod + Ord + 'node> Iterator for LeafNodeEntryIterator<'node, TKey> {
-    type Item = LeafNodeEntry<'node, TKey>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.offset >= self.node.len() {
-            return None;
-        }
-
-        self.offset += 1;
-
-        self.node.entry(self.offset - 1)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
 
     fn collect_entries<TKey: Pod + Ord>(node: &LeafNode<TKey>) -> Vec<(TKey, Vec<u8>)> {
         node.entries()
-            .map(|x| (x.key, x.value.to_vec()))
+            .map(|x| (x.key(), x.value().to_vec()))
             .collect::<Vec<_>>()
     }
 

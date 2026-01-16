@@ -4,7 +4,10 @@ use bytemuck::Pod;
 
 use crate::bplustree::{
     InteriorNodeId, LeafNode, LeafNodeId,
-    node::{NodeFlags, NodeHeader, leaf::LeafNodeHeader},
+    node::{
+        NodeFlags, NodeHeader,
+        leaf::{LeafNodeHeader, entries::LeafNodeEntries},
+    },
 };
 
 pub(in crate::bplustree) trait Topology {
@@ -114,13 +117,13 @@ impl<TKey, TTopology, TData> LeafNodeBuilder<TKey, TTopology, TData> {
     }
 }
 
-impl<'data, TKey: Pod, TTopology: Topology, TData: Data<'data, TKey>>
+impl<'data, TKey: Pod + Ord, TTopology: Topology, TData: Data<'data, TKey>>
     LeafNodeBuilder<TKey, TTopology, TData>
 {
     pub fn build(self) -> LeafNode<TKey> {
-        let mut node = LeafNode {
+        LeafNode {
             header: NodeHeader {
-                key_count: self.data.entry_count() as u16,
+                key_count: 0,
                 flags: NodeFlags::empty(),
                 _unused2: 0,
                 parent: self.topology.parent().into(),
@@ -129,11 +132,7 @@ impl<'data, TKey: Pod, TTopology: Topology, TData: Data<'data, TKey>>
                 previous: self.topology.previous().into(),
                 next: self.topology.next().into(),
             },
-            data: [0; _],
-            _key: PhantomData,
-        };
-        node.data[0..self.data.data().len()].copy_from_slice(self.data.data());
-
-        node
+            data: LeafNodeEntries::from_data(self.data.entry_count(), self.data.data()),
+        }
     }
 }
