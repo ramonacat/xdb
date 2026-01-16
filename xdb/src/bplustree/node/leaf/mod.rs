@@ -51,11 +51,11 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         }
     }
 
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         usize::from(self.header.key_count)
     }
 
-    fn entry(&self, index: usize) -> Option<LeafNodeEntry<'_, TKey>> {
+    pub fn entry(&self, index: usize) -> Option<LeafNodeEntry<'_, TKey>> {
         if index >= usize::from(self.header.key_count) {
             return None;
         }

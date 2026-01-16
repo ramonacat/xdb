@@ -68,16 +68,12 @@ impl<'tree, T: Storage, TKey: Pod + Ord, const REVERSE: bool> Iterator
         let read_result = self
             .transaction
             .read_node(self.current_leaf, |node| {
-                // TODO expose an API on node that will allow us to avoid collecting all the
-                // entries here
-                let entries = node.entries().collect::<Vec<_>>();
-
                 let entry = if !REVERSE {
-                    entries.get(self.index)
-                } else if entries.is_empty() || self.index >= entries.len() {
+                    node.entry(self.index)
+                } else if node.len() == 0 || self.index >= node.len() {
                     None
                 } else {
-                    Some(&entries[entries.len() - self.index - 1])
+                    node.entry(node.len() - self.index - 1)
                 };
 
                 match entry {
