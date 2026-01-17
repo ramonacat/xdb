@@ -81,7 +81,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         }
     }
 
-    pub fn delete(&mut self, key: TKey) -> Option<Vec<u8>> {
+    pub fn delete(&mut self, key: TKey) -> Option<(Vec<u8>, bool)> {
         let index = self.find(key)?;
 
         let entry = self.entry(index).unwrap();
@@ -89,7 +89,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 
         self.data.delete_at(index);
 
-        Some(result)
+        Some((result, self.data.needs_merge()))
     }
 
     pub fn find(&self, key: TKey) -> Option<usize> {
@@ -178,6 +178,19 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
 
     pub(crate) fn len(&self) -> usize {
         self.data.len()
+    }
+
+    pub(crate) fn merge_from(&mut self, right: &mut LeafNode<TKey>) {
+        // TODO we can optimize this merge as it can be a straight data copy, as the entries on the
+        // right are already sorted and greater than ours
+        for entry in right.entries() {
+            self.insert(entry.key(), entry.value()).unwrap();
+        }
+        self.set_links(self.parent(), self.previous(), right.next());
+    }
+
+    pub(crate) fn can_fit_merge(&self, right: &LeafNode<TKey>) -> bool {
+        self.data.can_fit_merge(right.data)
     }
 }
 

@@ -216,4 +216,12 @@ impl<TKey: Pod + Ord> LeafNodeEntries<TKey> {
 
         entries
     }
+
+    pub(super) fn needs_merge(&self) -> bool {
+        self.used_size() * 2 < self.data.len()
+    }
+
+    pub(crate) fn can_fit_merge(&self, other: LeafNodeEntries<TKey>) -> bool {
+        self.used_size() + other.used_size() <= self.data.len()
+    }
 }

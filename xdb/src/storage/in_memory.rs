@@ -44,6 +44,19 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         Ok(write(page))
     }
 
+    fn write_many<T>(
+        &self,
+        indices: (PageIndex, PageIndex),
+        write: impl FnOnce(&mut Page, &mut Page) -> T,
+    ) -> Result<T, StorageError> {
+        let mut storage = self.storage.pages.write().unwrap();
+        let [p0, p1] = storage
+            .get_disjoint_mut([indices.0.0 as usize, indices.1.0 as usize])
+            .unwrap();
+
+        Ok(write(p0, p1))
+    }
+
     fn read<TReturn>(
         &self,
         index: PageIndex,
@@ -180,6 +193,14 @@ pub mod test {
             self.1.fetch_add(1, Ordering::Relaxed);
 
             self.0.insert_reserved(reservation, page)
+        }
+
+        fn write_many<TReturn>(
+            &self,
+            indices: (PageIndex, PageIndex),
+            write: impl FnOnce(&mut Page, &mut Page) -> TReturn,
+        ) -> Result<TReturn, StorageError> {
+            self.0.write_many(indices, write)
         }
     }
 

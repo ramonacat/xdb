@@ -45,13 +45,13 @@ pub fn run_ops<T: Pod + Eq + Display + Ord>(actions: &[TreeAction<T>]) {
             match action {
                 TreeAction::Insert { key, value } => {
                     result += &format!(
-                        "(BigKey::new({}), vec![0u8; {}]),\n",
+                        "TestAction::Insert(BigKey::new({}), vec![0u8; {}]),\n",
                         key.value(),
                         value.0.len()
                     )
                 }
-                TreeAction::Delete { key: _ } => {
-                    // TODO add deletes here
+                TreeAction::Delete { key } => {
+                    result += &format!("TestAction::Delete(BigKey::new({})),\n", key.value());
                 }
             }
         }

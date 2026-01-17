@@ -42,6 +42,13 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
         write: impl FnOnce(&mut Page) -> T,
     ) -> Result<T, StorageError>;
 
+    // TODO implement for more than 2 indices
+    fn write_many<T>(
+        &self,
+        indices: (PageIndex, PageIndex),
+        write: impl FnOnce(&mut Page, &mut Page) -> T,
+    ) -> Result<T, StorageError>;
+
     fn reserve(&self) -> Result<TPageReservation, StorageError>;
 
     fn insert_reserved(

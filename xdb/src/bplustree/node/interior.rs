@@ -152,31 +152,45 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
 
         debug_assert!(bytes_of(key) != vec![0; size_of::<TKey>()]);
 
-        self.key_count += 1;
-
         let key_offset = size_of::<TKey>() * (index);
         let value_offset = self.values_offset() + size_of::<PageIndex>() * (index + 1);
 
-        let keys_to_move =
-            &self.data[key_offset..key_offset + size_of::<TKey>() * (key_len - index)].to_vec();
-
-        self.data
-            [key_offset + size_of::<TKey>()..key_offset + size_of::<TKey>() + keys_to_move.len()]
-            .copy_from_slice(keys_to_move);
-
-        let values_to_move = &self.data
-            [value_offset..value_offset + (key_len - index) * size_of::<PageIndex>()]
-            .to_vec();
-
-        assert!(key_offset + size_of::<TKey>() + keys_to_move.len() < self.values_offset());
-
-        self.data[value_offset + size_of::<PageIndex>()
-            ..value_offset + (key_len - index + 1) * size_of::<PageIndex>()]
-            .copy_from_slice(values_to_move);
+        self.move_keys(index, size_of::<TKey>() as isize);
+        self.move_values(index + 1, size_of::<PageIndex>() as isize);
 
         self.data[key_offset..key_offset + size_of::<TKey>()].copy_from_slice(bytes_of(key));
         self.data[value_offset..value_offset + size_of::<PageIndex>()]
             .copy_from_slice(bytes_of(&value.page()));
+
+        self.key_count += 1;
+    }
+
+    fn move_keys(&mut self, start_index: usize, offset: isize) {
+        let start_offset = start_index * size_of::<TKey>();
+        let end_offset = self.key_count() * size_of::<TKey>();
+
+        assert!(end_offset < self.values_offset());
+
+        let keys_to_move = self.data[start_offset..end_offset].to_vec();
+
+        let target_end_offset = end_offset.strict_add_signed(offset);
+        assert!(target_end_offset < self.values_offset());
+        self.data[start_offset.strict_add_signed(offset)..target_end_offset]
+            .copy_from_slice(&keys_to_move);
+    }
+
+    fn move_values(&mut self, start_index: usize, offset: isize) {
+        let start_offset = self.values_offset() + size_of::<PageIndex>() * start_index;
+        let end_offset = self.values_offset() + size_of::<PageIndex>() * (self.key_count() + 1);
+
+        let values_to_move = self.data[start_offset..end_offset].to_vec();
+
+        let target_start_offset = start_offset.strict_add_signed(offset);
+
+        assert!(target_start_offset >= self.values_offset());
+
+        self.data[target_start_offset..end_offset.strict_add_signed(offset)]
+            .copy_from_slice(&values_to_move);
     }
 
     pub(in crate::bplustree) fn value_at(&self, index: usize) -> Option<AnyNodeId> {
@@ -204,6 +218,32 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
 
     pub(crate) fn values(&self) -> impl Iterator<Item = AnyNodeId> {
         (0..(self.key_count() + 1)).map(|x| self.value_at(x).unwrap())
+    }
+
+    fn delete_at(&mut self, index: usize) {
+        assert!(index > 0); // TODO we should handle this situation as well
+
+        if index < self.key_count() {
+            self.move_keys(index, -(size_of::<TKey>() as isize));
+            self.move_values(index + 1, -(size_of::<PageIndex>() as isize));
+        }
+
+        self.key_count -= 1;
+    }
+
+    pub(crate) fn delete(&mut self, child: AnyNodeId) {
+        let mut delete_index = None;
+        for (index, value) in self.values().enumerate() {
+            if value == child {
+                delete_index = Some(index);
+                break;
+            }
+        }
+
+        if let Some(delete_index) = delete_index {
+            dbg!(delete_index);
+            self.delete_at(delete_index);
+        }
     }
 }
 
