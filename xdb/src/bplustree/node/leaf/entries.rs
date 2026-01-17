@@ -64,8 +64,8 @@ impl<'node, TKey: Pod + Ord + 'node> Iterator for LeafNodeEntryIterator<'node, T
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
 pub struct LeafNodeEntries<TKey> {
+    data: [u8; LEAF_NODE_DATA_SIZE - size_of::<u16>()],
     len: u16,
-    data: [u8; LEAF_NODE_DATA_SIZE - size_of::<u64>()],
     _key: PhantomData<TKey>,
 }
 
