@@ -81,6 +81,27 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         }
     }
 
+    pub fn delete(&mut self, key: TKey) -> Option<Vec<u8>> {
+        let index = self.find(key)?;
+
+        let entry = self.entry(index).unwrap();
+        let result = entry.value().to_vec();
+
+        self.data.delete_at(index);
+
+        Some(result)
+    }
+
+    pub fn find(&self, key: TKey) -> Option<usize> {
+        for (index, entry) in self.entries().enumerate() {
+            if entry.key() == key {
+                return Some(index);
+            }
+        }
+
+        None
+    }
+
     pub fn insert(&mut self, key: TKey, value: &[u8]) -> Result<(), TreeError> {
         let mut insert_index = self.data.len();
 

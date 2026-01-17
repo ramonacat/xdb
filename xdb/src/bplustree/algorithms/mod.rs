@@ -1,3 +1,4 @@
+pub mod delete;
 pub mod insert;
 
 use crate::bplustree::node::AnyNodeKind;

@@ -3,6 +3,7 @@ use bytemuck::Pod;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display};
 use xdb::bplustree::Tree;
+use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::insert::insert;
 use xdb::debug::BigKey;
 use xdb::storage::in_memory::InMemoryStorage;
@@ -32,6 +33,7 @@ impl<'a> Arbitrary<'a> for Value {
 #[derive(Debug, Arbitrary)]
 pub enum TreeAction<T: Pod + Display> {
     Insert { key: BigKey<T>, value: Value },
+    Delete { key: BigKey<T> },
 }
 
 pub fn run_ops<T: Pod + Eq + Display + Ord>(actions: &[TreeAction<T>]) {
@@ -47,6 +49,9 @@ pub fn run_ops<T: Pod + Eq + Display + Ord>(actions: &[TreeAction<T>]) {
                         key.value(),
                         value.0.len()
                     )
+                }
+                TreeAction::Delete { key: _ } => {
+                    // TODO add deletes here
                 }
             }
         }
@@ -66,6 +71,12 @@ pub fn run_ops<T: Pod + Eq + Display + Ord>(actions: &[TreeAction<T>]) {
             TreeAction::Insert { key, value } => {
                 insert(&transaction, *key, &value.0).unwrap();
                 rust_btree.insert(key, value);
+            }
+            TreeAction::Delete { key } => {
+                let deleted = delete(&transaction, *key).unwrap();
+                let deleted2 = rust_btree.remove(key);
+
+                assert!(deleted.map(Value).as_ref() == deleted2)
             }
         };
     }

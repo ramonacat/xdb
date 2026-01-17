@@ -182,7 +182,9 @@ mod test {
     };
 
     use crate::{
-        bplustree::algorithms::insert::insert, debug::BigKey, storage::in_memory::InMemoryStorage,
+        bplustree::algorithms::{delete::delete, insert::insert},
+        debug::BigKey,
+        storage::in_memory::InMemoryStorage,
     };
     use pretty_assertions::assert_eq;
     use tempfile::NamedTempFile;
@@ -750,5 +752,23 @@ mod test {
             (BigKey::new(18446736545355923455), vec![0u8; 1024]),
         ];
         test_from_data(data);
+    }
+
+    #[test]
+    fn simple_delete() {
+        let storage = InMemoryStorage::new();
+        let tree = Tree::new(storage).unwrap();
+        let transaction = tree.transaction().unwrap();
+
+        insert(&transaction, BigKey::new(1), &[1, 2, 3]).unwrap();
+        insert(&transaction, BigKey::new(2), &[4, 5, 6]).unwrap();
+
+        let deleted_value = delete(&transaction, BigKey::new(2)).unwrap();
+        assert_eq!(deleted_value, Some(vec![4, 5, 6]));
+
+        assert_eq!(
+            tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),
+            &[(BigKey::new(1), vec![1, 2, 3])]
+        );
     }
 }
