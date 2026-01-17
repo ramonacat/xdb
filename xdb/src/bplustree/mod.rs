@@ -182,7 +182,7 @@ mod test {
     };
 
     use crate::{
-        bplustree::algorithms::insert, debug::BigKey, storage::in_memory::InMemoryStorage,
+        bplustree::algorithms::insert::insert, debug::BigKey, storage::in_memory::InMemoryStorage,
     };
     use pretty_assertions::assert_eq;
     use tempfile::NamedTempFile;

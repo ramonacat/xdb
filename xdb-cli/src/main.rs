@@ -5,7 +5,7 @@ use std::sync::{
 };
 
 use xdb::{
-    bplustree::{Tree, algorithms::insert},
+    bplustree::{Tree, algorithms::insert::insert},
     debug::BigKey,
     storage::in_memory::{InMemoryStorage, test::TestStorage},
 };

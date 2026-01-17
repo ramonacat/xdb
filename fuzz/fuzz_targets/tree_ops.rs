@@ -3,7 +3,7 @@ use bytemuck::Pod;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display};
 use xdb::bplustree::Tree;
-use xdb::bplustree::algorithms::insert;
+use xdb::bplustree::algorithms::insert::insert;
 use xdb::debug::BigKey;
 use xdb::storage::in_memory::InMemoryStorage;
 
