@@ -8,8 +8,10 @@ arbitrary = { version = "1.4.2", features = ["derive"] }
 bitflags = { version = "2.10.0", features = ["bytemuck"] }
 bytemuck = { version = "1.24.0", features = ["derive", "min_const_generics", "must_cast"] }
 crc32c = "0.6.8"
+log = "0.4.29"
 thiserror = "2.0.17"
 
 [dev-dependencies]
+env_logger = "0.11.8"
 pretty_assertions = "1.4.1"
 tempfile = "3.24.0"

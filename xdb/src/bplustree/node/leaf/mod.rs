@@ -1,6 +1,8 @@
 pub(in crate::bplustree) mod builder;
 mod entries;
 
+use std::fmt::Debug;
+
 use bytemuck::{Pod, Zeroable};
 
 use crate::{
@@ -36,7 +38,11 @@ where
     data: LeafNodeEntries<TKey>,
 }
 
-impl<TKey: Pod + Ord> LeafNode<TKey> {
+// SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
+// automatically if not for the PhantomData
+unsafe impl<TKey: Pod> Pod for LeafNode<TKey> {}
+
+impl<TKey: Pod + Ord + Debug> LeafNode<TKey> {
     pub fn new() -> Self {
         Self {
             header: NodeHeader {
@@ -125,7 +131,7 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
         let size_increase = value.len().saturating_sub(
             delete_index
                 .and_then(|x| self.data.entry(x))
-                .map(|x| x.total_size())
+                .map(|x| x.value_size())
                 .unwrap_or(0),
         );
 
@@ -194,10 +200,6 @@ impl<TKey: Pod + Ord> LeafNode<TKey> {
     }
 }
 
-// SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
-// automatically if not for the PhantomData
-unsafe impl<TKey: Pod> Pod for LeafNode<TKey> {}
-
 impl<TKey: Pod> Node<TKey> for LeafNode<TKey> {
     fn parent(&self) -> Option<InteriorNodeId> {
         if self.header.parent == PageIndex::zero() {
@@ -219,11 +221,13 @@ struct LeafNodeHeader {
     next: PageIndex,
 }
 
+const _: () = assert!(size_of::<LeafNodeHeader>() == size_of::<u64>() * 2);
+
 #[cfg(test)]
 mod test {
     use super::*;
 
-    fn collect_entries<TKey: Pod + Ord>(node: &LeafNode<TKey>) -> Vec<(TKey, Vec<u8>)> {
+    fn collect_entries<TKey: Pod + Ord + Debug>(node: &LeafNode<TKey>) -> Vec<(TKey, Vec<u8>)> {
         node.entries()
             .map(|x| (x.key(), x.value().to_vec()))
             .collect::<Vec<_>>()

@@ -5,6 +5,7 @@ mod iterator;
 mod node;
 
 use crate::bplustree::iterator::TreeIterator;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use crate::bplustree::iterator::TreeIteratorItem;
@@ -115,7 +116,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
     }
 }
 
-impl<T: Storage, TKey: Pod + Ord> Tree<T, TKey> {
+impl<T: Storage, TKey: Pod + Ord + Debug> Tree<T, TKey> {
     // TODO also create a "new_read" method, or something like that (that reads a tree that already
     // exists from storage)
     pub fn new(mut storage: T) -> Result<Self, TreeError> {
@@ -203,6 +204,7 @@ mod test {
         debug::BigKey,
         storage::in_memory::{InMemoryStorage, test::TestStorage},
     };
+    use log::info;
     use pretty_assertions::assert_eq;
     use tempfile::NamedTempFile;
 
@@ -310,6 +312,8 @@ mod test {
     fn test_from_data<TKey: Pod + Ord + Debug + RefUnwindSafe + Display + UnwindSafe>(
         data: Vec<TestAction<TKey>>,
     ) {
+        let _ = env_logger::builder().is_test(true).try_init();
+
         let storage = InMemoryStorage::new();
         let tree = Tree::new(storage).unwrap();
         let transaction = tree.transaction().unwrap();
@@ -387,7 +391,7 @@ mod test {
             output.write_all(dot_data.as_bytes()).unwrap();
             let output_path = output.keep().unwrap().1;
 
-            eprintln!("dot data written to: {}", output_path.to_string_lossy());
+            info!("dot data written to: {}", output_path.to_string_lossy());
         }
 
         result.unwrap();
@@ -888,6 +892,33 @@ mod test {
             TestAction::Insert(BigKey::new(42788595496386794), vec![0u8; 1]),
             TestAction::Insert(BigKey::new(42784197449905415), vec![0u8; 1]),
             TestAction::Delete(BigKey::new(42784197198217216)),
+        ];
+        test_from_data(data);
+    }
+
+    #[test]
+    fn fuzzer_e() {
+        let data = vec![
+            TestAction::Insert(BigKey::<u64>::new(291326600879931392), vec![0u8; 1]),
+            TestAction::Delete(BigKey::new(3170534137752715140)),
+            TestAction::Insert(BigKey::new(18324302742308257536), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(21673582219952384), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(0), vec![0u8; 9]),
+            TestAction::Insert(BigKey::new(22799473540530176), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(70931692064604160), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(288230378218192896), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(66428094489755648), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(1125901973388800), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(17301504), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(21673741138084352), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(598134325937111040), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(72056704979697474), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(18446744073709551615), vec![0u8; 1]),
+            TestAction::Delete(BigKey::new(18446744073709551611)),
+            TestAction::Insert(BigKey::new(260723), vec![0u8; 28]),
+            TestAction::Insert(BigKey::new(18374822817046724608), vec![0u8; 45]),
+            TestAction::Delete(BigKey::new(18446744073709551615)),
+            TestAction::Delete(BigKey::new(18374755856278355967)),
         ];
         test_from_data(data);
     }

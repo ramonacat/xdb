@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use bytemuck::Pod;
+use log::debug;
 use thiserror::Error;
 
 use crate::{
@@ -16,10 +17,10 @@ enum MergeError {
     #[error("there is not enough capacity in the target node")]
     NotEnoughCapacity,
     #[error("tree error: {0:?}")]
-    Tree(#[from] TreeError)
+    Tree(#[from] TreeError),
 }
 
-fn merge_leaf_with<TStorage: Storage, TKey: Pod + Ord>(
+fn merge_leaf_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<'_, TStorage, TKey>,
     left_id: LeafNodeId,
     right_id: LeafNodeId,
@@ -54,25 +55,24 @@ fn merge_leaf_with<TStorage: Storage, TKey: Pod + Ord>(
 
     // TODO delete the sibling_id node
 
-    eprintln!("merged leaf {left_id:?} with {right_id:?}");
+    debug!("merged leaf {left_id:?} with {right_id:?}");
 
     Ok(())
 }
 
-fn merge_leaf<TStorage: Storage, TKey: Pod + Ord>(
+fn merge_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     leaf_id: LeafNodeId,
 ) -> Result<(), TreeError> {
-    let (next, previous) =
-        transaction.read_node(leaf_id, |x| (x.next(), x.previous()))?;
+    let (next, previous) = transaction.read_node(leaf_id, |x| (x.next(), x.previous()))?;
 
-    if let Some(next) = next{
+    if let Some(next) = next {
         match merge_leaf_with(transaction, leaf_id, next) {
             // TODO check if the parent needs a merge as well
             Ok(_) => return Ok(()),
             Err(err) => match err {
-                MergeError::NotSiblings => {},
-                MergeError::NotEnoughCapacity => {},
+                MergeError::NotSiblings => {}
+                MergeError::NotEnoughCapacity => {}
                 MergeError::Tree(tree_error) => return Err(tree_error),
             },
         }
@@ -83,8 +83,8 @@ fn merge_leaf<TStorage: Storage, TKey: Pod + Ord>(
             // TODO check if the parent needs a merge as well
             Ok(_) => return Ok(()),
             Err(err) => match err {
-                MergeError::NotSiblings => {},
-                MergeError::NotEnoughCapacity => {},
+                MergeError::NotSiblings => {}
+                MergeError::NotEnoughCapacity => {}
                 MergeError::Tree(tree_error) => return Err(tree_error),
             },
         }
@@ -101,7 +101,7 @@ pub fn delete<TStorage: Storage, TKey: Pod + Ord + Debug>(
 
     let result = transaction.write_node(starting_leaf, |node| node.delete(key))?;
 
-    eprintln!("deleted {key:?} from {starting_leaf:?}");
+    debug!("deleted {key:?} from {starting_leaf:?}");
     match result {
         Some((deleted, needs_merge)) => {
             if needs_merge {

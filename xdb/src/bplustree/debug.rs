@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use bytemuck::Pod;
 
 use crate::{
@@ -5,7 +7,7 @@ use crate::{
     storage::Storage,
 };
 
-pub fn assert_properties<TStorage: Storage, TKey: Pod + Ord>(
+pub fn assert_properties<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
 ) {
     if !cfg!(any(debug_assertions, fuzzing)) {
@@ -17,7 +19,7 @@ pub fn assert_properties<TStorage: Storage, TKey: Pod + Ord>(
     // TODO verify the tree is balanced
 }
 
-fn assert_keys_lower_than_parent<TStorage: Storage, TKey: Pod + Ord>(
+fn assert_keys_lower_than_parent<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     start_id: Option<AnyNodeId>,
     start_min_key: Option<TKey>,

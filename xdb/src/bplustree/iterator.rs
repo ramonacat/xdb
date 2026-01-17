@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use bytemuck::Pod;
 
 use crate::{
@@ -18,7 +20,7 @@ pub(super) struct TreeIterator<'tree, T: Storage, TKey> {
     backward_index: usize,
 }
 
-impl<'tree, T: Storage, TKey: Pod + Ord> TreeIterator<'tree, T, TKey> {
+impl<'tree, T: Storage, TKey: Pod + Ord + Debug> TreeIterator<'tree, T, TKey> {
     pub fn new(transaction: TreeTransaction<'tree, T, TKey>) -> Result<Self, TreeError> {
         let root = transaction.get_root()?;
         let starting_leaf_forwards = first_leaf(&transaction, root)?;
@@ -42,7 +44,7 @@ enum IteratorResult<TKey> {
     None,
 }
 
-impl<'tree, T: Storage, TKey: Pod + Ord> Iterator for TreeIterator<'tree, T, TKey> {
+impl<'tree, T: Storage, TKey: Pod + Ord + Debug> Iterator for TreeIterator<'tree, T, TKey> {
     type Item = Result<(TKey, Vec<u8>), TreeError>;
 
     // TODO get rid of all the unwraps!
@@ -87,7 +89,9 @@ impl<'tree, T: Storage, TKey: Pod + Ord> Iterator for TreeIterator<'tree, T, TKe
     }
 }
 
-impl<'tree, T: Storage, TKey: Pod + Ord> DoubleEndedIterator for TreeIterator<'tree, T, TKey> {
+impl<'tree, T: Storage, TKey: Pod + Ord + Debug> DoubleEndedIterator
+    for TreeIterator<'tree, T, TKey>
+{
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.current_forward_leaf == self.current_backward_leaf
             && self.forward_index == self.backward_index

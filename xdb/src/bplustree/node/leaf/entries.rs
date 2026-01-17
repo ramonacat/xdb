@@ -22,6 +22,10 @@ impl<'node, TKey: Copy> LeafNodeEntry<'node, TKey> {
     pub fn total_size(&self) -> usize {
         self.size + size_of::<u64>() + size_of::<TKey>()
     }
+
+    pub(crate) fn value_size(&self) -> usize {
+        self.size
+    }
 }
 
 pub(super) struct LeafNodeEntryIterator<'node, TKey: Pod> {
@@ -61,13 +65,9 @@ impl<'node, TKey: Pod + Ord + 'node> Iterator for LeafNodeEntryIterator<'node, T
 #[repr(C, align(8))]
 pub struct LeafNodeEntries<TKey> {
     len: u16,
-    data: [u8; LEAF_NODE_DATA_SIZE - size_of::<u16>()],
+    data: [u8; LEAF_NODE_DATA_SIZE - size_of::<u64>()],
     _key: PhantomData<TKey>,
 }
-
-// SAFETY: this struct would almost work with auto derive, if not for PhantomData, which doesn't
-// affect the layour
-unsafe impl<TKey: Pod> Pod for LeafNodeEntries<TKey> {}
 
 impl<TKey: Pod + Ord> LeafNodeEntries<TKey> {
     const _ASSERT_SIZE: () = assert!(size_of::<LeafNodeEntries<TKey>>() == LEAF_NODE_DATA_SIZE);
@@ -144,7 +144,7 @@ impl<TKey: Pod + Ord> LeafNodeEntries<TKey> {
     }
 
     pub fn can_fit(&self, value_size: usize) -> bool {
-        self.used_size() + self.entry_size_for_value_size(value_size) < (self.data.len())
+        self.used_size() + self.entry_size_for_value_size(value_size) <= self.data.len()
     }
 
     fn move_entries(&mut self, start_index: usize, offset: isize) {

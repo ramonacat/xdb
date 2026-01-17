@@ -1,7 +1,9 @@
 use crate::bplustree::node::NodeFlags;
 use std::marker::PhantomData;
 
-use bytemuck::{Pod, Zeroable, bytes_of, checked::pod_read_unaligned, from_bytes};
+use bytemuck::{
+    AnyBitPattern, NoUninit, Pod, Zeroable, bytes_of, checked::pod_read_unaligned, from_bytes,
+};
 
 use crate::{
     bplustree::{
@@ -17,17 +19,25 @@ impl From<Option<InteriorNodeId>> for PageIndex {
     }
 }
 
-#[derive(Debug, Zeroable, Clone, Copy)]
+#[derive(Debug, AnyBitPattern, Clone, Copy)]
 #[repr(C, align(8))]
 pub(in crate::bplustree) struct InteriorNode<TKey>
 where
-    TKey: Pod,
+    TKey: Zeroable,
 {
     header: NodeHeader,
+
     key_count: u16,
-    data: [u8; NODE_DATA_SIZE - size_of::<u16>()],
+    _unused1: u16,
+    _unused2: u32,
+
+    data: [u8; NODE_DATA_SIZE - size_of::<u64>()],
     _key: PhantomData<TKey>,
 }
+
+// SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
+// automatically if not for the PhantomData
+unsafe impl<TKey: Zeroable + Copy + 'static> NoUninit for InteriorNode<TKey> {}
 
 impl<TKey: Pod + Ord> InteriorNode<TKey> {
     pub fn new() -> Self {
@@ -39,6 +49,8 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
                 parent: PageIndex::zero(),
             },
             key_count: 0,
+            _unused1: 0,
+            _unused2: 0,
             data: [0; _],
             _key: PhantomData,
         }
@@ -241,15 +253,10 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
         }
 
         if let Some(delete_index) = delete_index {
-            dbg!(delete_index);
             self.delete_at(delete_index);
         }
     }
 }
-
-// SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
-// automatically if not for the PhantomData
-unsafe impl<TKey: Pod> Pod for InteriorNode<TKey> {}
 
 impl<TKey: Pod> Node<TKey> for InteriorNode<TKey> {
     fn parent(&self) -> Option<InteriorNodeId> {

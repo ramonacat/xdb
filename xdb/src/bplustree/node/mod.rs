@@ -7,7 +7,7 @@ use crate::bplustree::node::interior::InteriorNode;
 use crate::bplustree::node::leaf::LeafNode;
 use crate::page::PAGE_DATA_SIZE;
 use crate::storage::PageIndex;
-use bytemuck::{Pod, Zeroable, must_cast_ref};
+use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, must_cast_ref};
 
 pub(super) trait NodeId: Copy + PartialEq {
     type Node<TKey>: Node<TKey>
@@ -132,6 +132,7 @@ pub(super) struct NodeHeader {
     _unused2: u32,
     parent: PageIndex,
 }
+const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>() * 2);
 
 impl NodeHeader {
     fn parent(&self) -> Option<InteriorNodeId> {
@@ -146,7 +147,6 @@ impl NodeHeader {
         self.parent = parent.map_or_else(PageIndex::zero, |x| x.page());
     }
 }
-const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>() * 2);
 
 const NODE_DATA_SIZE: usize = PAGE_DATA_SIZE - size_of::<NodeHeader>();
 
@@ -163,7 +163,7 @@ pub(super) struct AnyNode<TKey> {
 // layout)
 unsafe impl<TKey: Pod> Pod for AnyNode<TKey> {}
 
-pub(super) trait Node<TKey>: Pod {
+pub(super) trait Node<TKey>: AnyBitPattern + NoUninit {
     const _ASSERT_SIZE: () = assert!(size_of::<Self>() == PAGE_DATA_SIZE);
 
     fn parent(&self) -> Option<InteriorNodeId>;

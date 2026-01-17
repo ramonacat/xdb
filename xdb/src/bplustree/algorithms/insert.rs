@@ -1,4 +1,5 @@
 use bytemuck::Pod;
+use log::debug;
 
 use crate::{
     bplustree::{
@@ -30,7 +31,7 @@ fn create_new_root<'storage, TStorage: Storage, TKey: Pod + Ord>(
     Ok(())
 }
 
-fn split_leaf_root<TStorage: Storage, TKey: Pod + Ord>(
+fn split_leaf_root<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
 ) -> Result<(), TreeError> {
     let root_id = transaction.get_root()?;
@@ -97,7 +98,7 @@ fn split_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
 
     match parent {
         Some(parent) => {
-            eprintln!("split interior node {target:?} into new node {new_node_id:?}");
+            debug!("split interior node {target:?} into new node {new_node_id:?}");
             insert_child(transaction, parent, split_key, new_node_id.into())?;
 
             assert_properties(transaction);
@@ -118,7 +119,7 @@ fn split_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
                 split_key,
                 new_node_id.into(),
             )?;
-            eprintln!("created new root {new_root_id:?} at split key {split_key:?}");
+            debug!("created new root {new_root_id:?} at split key {split_key:?}");
 
             assert_properties(transaction);
         }
@@ -176,7 +177,7 @@ fn split_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     }
 
     let split_key = new_leaf.first_key().unwrap();
-    eprintln!(
+    debug!(
         "split {:?} into {:?} at key {:?}",
         target_node_id, new_leaf_id, split_key
     );
@@ -224,7 +225,7 @@ pub fn insert<TStorage: Storage, TKey: Pod + Ord + Debug>(
 
     transaction.write_node(target_node_id, |node| node.insert(key, value))??;
 
-    eprintln!("inserted {key:?} into {target_node_id:?}");
+    debug!("inserted {key:?} into {target_node_id:?}");
 
     assert_properties(transaction);
 

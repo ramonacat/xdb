@@ -1,4 +1,6 @@
-use bytemuck::{Pod, Zeroable, bytes_of, from_bytes, from_bytes_mut, must_cast};
+use bytemuck::{
+    AnyBitPattern, NoUninit, Pod, Zeroable, bytes_of, from_bytes, from_bytes_mut, must_cast,
+};
 use thiserror::Error;
 
 use crate::checksum::Checksum;
@@ -31,7 +33,7 @@ pub struct Page {
 const _: () = assert!(size_of::<Page>() == PAGE_SIZE);
 
 impl Page {
-    pub fn from_data<T: Pod>(data: T) -> Self {
+    pub fn from_data<T: AnyBitPattern + NoUninit>(data: T) -> Self {
         Self {
             header: PageHeader::zeroed(),
             data: must_cast(data),
@@ -68,11 +70,11 @@ impl Page {
         }
     }
 
-    pub fn data<T: Pod>(&self) -> &T {
+    pub fn data<T: AnyBitPattern>(&self) -> &T {
         from_bytes(&self.data)
     }
 
-    pub fn data_mut<T: Pod>(&mut self) -> &mut T {
+    pub fn data_mut<T: AnyBitPattern + NoUninit>(&mut self) -> &mut T {
         from_bytes_mut(&mut self.data)
     }
 }
