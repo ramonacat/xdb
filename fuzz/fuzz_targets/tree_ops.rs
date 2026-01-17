@@ -85,8 +85,9 @@ pub fn run_ops<T: Pod + Eq + Display + Ord>(actions: &[TreeAction<T>]) {
             .map(|x| (**x.0, x.1.0.clone()))
             .map(|x| (x.0, Value(x.1)))
             .collect::<Vec<_>>(),
-        tree.iter_reverse()
+        tree.iter()
             .unwrap()
+            .rev()
             .map(|x| x.unwrap())
             .map(|x| (x.0, Value(x.1)))
             .collect::<Vec<_>>()

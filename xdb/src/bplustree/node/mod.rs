@@ -127,7 +127,6 @@ bitflags::bitflags! {
 #[derive(Debug, Pod, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
 pub(super) struct NodeHeader {
-    // TODO remove this field, it's up to the node to store its own size
     flags: NodeFlags,
     _unused1: u16,
     _unused2: u32,

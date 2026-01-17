@@ -1,12 +1,13 @@
 pub mod algorithms;
 pub mod debug;
 pub mod dot;
+mod iterator;
 mod node;
 
+use crate::bplustree::iterator::TreeIterator;
 use std::marker::PhantomData;
 
-use crate::bplustree::algorithms::first_leaf;
-use crate::bplustree::algorithms::last_leaf;
+use crate::bplustree::iterator::TreeIteratorItem;
 use crate::bplustree::node::AnyNodeId;
 use crate::bplustree::node::InteriorNodeId;
 use crate::bplustree::node::LeafNodeId;
@@ -26,87 +27,6 @@ use thiserror::Error;
 use crate::page::PAGE_DATA_SIZE;
 
 const ROOT_NODE_TAIL_SIZE: usize = PAGE_DATA_SIZE - size_of::<u64>() - size_of::<PageIndex>();
-
-struct TreeIterator<'tree, T: Storage, TKey, const REVERSE: bool> {
-    transaction: TreeTransaction<'tree, T, TKey>,
-    current_leaf: LeafNodeId,
-    index: usize,
-}
-
-impl<'tree, T: Storage, TKey: Pod + Ord, const REVERSE: bool>
-    TreeIterator<'tree, T, TKey, REVERSE>
-{
-    fn new(transaction: TreeTransaction<'tree, T, TKey>) -> Result<Self, TreeError> {
-        let root = transaction.get_root()?;
-        let starting_leaf = if !REVERSE {
-            first_leaf(&transaction, root)?
-        } else {
-            last_leaf(&transaction, root)?
-        };
-
-        Ok(Self {
-            transaction,
-            current_leaf: starting_leaf,
-            index: 0,
-        })
-    }
-}
-
-enum IteratorResult<TKey> {
-    Value(TreeIteratorItem<TKey>),
-    Next,
-    None,
-}
-
-impl<'tree, T: Storage, TKey: Pod + Ord, const REVERSE: bool> Iterator
-    for TreeIterator<'tree, T, TKey, REVERSE>
-{
-    type Item = Result<(TKey, Vec<u8>), TreeError>;
-
-    // TODO get rid of all the unwraps!
-    fn next(&mut self) -> Option<Self::Item> {
-        let read_result = self
-            .transaction
-            .read_node(self.current_leaf, |node| {
-                let entry = if !REVERSE {
-                    node.entry(self.index)
-                } else if node.len() == 0 || self.index >= node.len() {
-                    None
-                } else {
-                    node.entry(node.len() - self.index - 1)
-                };
-
-                match entry {
-                    Some(entry) => {
-                        self.index += 1;
-
-                        IteratorResult::Value(Ok((entry.key(), entry.value().to_vec())))
-                    }
-                    None => {
-                        if let Some(next_leaf) = if !REVERSE {
-                            node.next()
-                        } else {
-                            node.previous()
-                        } {
-                            self.current_leaf = next_leaf;
-                            self.index = 0;
-
-                            IteratorResult::Next
-                        } else {
-                            IteratorResult::None
-                        }
-                    }
-                }
-            })
-            .unwrap();
-
-        match read_result {
-            IteratorResult::Value(x) => Some(x),
-            IteratorResult::Next => self.next(),
-            IteratorResult::None => None,
-        }
-    }
-}
 
 #[derive(Debug)]
 pub struct Tree<T: Storage, TKey> {
@@ -182,8 +102,6 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
     }
 }
 
-type TreeIteratorItem<TKey> = Result<(TKey, Vec<u8>), TreeError>;
-
 impl<T: Storage, TKey: Pod + Ord> Tree<T, TKey> {
     // TODO also create a "new_read" method, or something like that (that reads a tree that already
     // exists from storage)
@@ -200,13 +118,10 @@ impl<T: Storage, TKey: Pod + Ord> Tree<T, TKey> {
         })
     }
 
-    pub fn iter(&self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
-        TreeIterator::<_, _, false>::new(self.transaction()?)
-    }
-
-    // TODO probably should just use iter with DoubleEndedIterator
-    pub fn iter_reverse(&self) -> Result<impl Iterator<Item = TreeIteratorItem<TKey>>, TreeError> {
-        TreeIterator::<_, _, true>::new(self.transaction()?)
+    pub fn iter(
+        &self,
+    ) -> Result<impl DoubleEndedIterator<Item = TreeIteratorItem<TKey>>, TreeError> {
+        TreeIterator::<_, _>::new(self.transaction()?)
     }
 
     pub fn transaction(&self) -> Result<TreeTransaction<'_, T, TKey>, TreeError> {
@@ -389,8 +304,9 @@ mod test {
             );
             assert_eq!(
                 rust_tree.into_iter().rev().collect::<Vec<_>>(),
-                tree.iter_reverse()
+                tree.iter()
                     .unwrap()
+                    .rev()
                     .map(|x| x.unwrap())
                     .collect::<Vec<_>>()
             );
