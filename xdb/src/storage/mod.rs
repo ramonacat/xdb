@@ -49,6 +49,14 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
         write: impl FnOnce(&mut Page, &mut Page) -> T,
     ) -> Result<T, StorageError>;
 
+    // TODO do some type-level magic so that it can just take whatever-sized tuple and still be
+    // called `write_many`
+    fn write_many_3<T>(
+        &self,
+        indices: (PageIndex, PageIndex, PageIndex),
+        write: impl FnOnce(&mut Page, &mut Page, &mut Page) -> T,
+    ) -> Result<T, StorageError>;
+
     fn reserve(&self) -> Result<TPageReservation, StorageError>;
 
     fn insert_reserved(

@@ -27,8 +27,17 @@ pub struct InMemoryTransaction<'storage> {
 impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     for InMemoryTransaction<'storage>
 {
-    fn commit(self) -> Result<(), StorageError> {
-        todo!()
+    fn read<TReturn>(
+        &self,
+        index: PageIndex,
+        read: impl FnOnce(&Page) -> TReturn,
+    ) -> Result<TReturn, StorageError> {
+        let storage = self.storage.pages.read().unwrap();
+        let page = storage
+            .get(index.0 as usize)
+            .ok_or(StorageError::PageNotFound(index))?;
+
+        Ok(read(page))
     }
 
     fn write<T>(
@@ -57,24 +66,21 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         Ok(write(p0, p1))
     }
 
-    fn read<TReturn>(
+    fn write_many_3<T>(
         &self,
-        index: PageIndex,
-        read: impl FnOnce(&Page) -> TReturn,
-    ) -> Result<TReturn, StorageError> {
-        let storage = self.storage.pages.read().unwrap();
-        let page = storage
-            .get(index.0 as usize)
-            .ok_or(StorageError::PageNotFound(index))?;
-
-        Ok(read(page))
-    }
-
-    fn insert(&self, page: Page) -> Result<PageIndex, StorageError> {
+        indices: (PageIndex, PageIndex, PageIndex),
+        write: impl FnOnce(&mut Page, &mut Page, &mut Page) -> T,
+    ) -> Result<T, StorageError> {
         let mut storage = self.storage.pages.write().unwrap();
-        storage.push(page);
+        let [p0, p1, p2] = storage
+            .get_disjoint_mut([
+                indices.0.0 as usize,
+                indices.1.0 as usize,
+                indices.2.0 as usize,
+            ])
+            .unwrap();
 
-        Ok(PageIndex((storage.len() - 1) as u64))
+        Ok(write(p0, p1, p2))
     }
 
     fn reserve<'a>(&'a self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
@@ -101,6 +107,17 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
             .ok_or_else(|| StorageError::PageNotFound(reservation.index()))? = page;
 
         Ok(())
+    }
+
+    fn insert(&self, page: Page) -> Result<PageIndex, StorageError> {
+        let mut storage = self.storage.pages.write().unwrap();
+        storage.push(page);
+
+        Ok(PageIndex((storage.len() - 1) as u64))
+    }
+
+    fn commit(self) -> Result<(), StorageError> {
+        todo!()
     }
 }
 
@@ -155,18 +172,6 @@ pub mod test {
     impl<'a, T: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
         Transaction<'a, TStorage::PageReservation<'a>> for TestTransaction<'a, T, TStorage>
     {
-        fn write<TReturn>(
-            &self,
-            index: PageIndex,
-            write: impl FnOnce(&mut Page) -> TReturn,
-        ) -> Result<TReturn, StorageError> {
-            self.0.write(index, write)
-        }
-
-        fn commit(self) -> Result<(), StorageError> {
-            self.0.commit()
-        }
-
         fn read<TReturn>(
             &self,
             index: PageIndex,
@@ -175,10 +180,28 @@ pub mod test {
             self.0.read(index, read)
         }
 
-        fn insert(&self, page: Page) -> Result<PageIndex, StorageError> {
-            self.1.fetch_add(1, Ordering::Relaxed);
+        fn write<TReturn>(
+            &self,
+            index: PageIndex,
+            write: impl FnOnce(&mut Page) -> TReturn,
+        ) -> Result<TReturn, StorageError> {
+            self.0.write(index, write)
+        }
 
-            self.0.insert(page)
+        fn write_many<TReturn>(
+            &self,
+            indices: (PageIndex, PageIndex),
+            write: impl FnOnce(&mut Page, &mut Page) -> TReturn,
+        ) -> Result<TReturn, StorageError> {
+            self.0.write_many(indices, write)
+        }
+
+        fn write_many_3<TReturn>(
+            &self,
+            indices: (PageIndex, PageIndex, PageIndex),
+            write: impl FnOnce(&mut Page, &mut Page, &mut Page) -> TReturn,
+        ) -> Result<TReturn, StorageError> {
+            self.0.write_many_3(indices, write)
         }
 
         fn reserve(&self) -> Result<TStorage::PageReservation<'a>, StorageError> {
@@ -195,12 +218,14 @@ pub mod test {
             self.0.insert_reserved(reservation, page)
         }
 
-        fn write_many<TReturn>(
-            &self,
-            indices: (PageIndex, PageIndex),
-            write: impl FnOnce(&mut Page, &mut Page) -> TReturn,
-        ) -> Result<TReturn, StorageError> {
-            self.0.write_many(indices, write)
+        fn insert(&self, page: Page) -> Result<PageIndex, StorageError> {
+            self.1.fetch_add(1, Ordering::Relaxed);
+
+            self.0.insert(page)
+        }
+
+        fn commit(self) -> Result<(), StorageError> {
+            self.0.commit()
         }
     }
 

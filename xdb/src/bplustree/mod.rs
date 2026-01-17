@@ -101,6 +101,23 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
             })?)
     }
 
+    // TODO do some type magic so we can call it just write_nodes and accept tuples of varying
+    // sizes
+    fn write_nodes_3<TReturn, T1: NodeId, T2: NodeId, T3: NodeId>(
+        &self,
+        indices: (T1, T2, T3),
+        write: impl for<'node> FnOnce(
+            &mut T1::Node<TKey>,
+            &mut T2::Node<TKey>,
+            &mut T3::Node<TKey>,
+        ) -> TReturn,
+    ) -> Result<TReturn, TreeError> {
+        Ok(self.transaction.write_many_3(
+            (indices.0.page(), indices.1.page(), indices.2.page()),
+            |page1, page2, page3| write(page1.data_mut(), page2.data_mut(), page3.data_mut()),
+        )?)
+    }
+
     fn reserve_node(&self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
         Ok(self.transaction.reserve()?)
     }
@@ -246,13 +263,27 @@ mod test {
     fn insert_multiple_nodes() {
         let mut data = vec![];
 
-        for i in 0..5000 {
+        for i in 0..1024 {
             // make the value bigger with repeat so fewer inserts are needed and the test runs faster
             data.push(TestAction::Insert(
                 BigKey::<usize>::new(i),
                 (u16::max_value() - i as u16).to_be_bytes().repeat(8),
             ));
         }
+
+        test_from_data(data);
+    }
+
+    #[test]
+    fn delete_first_from_big_tree() {
+        let mut data = vec![];
+
+        for i in 0..256 {
+            // make the value bigger with repeat so fewer inserts are needed and the test runs faster
+            data.push(TestAction::Insert(BigKey::<usize>::new(i), vec![0; i % 8]));
+        }
+
+        data.push(TestAction::Delete(BigKey::new(0)));
 
         test_from_data(data);
     }

@@ -103,6 +103,10 @@ impl InteriorNodeId {
 
         Self(index)
     }
+
+    pub(crate) fn from_any(other: AnyNodeId) -> InteriorNodeId {
+        Self::new(other.0)
+    }
 }
 
 impl NodeId for InteriorNodeId {

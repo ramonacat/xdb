@@ -5,7 +5,9 @@ use log::debug;
 use thiserror::Error;
 
 use crate::{
-    bplustree::{LeafNodeId, Node, TreeError, TreeTransaction, algorithms::leaf_search},
+    bplustree::{
+        InteriorNodeId, LeafNodeId, Node, TreeError, TreeTransaction, algorithms::leaf_search,
+    },
     storage::Storage,
 };
 
@@ -60,16 +62,92 @@ fn merge_leaf_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
     Ok(())
 }
 
+fn merge_interior_node_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
+    transaction: &TreeTransaction<TStorage, TKey>,
+    left_id: InteriorNodeId,
+    right_id: InteriorNodeId,
+    parent_id: InteriorNodeId,
+) -> Result<(), MergeError> {
+    transaction.write_nodes_3((left_id, right_id, parent_id), |left, right, parent| {
+        if left.parent() != right.parent() || left.parent() != Some(parent_id) {
+            return Err(MergeError::NotSiblings);
+        }
+
+        if !left.can_fit_merge(right) {
+            return Err(MergeError::NotEnoughCapacity);
+        }
+
+        left.merge_from(right);
+        parent.remove_value(right_id.into());
+
+        Ok(())
+    })?
+}
+
+fn merge_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
+    transaction: &TreeTransaction<TStorage, TKey>,
+    node_id: InteriorNodeId,
+) -> Result<(), TreeError> {
+    if !transaction.read_node(node_id, |node| node.needs_merge())? {
+        return Ok(());
+    }
+
+    let parent_id = transaction.read_node(node_id, |node| node.parent())?;
+    let Some(parent_id) = parent_id else {
+        return Ok(());
+    };
+
+    let index_in_parent =
+        transaction.read_node(parent_id, |x| x.find_value_index(node_id.into()).unwrap())?;
+
+    if index_in_parent > 0 {
+        let left =
+            transaction.read_node(parent_id, |x| x.value_at(index_in_parent - 1).unwrap())?;
+        let left = InteriorNodeId::from_any(left);
+
+        match merge_interior_node_with(transaction, left, node_id, parent_id) {
+            Ok(()) => return Ok(()),
+            Err(MergeError::NotEnoughCapacity) => {}
+            Err(MergeError::NotSiblings) => todo!(), // this should probably just panic?
+            Err(MergeError::Tree(err)) => return Err(err),
+        };
+    }
+
+    let right_id =
+        transaction.read_node(parent_id, |parent| parent.value_at(index_in_parent + 1))?;
+
+    if let Some(right_id) = right_id {
+        let right_id = InteriorNodeId::from_any(right_id);
+
+        match merge_interior_node_with(transaction, node_id, right_id, parent_id) {
+            Ok(()) => return Ok(()),
+            Err(MergeError::NotEnoughCapacity) => {}
+            Err(MergeError::NotSiblings) => todo!(), // this should probably just panic?
+            Err(MergeError::Tree(err)) => return Err(err),
+        };
+    }
+
+    merge_interior_node(transaction, parent_id)?;
+
+    Ok(())
+}
+
 fn merge_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     leaf_id: LeafNodeId,
 ) -> Result<(), TreeError> {
-    let (next, previous) = transaction.read_node(leaf_id, |x| (x.next(), x.previous()))?;
+    let (next, previous, parent) =
+        transaction.read_node(leaf_id, |x| (x.next(), x.previous(), x.parent()))?;
 
     if let Some(next) = next {
         match merge_leaf_with(transaction, leaf_id, next) {
-            // TODO check if the parent needs a merge as well
-            Ok(_) => return Ok(()),
+            Ok(_) => {
+                if let Some(parent) = parent {
+                    merge_interior_node(transaction, parent)?;
+                }
+
+                return Ok(());
+            }
             Err(err) => match err {
                 MergeError::NotSiblings => {}
                 MergeError::NotEnoughCapacity => {}
@@ -80,8 +158,13 @@ fn merge_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
 
     if let Some(previous) = previous {
         match merge_leaf_with(transaction, previous, leaf_id) {
-            // TODO check if the parent needs a merge as well
-            Ok(_) => return Ok(()),
+            Ok(_) => {
+                if let Some(parent) = parent {
+                    merge_interior_node(transaction, parent)?;
+                }
+
+                return Ok(());
+            }
             Err(err) => match err {
                 MergeError::NotSiblings => {}
                 MergeError::NotEnoughCapacity => {}

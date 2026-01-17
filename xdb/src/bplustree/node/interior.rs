@@ -256,6 +256,37 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
             self.delete_at(delete_index);
         }
     }
+
+    pub(crate) fn needs_merge(&self) -> bool {
+        // TODO extract the raw byte operations into InteriorNodeData<TKey>
+        2 * (self.key_count() * size_of::<TKey>() + (self.key_count() + 1) * size_of::<PageIndex>())
+            < self.data.len()
+    }
+
+    pub(crate) fn find_value_index(&self, node_id: AnyNodeId) -> Option<usize> {
+        for (index, value) in self.values().enumerate() {
+            if value == node_id {
+                return Some(index);
+            }
+        }
+
+        None
+    }
+
+    pub(crate) fn can_fit_merge(&self, right: &InteriorNode<TKey>) -> bool {
+        self.key_count() + right.key_count() > self.key_capacity()
+    }
+
+    pub(crate) fn merge_from(&self, right: &mut InteriorNode<TKey>) {
+        assert!(self.can_fit_merge(right));
+    }
+
+    // TODO rename -> delete_value for consistency
+    pub(crate) fn remove_value(&mut self, value: AnyNodeId) {
+        let index = self.find_value_index(value).unwrap();
+
+        self.delete_at(index);
+    }
 }
 
 impl<TKey: Pod> Node<TKey> for InteriorNode<TKey> {
