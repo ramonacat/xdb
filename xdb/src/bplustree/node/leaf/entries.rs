@@ -2,7 +2,10 @@ use std::marker::PhantomData;
 
 use bytemuck::{Zeroable, bytes_of, pod_read_unaligned};
 
-use crate::bplustree::{TreeError, TreeKey, node::leaf::LEAF_NODE_DATA_SIZE};
+use crate::bplustree::{
+    TreeError, TreeKey,
+    node::leaf::{LEAF_NODE_DATA_SIZE, builder::MaterializedData},
+};
 
 pub(in crate::bplustree) struct LeafNodeEntry<'node, TKey> {
     key: TKey,
@@ -198,7 +201,26 @@ impl<TKey: TreeKey> LeafNodeEntries<TKey> {
         self.len -= 1;
     }
 
-    pub(crate) fn split_at(&mut self, entries_to_leave: usize) -> &[u8] {
+    pub fn split(&'_ mut self) -> MaterializedData<'_, TKey> {
+        let initial_len = self.len();
+        assert!(initial_len > 0, "Trying to split an empty node");
+
+        let mut entries_to_leave = 0;
+        let mut offset = 0;
+
+        while offset <= self.used_size() / 2 {
+            let entry = self.entry(entries_to_leave).unwrap();
+
+            offset += entry.total_size();
+            entries_to_leave += 1;
+        }
+
+        let entries_to_move = initial_len - entries_to_leave;
+
+        MaterializedData::new(entries_to_move, self.split_at(entries_to_leave))
+    }
+
+    fn split_at(&mut self, entries_to_leave: usize) -> &[u8] {
         let move_start_offset = self.entry_offset(entries_to_leave).unwrap();
         let moved_entries_end = self.used_size();
 

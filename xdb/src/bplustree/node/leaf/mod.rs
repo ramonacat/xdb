@@ -150,17 +150,9 @@ impl<TKey: TreeKey> LeafNode<TKey> {
     }
 
     pub fn split(&'_ mut self) -> LeafNodeBuilder<TKey, (), MaterializedData<'_, TKey>> {
-        let initial_len = self.data.len();
-        assert!(initial_len > 0, "Trying to split an empty node");
+        let new_node_entries = self.data.split();
 
-        // TODO this should be based on size and not indices to keep balance in case of unbalanced
-        // values
-        let entries_to_leave = initial_len.div_ceil(2);
-        let entries_to_move = initial_len - entries_to_leave;
-
-        let new_node_entries = self.data.split_at(entries_to_leave);
-
-        LeafNodeBuilder::new().with_data(MaterializedData::new(entries_to_move, new_node_entries))
+        LeafNodeBuilder::new().with_data(new_node_entries)
     }
 
     pub fn set_links(
@@ -187,11 +179,10 @@ impl<TKey: TreeKey> LeafNode<TKey> {
     }
 
     pub(crate) fn merge_from(&mut self, right: &mut LeafNode<TKey>) {
-        // TODO we can optimize this merge as it can be a straight data copy, as the entries on the
-        // right are already sorted and greater than ours
         for entry in right.entries() {
             self.insert(entry.key(), entry.value()).unwrap();
         }
+
         self.set_links(self.parent(), self.previous(), right.next());
     }
 

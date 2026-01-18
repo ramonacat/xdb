@@ -3,7 +3,6 @@ use crate::{bplustree::TreeKey, page::Page};
 use crate::{bplustree::NodeId, storage::PageIndex};
 
 pub(super) trait NodeIds<const N: usize> {
-    // TODO create a trait for TKey instead of having this constraint repeated all over
     type Nodes<'a, TKey: TreeKey>;
     type NodesMut<'a, TKey: TreeKey>;
 
