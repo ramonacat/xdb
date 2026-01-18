@@ -46,7 +46,7 @@ fn split_leaf_root<TStorage: Storage, TKey: Pod + Ord + Debug>(
     let new_leaf_reservation = transaction.reserve_node()?;
     let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
 
-    let new_leaf = transaction.write_node(root_id, |root| {
+    let new_leaf = transaction.write_nodes(root_id, |root| {
         let new_leaf = root
             .split()
             .with_topology(Some(new_root_id), Some(root_id), None)
@@ -88,10 +88,10 @@ fn split_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
     let new_node_reservation = transaction.reserve_node()?;
     let new_node_id = InteriorNodeId::new(new_node_reservation.index());
 
-    let (split_key, new_node) = transaction.write_node(target, |node| node.split())?;
+    let (split_key, new_node) = transaction.write_nodes(target, |node| node.split())?;
 
     for child in new_node.values() {
-        transaction.write_node(child, |node| node.set_parent(Some(new_node_id)))?;
+        transaction.write_nodes(child, |node| node.set_parent(Some(new_node_id)))?;
     }
 
     transaction.insert_reserved(new_node_reservation, Page::from_data(new_node))?;
@@ -109,8 +109,8 @@ fn split_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
             let new_root_reservation = transaction.reserve_node()?;
             let new_root_id = InteriorNodeId::new(new_root_reservation.index());
 
-            transaction.write_node(target, |node| node.set_parent(Some(new_root_id)))?;
-            transaction.write_node(new_node_id, |node| node.set_parent(Some(new_root_id)))?;
+            transaction.write_nodes(target, |node| node.set_parent(Some(new_root_id)))?;
+            transaction.write_nodes(new_node_id, |node| node.set_parent(Some(new_root_id)))?;
 
             create_new_root(
                 transaction,
@@ -136,8 +136,8 @@ fn insert_child<TStorage: Storage, TKey: Pod + Ord + Debug>(
 ) -> Result<(), TreeError> {
     assert_properties(transaction);
 
-    transaction.write_node(target, |node| node.insert_node(&key, child_id))?;
-    transaction.write_node(child_id, |x| x.set_parent(Some(target)))?;
+    transaction.write_nodes(target, |node| node.insert_node(&key, child_id))?;
+    transaction.write_nodes(child_id, |x| x.set_parent(Some(target)))?;
 
     Ok(())
 }
@@ -157,7 +157,7 @@ fn split_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     let new_leaf_reservation = transaction.reserve_node()?;
     let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
 
-    let new_leaf = transaction.write_node(target_node_id, |target_node| {
+    let new_leaf = transaction.write_nodes(target_node_id, |target_node| {
         let next = target_node.next();
 
         let new_leaf = target_node
@@ -171,7 +171,7 @@ fn split_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     })?;
 
     if let Some(next_leaf) = new_leaf.next() {
-        transaction.write_node(next_leaf, |node| {
+        transaction.write_nodes(next_leaf, |node| {
             node.set_links(node.parent(), Some(new_leaf_id), node.next());
         })?;
     }
@@ -223,7 +223,7 @@ pub fn insert<TStorage: Storage, TKey: Pod + Ord + Debug>(
         }
     }
 
-    transaction.write_node(target_node_id, |node| node.insert(key, value))??;
+    transaction.write_nodes(target_node_id, |node| node.insert(key, value))??;
 
     debug!("inserted {key:?} into {target_node_id:?}");
 

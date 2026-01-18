@@ -46,14 +46,14 @@ fn merge_leaf_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
     })?;
 
     if let Some(next) = next {
-        transaction.write_node(next, |node| {
+        transaction.write_nodes(next, |node| {
             node.set_links(node.parent(), Some(left_id), node.next())
         })?;
     }
 
     let parent_id = transaction.read_node(left_id, |x| x.parent())?.unwrap();
 
-    transaction.write_node(parent_id, |parent| parent.delete(right_id.into()))?;
+    transaction.write_nodes(parent_id, |parent| parent.delete(right_id.into()))?;
 
     // TODO delete the sibling_id node
 
@@ -182,7 +182,7 @@ pub fn delete<TStorage: Storage, TKey: Pod + Ord + Debug>(
 ) -> Result<Option<Vec<u8>>, TreeError> {
     let starting_leaf = leaf_search(transaction, transaction.get_root()?, &key)?;
 
-    let result = transaction.write_node(starting_leaf, |node| node.delete(key))?;
+    let result = transaction.write_nodes(starting_leaf, |node| node.delete(key))?;
 
     debug!("deleted {key:?} from {starting_leaf:?}");
     match result {

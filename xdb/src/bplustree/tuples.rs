@@ -12,6 +12,22 @@ pub(super) trait NodeIds<const N: usize> {
     fn pages_to_nodes_mut<'a, TKey: Pod>(pages: [&'a mut Page; N]) -> Self::NodesMut<'a, TKey>;
 }
 
+impl<T> NodeIds<1> for T
+where
+    T: NodeId,
+{
+    type Nodes<'a, TKey: Pod> = &'a T::Node<TKey>;
+    type NodesMut<'a, TKey: Pod> = &'a mut T::Node<TKey>;
+
+    fn to_page_indices(self) -> [PageIndex; 1] {
+        [self.page()]
+    }
+
+    fn pages_to_nodes_mut<'a, TKey: Pod>(pages: [&'a mut Page; 1]) -> Self::NodesMut<'a, TKey> {
+        pages[0].data_mut()
+    }
+}
+
 impl<T1, T2> NodeIds<2> for (T1, T2)
 where
     T1: NodeId,

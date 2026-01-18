@@ -80,17 +80,6 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
             .read(index.page(), |page| read(page.data()))?)
     }
 
-    fn write_node<TReturn, TNodeId: NodeId>(
-        &self,
-        index: TNodeId,
-        write: impl for<'node> FnOnce(&mut TNodeId::Node<TKey>) -> TReturn,
-    ) -> Result<TReturn, TreeError> {
-        Ok(self
-            .transaction
-            .write(index.page(), |page| write(page.data_mut()))?)
-    }
-
-    // TODO implementations for more than 2 nodes (probably generate with a macro?)
     fn write_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
         &self,
         indices: TIndices,
