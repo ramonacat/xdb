@@ -1,34 +1,33 @@
-use crate::page::Page;
-use bytemuck::Pod;
+use crate::{bplustree::TreeKey, page::Page};
 
 use crate::{bplustree::NodeId, storage::PageIndex};
 
 pub(super) trait NodeIds<const N: usize> {
     // TODO create a trait for TKey instead of having this constraint repeated all over
-    type Nodes<'a, TKey: Pod>;
-    type NodesMut<'a, TKey: Pod>;
+    type Nodes<'a, TKey: TreeKey>;
+    type NodesMut<'a, TKey: TreeKey>;
 
     fn to_page_indices(self) -> [PageIndex; N];
-    fn pages_to_nodes<'a, TKey: Pod>(pages: [&'a Page; N]) -> Self::Nodes<'a, TKey>;
-    fn pages_to_nodes_mut<'a, TKey: Pod>(pages: [&'a mut Page; N]) -> Self::NodesMut<'a, TKey>;
+    fn pages_to_nodes<'a, TKey: TreeKey>(pages: [&'a Page; N]) -> Self::Nodes<'a, TKey>;
+    fn pages_to_nodes_mut<'a, TKey: TreeKey>(pages: [&'a mut Page; N]) -> Self::NodesMut<'a, TKey>;
 }
 
 impl<T> NodeIds<1> for T
 where
     T: NodeId,
 {
-    type Nodes<'a, TKey: Pod> = &'a T::Node<TKey>;
-    type NodesMut<'a, TKey: Pod> = &'a mut T::Node<TKey>;
+    type Nodes<'a, TKey: TreeKey> = &'a T::Node<TKey>;
+    type NodesMut<'a, TKey: TreeKey> = &'a mut T::Node<TKey>;
 
     fn to_page_indices(self) -> [PageIndex; 1] {
         [self.page()]
     }
 
-    fn pages_to_nodes<'a, TKey: Pod>(pages: [&'a Page; 1]) -> Self::Nodes<'a, TKey> {
+    fn pages_to_nodes<'a, TKey: TreeKey>(pages: [&'a Page; 1]) -> Self::Nodes<'a, TKey> {
         pages[0].data()
     }
 
-    fn pages_to_nodes_mut<'a, TKey: Pod>(pages: [&'a mut Page; 1]) -> Self::NodesMut<'a, TKey> {
+    fn pages_to_nodes_mut<'a, TKey: TreeKey>(pages: [&'a mut Page; 1]) -> Self::NodesMut<'a, TKey> {
         pages[0].data_mut()
     }
 }
@@ -38,8 +37,8 @@ where
     T1: NodeId,
     T2: NodeId,
 {
-    type Nodes<'a, TKey: Pod> = (&'a T1::Node<TKey>, &'a T2::Node<TKey>);
-    type NodesMut<'a, TKey: Pod> = (&'a mut T1::Node<TKey>, &'a mut T2::Node<TKey>);
+    type Nodes<'a, TKey: TreeKey> = (&'a T1::Node<TKey>, &'a T2::Node<TKey>);
+    type NodesMut<'a, TKey: TreeKey> = (&'a mut T1::Node<TKey>, &'a mut T2::Node<TKey>);
 
     fn to_page_indices(self) -> [PageIndex; 2] {
         let (i0, i1) = self;
@@ -47,13 +46,13 @@ where
         [i0.page(), i1.page()]
     }
 
-    fn pages_to_nodes<'a, TKey: Pod>(pages: [&'a Page; 2]) -> Self::Nodes<'a, TKey> {
+    fn pages_to_nodes<'a, TKey: TreeKey>(pages: [&'a Page; 2]) -> Self::Nodes<'a, TKey> {
         let [p0, p1] = pages;
 
         (p0.data(), p1.data())
     }
 
-    fn pages_to_nodes_mut<'a, TKey: Pod>(pages: [&'a mut Page; 2]) -> Self::NodesMut<'a, TKey> {
+    fn pages_to_nodes_mut<'a, TKey: TreeKey>(pages: [&'a mut Page; 2]) -> Self::NodesMut<'a, TKey> {
         let [p0, p1] = pages;
         (p0.data_mut(), p1.data_mut())
     }
@@ -65,8 +64,8 @@ where
     T2: NodeId,
     T3: NodeId,
 {
-    type Nodes<'a, TKey: Pod> = (&'a T1::Node<TKey>, &'a T2::Node<TKey>, &'a T3::Node<TKey>);
-    type NodesMut<'a, TKey: Pod> = (
+    type Nodes<'a, TKey: TreeKey> = (&'a T1::Node<TKey>, &'a T2::Node<TKey>, &'a T3::Node<TKey>);
+    type NodesMut<'a, TKey: TreeKey> = (
         &'a mut T1::Node<TKey>,
         &'a mut T2::Node<TKey>,
         &'a mut T3::Node<TKey>,
@@ -78,12 +77,12 @@ where
         [i0.page(), i1.page(), i2.page()]
     }
 
-    fn pages_to_nodes_mut<'a, TKey: Pod>(pages: [&'a mut Page; 3]) -> Self::NodesMut<'a, TKey> {
+    fn pages_to_nodes_mut<'a, TKey: TreeKey>(pages: [&'a mut Page; 3]) -> Self::NodesMut<'a, TKey> {
         let [p0, p1, p2] = pages;
         (p0.data_mut(), p1.data_mut(), p2.data_mut())
     }
 
-    fn pages_to_nodes<'a, TKey: Pod>(pages: [&'a Page; 3]) -> Self::Nodes<'a, TKey> {
+    fn pages_to_nodes<'a, TKey: TreeKey>(pages: [&'a Page; 3]) -> Self::Nodes<'a, TKey> {
         let [p0, p1, p2] = pages;
 
         (p0.data(), p1.data(), p2.data())

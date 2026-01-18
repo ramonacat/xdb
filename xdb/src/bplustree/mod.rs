@@ -29,10 +29,22 @@ use thiserror::Error;
 
 use crate::page::PAGE_DATA_SIZE;
 
+pub trait TreeKey: Debug + Ord + Pod {}
+impl TreeKey for u8 {}
+impl TreeKey for u16 {}
+impl TreeKey for u32 {}
+impl TreeKey for u64 {}
+impl TreeKey for usize {}
+impl TreeKey for i8 {}
+impl TreeKey for i16 {}
+impl TreeKey for i32 {}
+impl TreeKey for i64 {}
+impl TreeKey for isize {}
+
 const ROOT_NODE_TAIL_SIZE: usize = PAGE_DATA_SIZE - size_of::<u64>() - size_of::<PageIndex>();
 
 #[derive(Debug)]
-pub struct Tree<T: Storage, TKey> {
+pub struct Tree<T: Storage, TKey: TreeKey> {
     storage: T,
     _key: PhantomData<TKey>,
 }
@@ -45,7 +57,7 @@ where
     _key: PhantomData<&'storage TKey>,
 }
 
-impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
+impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     TreeTransaction<'storage, TStorage, TKey>
 {
     fn get_root(&self) -> Result<AnyNodeId, TreeError> {
@@ -109,7 +121,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
     }
 }
 
-impl<T: Storage, TKey: Pod + Ord + Debug> Tree<T, TKey> {
+impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
     // TODO also create a "new_read" method, or something like that (that reads a tree that already
     // exists from storage)
     pub fn new(mut storage: T) -> Result<Self, TreeError> {
@@ -183,7 +195,6 @@ impl TreeHeader {
 mod test {
     use std::{
         collections::BTreeMap,
-        fmt::{Debug, Display},
         io::Write,
         panic::{RefUnwindSafe, UnwindSafe, catch_unwind},
         sync::{
@@ -316,9 +327,7 @@ mod test {
         Delete(TKey),
     }
 
-    fn test_from_data<TKey: Pod + Ord + Debug + RefUnwindSafe + Display + UnwindSafe>(
-        data: Vec<TestAction<TKey>>,
-    ) {
+    fn test_from_data<TKey: TreeKey + UnwindSafe + RefUnwindSafe>(data: Vec<TestAction<TKey>>) {
         let _ = env_logger::builder().is_test(true).try_init();
 
         let storage = InMemoryStorage::new();

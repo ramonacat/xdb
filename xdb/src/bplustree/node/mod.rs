@@ -3,8 +3,8 @@ pub(super) mod leaf;
 
 use std::{fmt::Display, marker::PhantomData};
 
-use crate::bplustree::node::interior::InteriorNode;
 use crate::bplustree::node::leaf::LeafNode;
+use crate::bplustree::{TreeKey, node::interior::InteriorNode};
 use crate::page::PAGE_DATA_SIZE;
 use crate::storage::PageIndex;
 use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, must_cast_ref};
@@ -12,7 +12,7 @@ use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, must_cast_ref};
 pub(super) trait NodeId: Copy + PartialEq {
     type Node<TKey>: Node<TKey>
     where
-        TKey: Pod;
+        TKey: TreeKey;
 
     fn page(&self) -> PageIndex;
 }
@@ -50,7 +50,7 @@ impl NodeId for AnyNodeId {
     type Node<TKey>
         = AnyNode<TKey>
     where
-        TKey: Pod;
+        TKey: TreeKey;
 
     fn page(&self) -> PageIndex {
         self.0
@@ -81,7 +81,7 @@ impl NodeId for LeafNodeId {
     type Node<TKey>
         = LeafNode<TKey>
     where
-        TKey: Pod;
+        TKey: TreeKey;
 
     fn page(&self) -> PageIndex {
         self.0
@@ -113,7 +113,7 @@ impl NodeId for InteriorNodeId {
     type Node<TKey>
         = InteriorNode<TKey>
     where
-        TKey: Pod;
+        TKey: TreeKey;
 
     fn page(&self) -> PageIndex {
         self.0
@@ -165,7 +165,7 @@ pub(super) struct AnyNode<TKey> {
 // SAFETY: this struct does not have padding and can be initialized to zero, but can't
 // automatically derive Pod since it contains a PhantomData (which does not actually affect the
 // layout)
-unsafe impl<TKey: Pod> Pod for AnyNode<TKey> {}
+unsafe impl<TKey: TreeKey> Pod for AnyNode<TKey> {}
 
 pub(super) trait Node<TKey>: AnyBitPattern + NoUninit {
     const _ASSERT_SIZE: () = assert!(size_of::<Self>() == PAGE_DATA_SIZE);
@@ -174,7 +174,7 @@ pub(super) trait Node<TKey>: AnyBitPattern + NoUninit {
     fn set_parent(&mut self, parent: Option<InteriorNodeId>);
 }
 
-impl<TKey: Pod> Node<TKey> for AnyNode<TKey> {
+impl<TKey: TreeKey> Node<TKey> for AnyNode<TKey> {
     fn parent(&self) -> Option<InteriorNodeId> {
         self.header.parent()
     }
@@ -184,12 +184,12 @@ impl<TKey: Pod> Node<TKey> for AnyNode<TKey> {
     }
 }
 
-pub(super) enum AnyNodeKind<'node, TKey: Pod> {
+pub(super) enum AnyNodeKind<'node, TKey: TreeKey> {
     Interior(&'node InteriorNode<TKey>),
     Leaf(&'node LeafNode<TKey>),
 }
 
-impl<TKey: Pod> AnyNode<TKey> {
+impl<TKey: TreeKey> AnyNode<TKey> {
     pub fn is_leaf(&self) -> bool {
         !self.header.flags.contains(NodeFlags::INTERNAL)
     }

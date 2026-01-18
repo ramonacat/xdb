@@ -1,9 +1,7 @@
 use std::marker::PhantomData;
 
-use bytemuck::Pod;
-
 use crate::bplustree::{
-    InteriorNodeId, LeafNode, LeafNodeId,
+    InteriorNodeId, LeafNode, LeafNodeId, TreeKey,
     node::{
         NodeFlags, NodeHeader,
         leaf::{LeafNodeHeader, entries::LeafNodeEntries},
@@ -117,7 +115,7 @@ impl<TKey, TTopology, TData> LeafNodeBuilder<TKey, TTopology, TData> {
     }
 }
 
-impl<'data, TKey: Pod + Ord, TTopology: Topology, TData: Data<'data, TKey>>
+impl<'data, TKey: TreeKey, TTopology: Topology, TData: Data<'data, TKey>>
     LeafNodeBuilder<TKey, TTopology, TData>
 {
     pub fn build(self) -> LeafNode<TKey> {

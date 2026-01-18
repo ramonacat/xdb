@@ -1,8 +1,7 @@
 pub mod delete;
 pub mod insert;
 
-use crate::bplustree::node::AnyNodeKind;
-use bytemuck::Pod;
+use crate::bplustree::{TreeKey, node::AnyNodeKind};
 
 use crate::{
     bplustree::{
@@ -12,7 +11,7 @@ use crate::{
     storage::Storage,
 };
 
-pub(super) fn leaf_search<TStorage: Storage, TKey: Pod + Ord>(
+pub(super) fn leaf_search<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     node_index: AnyNodeId,
     key: &TKey,
@@ -39,7 +38,7 @@ pub(super) fn leaf_search<TStorage: Storage, TKey: Pod + Ord>(
     })?
 }
 
-pub(super) fn first_leaf<TStorage: Storage, TKey: Pod + Ord>(
+pub(super) fn first_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> Result<LeafNodeId, TreeError> {
@@ -51,7 +50,7 @@ pub(super) fn first_leaf<TStorage: Storage, TKey: Pod + Ord>(
     })?
 }
 
-pub(super) fn last_leaf<TStorage: Storage, TKey: Pod + Ord>(
+pub(super) fn last_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> Result<LeafNodeId, TreeError> {

@@ -6,13 +6,17 @@ use std::{
 use arbitrary::Arbitrary;
 use bytemuck::{Pod, Zeroable, bytes_of, pod_read_unaligned};
 
+use crate::bplustree::TreeKey;
+
 #[derive(Clone, Copy, Pod, Zeroable, Ord, PartialOrd, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct BigKey<T>([u8; 256], PhantomData<T>);
 
-impl<T: Pod + Display> Debug for BigKey<T> {
+impl<T: TreeKey> TreeKey for BigKey<T> {}
+
+impl<T: Pod + Debug> Debug for BigKey<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BigKey({})", self.value())
+        write!(f, "BigKey({:?})", self.value())
     }
 }
 

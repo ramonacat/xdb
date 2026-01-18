@@ -1,10 +1,9 @@
 use arbitrary::Arbitrary;
-use bytemuck::Pod;
 use std::collections::BTreeMap;
-use std::fmt::{Debug, Display};
-use xdb::bplustree::Tree;
+use std::fmt::Debug;
 use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::insert::insert;
+use xdb::bplustree::{Tree, TreeKey};
 use xdb::debug::BigKey;
 use xdb::storage::in_memory::InMemoryStorage;
 
@@ -31,12 +30,12 @@ impl<'a> Arbitrary<'a> for Value {
 }
 
 #[derive(Debug, Arbitrary)]
-pub enum TreeAction<T: Pod + Display> {
+pub enum TreeAction<T: TreeKey> {
     Insert { key: BigKey<T>, value: Value },
     Delete { key: BigKey<T> },
 }
 
-pub fn run_ops<T: Pod + Eq + Display + Ord>(actions: &[TreeAction<T>]) {
+pub fn run_ops<T: TreeKey>(actions: &[TreeAction<T>]) {
     #[cfg(true)]
     {
         let mut result = "vec![\n".to_string();
@@ -45,13 +44,13 @@ pub fn run_ops<T: Pod + Eq + Display + Ord>(actions: &[TreeAction<T>]) {
             match action {
                 TreeAction::Insert { key, value } => {
                     result += &format!(
-                        "TestAction::Insert(BigKey::new({}), vec![0u8; {}]),\n",
+                        "TestAction::Insert(BigKey::new({:?}), vec![0u8; {}]),\n",
                         key.value(),
                         value.0.len()
                     )
                 }
                 TreeAction::Delete { key } => {
-                    result += &format!("TestAction::Delete(BigKey::new({})),\n", key.value());
+                    result += &format!("TestAction::Delete(BigKey::new({:?})),\n", key.value());
                 }
             }
         }

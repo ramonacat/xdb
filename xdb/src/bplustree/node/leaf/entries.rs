@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
-use bytemuck::{Pod, Zeroable, bytes_of, pod_read_unaligned};
+use bytemuck::{Zeroable, bytes_of, pod_read_unaligned};
 
-use crate::bplustree::{TreeError, node::leaf::LEAF_NODE_DATA_SIZE};
+use crate::bplustree::{TreeError, TreeKey, node::leaf::LEAF_NODE_DATA_SIZE};
 
 pub(in crate::bplustree) struct LeafNodeEntry<'node, TKey> {
     key: TKey,
@@ -10,7 +10,7 @@ pub(in crate::bplustree) struct LeafNodeEntry<'node, TKey> {
     size: usize,
 }
 
-impl<'node, TKey: Copy> LeafNodeEntry<'node, TKey> {
+impl<'node, TKey: TreeKey> LeafNodeEntry<'node, TKey> {
     pub fn key(&self) -> TKey {
         self.key
     }
@@ -28,13 +28,13 @@ impl<'node, TKey: Copy> LeafNodeEntry<'node, TKey> {
     }
 }
 
-pub(super) struct LeafNodeEntryIterator<'node, TKey: Pod> {
+pub(super) struct LeafNodeEntryIterator<'node, TKey: TreeKey> {
     data: &'node LeafNodeEntries<TKey>,
     offset: usize,
     index: usize,
 }
 
-impl<'node, TKey: Pod> LeafNodeEntryIterator<'node, TKey> {
+impl<'node, TKey: TreeKey> LeafNodeEntryIterator<'node, TKey> {
     pub(crate) fn new(data: &'node LeafNodeEntries<TKey>) -> Self {
         Self {
             data,
@@ -44,7 +44,7 @@ impl<'node, TKey: Pod> LeafNodeEntryIterator<'node, TKey> {
     }
 }
 
-impl<'node, TKey: Pod + Ord + 'node> Iterator for LeafNodeEntryIterator<'node, TKey> {
+impl<'node, TKey: TreeKey + 'node> Iterator for LeafNodeEntryIterator<'node, TKey> {
     type Item = LeafNodeEntry<'node, TKey>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -69,7 +69,7 @@ pub struct LeafNodeEntries<TKey> {
     _key: PhantomData<TKey>,
 }
 
-impl<TKey: Pod + Ord> LeafNodeEntries<TKey> {
+impl<TKey: TreeKey> LeafNodeEntries<TKey> {
     const _ASSERT_SIZE: () = assert!(size_of::<LeafNodeEntries<TKey>>() == LEAF_NODE_DATA_SIZE);
 
     pub fn new() -> Self {

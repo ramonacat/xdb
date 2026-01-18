@@ -1,9 +1,7 @@
-use crate::bplustree::node::NodeFlags;
+use crate::bplustree::{TreeKey, node::NodeFlags};
 use std::marker::PhantomData;
 
-use bytemuck::{
-    AnyBitPattern, NoUninit, Pod, Zeroable, bytes_of, checked::pod_read_unaligned, from_bytes,
-};
+use bytemuck::{AnyBitPattern, NoUninit, bytes_of, checked::pod_read_unaligned, from_bytes};
 
 use crate::{
     bplustree::{
@@ -23,7 +21,7 @@ impl From<Option<InteriorNodeId>> for PageIndex {
 #[repr(C, align(8))]
 pub(in crate::bplustree) struct InteriorNode<TKey>
 where
-    TKey: Zeroable,
+    TKey: TreeKey,
 {
     header: NodeHeader,
 
@@ -37,9 +35,9 @@ where
 
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
 // automatically if not for the PhantomData
-unsafe impl<TKey: Zeroable + Copy + 'static> NoUninit for InteriorNode<TKey> {}
+unsafe impl<TKey: TreeKey + 'static> NoUninit for InteriorNode<TKey> {}
 
-impl<TKey: Pod + Ord> InteriorNode<TKey> {
+impl<TKey: TreeKey> InteriorNode<TKey> {
     pub fn new() -> Self {
         Self {
             header: NodeHeader {
@@ -289,7 +287,7 @@ impl<TKey: Pod + Ord> InteriorNode<TKey> {
     }
 }
 
-impl<TKey: Pod> Node<TKey> for InteriorNode<TKey> {
+impl<TKey: TreeKey> Node<TKey> for InteriorNode<TKey> {
     fn parent(&self) -> Option<InteriorNodeId> {
         self.header.parent()
     }
@@ -299,12 +297,12 @@ impl<TKey: Pod> Node<TKey> for InteriorNode<TKey> {
     }
 }
 
-struct InteriorNodeKeysIterator<'node, TKey: Pod> {
+struct InteriorNodeKeysIterator<'node, TKey: TreeKey> {
     node: &'node InteriorNode<TKey>,
     index: usize,
 }
 
-impl<'node, TKey: Pod + Ord> Iterator for InteriorNodeKeysIterator<'node, TKey> {
+impl<'node, TKey: TreeKey> Iterator for InteriorNodeKeysIterator<'node, TKey> {
     type Item = &'node TKey;
 
     fn next(&mut self) -> Option<Self::Item> {

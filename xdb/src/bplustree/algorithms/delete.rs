@@ -1,12 +1,12 @@
 use std::fmt::Debug;
 
-use bytemuck::Pod;
 use log::debug;
 use thiserror::Error;
 
 use crate::{
     bplustree::{
-        InteriorNodeId, LeafNodeId, Node, TreeError, TreeTransaction, algorithms::leaf_search,
+        InteriorNodeId, LeafNodeId, Node, TreeError, TreeKey, TreeTransaction,
+        algorithms::leaf_search,
     },
     storage::Storage,
 };
@@ -22,7 +22,7 @@ enum MergeError {
     Tree(#[from] TreeError),
 }
 
-fn merge_leaf_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
+fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<'_, TStorage, TKey>,
     left_id: LeafNodeId,
     right_id: LeafNodeId,
@@ -62,7 +62,7 @@ fn merge_leaf_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
     Ok(())
 }
 
-fn merge_interior_node_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
+fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     left_id: InteriorNodeId,
     right_id: InteriorNodeId,
@@ -84,7 +84,7 @@ fn merge_interior_node_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
     })?
 }
 
-fn merge_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
+fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     node_id: InteriorNodeId,
 ) -> Result<(), TreeError> {
@@ -132,7 +132,7 @@ fn merge_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
     Ok(())
 }
 
-fn merge_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
+fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     leaf_id: LeafNodeId,
 ) -> Result<(), TreeError> {
@@ -176,7 +176,7 @@ fn merge_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     Ok(())
 }
 
-pub fn delete<TStorage: Storage, TKey: Pod + Ord + Debug>(
+pub fn delete<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     key: TKey,
 ) -> Result<Option<Vec<u8>>, TreeError> {

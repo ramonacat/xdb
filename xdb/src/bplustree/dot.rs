@@ -1,15 +1,11 @@
-use std::fmt::{Debug, Display};
-
-use bytemuck::Pod;
-
 use crate::bplustree::node::AnyNodeKind;
-use crate::bplustree::{AnyNodeId, Node, TreeTransaction};
+use crate::bplustree::{AnyNodeId, Node, TreeKey, TreeTransaction};
 use crate::{
     bplustree::{Tree, TreeError},
     storage::Storage,
 };
 
-impl<T: Storage, TKey: Pod + Ord + Display + Debug> Tree<T, TKey> {
+impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
     pub fn into_dot(self, stringify_value: impl Fn(&[u8]) -> String) -> Result<String, TreeError> {
         let mut output = String::new();
 
@@ -43,7 +39,7 @@ impl<T: Storage, TKey: Pod + Ord + Display + Debug> Tree<T, TKey> {
                     ];
 
                     for key in node.keys() {
-                        label.push(key.to_string());
+                        label.push(format!("{key:?}"));
                     }
 
                     let label = label.join("\\n");
@@ -76,7 +72,7 @@ impl<T: Storage, TKey: Pod + Ord + Display + Debug> Tree<T, TKey> {
 
                     for entry in node.entries() {
                         label.push(format!(
-                            "{}/{}",
+                            "{:?}/{}",
                             entry.key(),
                             (stringify_value)(entry.value())
                         ));

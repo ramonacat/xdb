@@ -7,7 +7,7 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::{
     bplustree::{
-        LeafNodeId, NodeId, TreeError,
+        LeafNodeId, NodeId, TreeError, TreeKey,
         node::{
             InteriorNodeId, NODE_DATA_SIZE, Node, NodeFlags, NodeHeader,
             leaf::{
@@ -31,7 +31,7 @@ const LEAF_NODE_DATA_SIZE: usize = NODE_DATA_SIZE - size_of::<LeafNodeHeader>();
 #[repr(C, align(8))]
 pub(in crate::bplustree) struct LeafNode<TKey>
 where
-    TKey: Pod,
+    TKey: TreeKey,
 {
     header: NodeHeader,
     leaf_header: LeafNodeHeader,
@@ -40,9 +40,9 @@ where
 
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
 // automatically if not for the PhantomData
-unsafe impl<TKey: Pod> Pod for LeafNode<TKey> {}
+unsafe impl<TKey: TreeKey> Pod for LeafNode<TKey> {}
 
-impl<TKey: Pod + Ord + Debug> LeafNode<TKey> {
+impl<TKey: TreeKey> LeafNode<TKey> {
     pub fn new() -> Self {
         Self {
             header: NodeHeader {
@@ -200,7 +200,7 @@ impl<TKey: Pod + Ord + Debug> LeafNode<TKey> {
     }
 }
 
-impl<TKey: Pod> Node<TKey> for LeafNode<TKey> {
+impl<TKey: TreeKey> Node<TKey> for LeafNode<TKey> {
     fn parent(&self) -> Option<InteriorNodeId> {
         if self.header.parent == PageIndex::zero() {
             None
@@ -227,7 +227,7 @@ const _: () = assert!(size_of::<LeafNodeHeader>() == size_of::<u64>() * 2);
 mod test {
     use super::*;
 
-    fn collect_entries<TKey: Pod + Ord + Debug>(node: &LeafNode<TKey>) -> Vec<(TKey, Vec<u8>)> {
+    fn collect_entries<TKey: TreeKey>(node: &LeafNode<TKey>) -> Vec<(TKey, Vec<u8>)> {
         node.entries()
             .map(|x| (x.key(), x.value().to_vec()))
             .collect::<Vec<_>>()

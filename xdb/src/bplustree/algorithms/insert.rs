@@ -1,17 +1,15 @@
-use bytemuck::Pod;
 use log::debug;
 
 use crate::{
     bplustree::{
         AnyNodeId, InteriorNode, InteriorNodeId, LeafNodeId, Node as _, NodeId as _, TreeError,
-        TreeTransaction, algorithms::leaf_search, debug::assert_properties,
+        TreeKey, TreeTransaction, algorithms::leaf_search, debug::assert_properties,
     },
     page::Page,
     storage::{PageReservation as _, Storage},
 };
-use std::fmt::Debug;
 
-fn create_new_root<'storage, TStorage: Storage, TKey: Pod + Ord>(
+fn create_new_root<'storage, TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<'storage, TStorage, TKey>,
     reservation: <TStorage as Storage>::PageReservation<'storage>,
     left: AnyNodeId,
@@ -31,7 +29,7 @@ fn create_new_root<'storage, TStorage: Storage, TKey: Pod + Ord>(
     Ok(())
 }
 
-fn split_leaf_root<TStorage: Storage, TKey: Pod + Ord + Debug>(
+fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
 ) -> Result<(), TreeError> {
     let root_id = transaction.get_root()?;
@@ -69,7 +67,7 @@ fn split_leaf_root<TStorage: Storage, TKey: Pod + Ord + Debug>(
     Ok(())
 }
 
-fn split_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
+fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     target: InteriorNodeId,
 ) -> Result<bool, TreeError> {
@@ -128,7 +126,7 @@ fn split_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
     Ok(true)
 }
 
-fn insert_child<TStorage: Storage, TKey: Pod + Ord + Debug>(
+fn insert_child<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     target: InteriorNodeId,
     key: TKey,
@@ -142,7 +140,7 @@ fn insert_child<TStorage: Storage, TKey: Pod + Ord + Debug>(
     Ok(())
 }
 
-fn split_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
+fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     target_node_id: LeafNodeId,
 ) -> Result<(), TreeError> {
@@ -189,7 +187,7 @@ fn split_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     Ok(())
 }
 
-pub fn insert<TStorage: Storage, TKey: Pod + Ord + Debug>(
+pub fn insert<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     key: TKey,
     value: &[u8],
