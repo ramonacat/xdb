@@ -27,7 +27,7 @@ pub struct InMemoryTransaction<'storage> {
 impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     for InMemoryTransaction<'storage>
 {
-    fn write_many<T, const N: usize>(
+    fn write<T, const N: usize>(
         &self,
         indices: [PageIndex; N],
         write: impl FnOnce([&mut Page; N]) -> T,
@@ -77,7 +77,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         todo!()
     }
 
-    fn read_many<T, const N: usize>(
+    fn read<T, const N: usize>(
         &self,
         indices: [PageIndex; N],
         read: impl FnOnce([&Page; N]) -> T,
@@ -141,20 +141,20 @@ pub mod test {
     impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
         Transaction<'a, TStorage::PageReservation<'a>> for TestTransaction<'a, TTx, TStorage>
     {
-        fn read_many<TReturn, const N: usize>(
+        fn read<TReturn, const N: usize>(
             &self,
             indices: [PageIndex; N],
             read: impl FnOnce([&Page; N]) -> TReturn,
         ) -> Result<TReturn, StorageError> {
-            self.0.read_many(indices, read)
+            self.0.read(indices, read)
         }
 
-        fn write_many<TReturn, const N: usize>(
+        fn write<TReturn, const N: usize>(
             &self,
             indices: [PageIndex; N],
             write: impl FnOnce([&mut Page; N]) -> TReturn,
         ) -> Result<TReturn, StorageError> {
-            self.0.write_many(indices, write)
+            self.0.write(indices, write)
         }
 
         fn reserve(&self) -> Result<TStorage::PageReservation<'a>, StorageError> {

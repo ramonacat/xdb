@@ -70,7 +70,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
-            .read_many([PageIndex::zero()], |[page]| read(page.data()))?)
+            .read([PageIndex::zero()], |[page]| read(page.data()))?)
     }
 
     fn write_header<TReturn>(
@@ -79,7 +79,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
-            .write_many([PageIndex::zero()], |[page]| write(page.data_mut()))?)
+            .write([PageIndex::zero()], |[page]| write(page.data_mut()))?)
     }
 
     fn read_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
@@ -87,11 +87,9 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         indices: TIndices,
         read: impl for<'node> FnOnce(TIndices::Nodes<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        Ok(self
-            .transaction
-            .read_many(indices.to_page_indices(), |pages| {
-                read(TIndices::pages_to_nodes(pages))
-            })?)
+        Ok(self.transaction.read(indices.to_page_indices(), |pages| {
+            read(TIndices::pages_to_nodes(pages))
+        })?)
     }
 
     fn write_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
@@ -99,11 +97,9 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         indices: TIndices,
         write: impl for<'node> FnOnce(TIndices::NodesMut<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        Ok(self
-            .transaction
-            .write_many(indices.to_page_indices(), |pages| {
-                write(TIndices::pages_to_nodes_mut(pages))
-            })?)
+        Ok(self.transaction.write(indices.to_page_indices(), |pages| {
+            write(TIndices::pages_to_nodes_mut(pages))
+        })?)
     }
 
     fn reserve_node(&self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
