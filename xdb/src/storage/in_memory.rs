@@ -66,23 +66,6 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         Ok(write(pages))
     }
 
-    fn write_many_3<T>(
-        &self,
-        indices: (PageIndex, PageIndex, PageIndex),
-        write: impl FnOnce(&mut Page, &mut Page, &mut Page) -> T,
-    ) -> Result<T, StorageError> {
-        let mut storage = self.storage.pages.write().unwrap();
-        let [p0, p1, p2] = storage
-            .get_disjoint_mut([
-                indices.0.0 as usize,
-                indices.1.0 as usize,
-                indices.2.0 as usize,
-            ])
-            .unwrap();
-
-        Ok(write(p0, p1, p2))
-    }
-
     fn reserve<'a>(&'a self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
         let mut storage = self.storage.pages.write().unwrap();
         storage.push(Page::zeroed());
@@ -194,14 +177,6 @@ pub mod test {
             write: impl FnOnce([&mut Page; N]) -> TReturn,
         ) -> Result<TReturn, StorageError> {
             self.0.write_many(indices, write)
-        }
-
-        fn write_many_3<TReturn>(
-            &self,
-            indices: (PageIndex, PageIndex, PageIndex),
-            write: impl FnOnce(&mut Page, &mut Page, &mut Page) -> TReturn,
-        ) -> Result<TReturn, StorageError> {
-            self.0.write_many_3(indices, write)
         }
 
         fn reserve(&self) -> Result<TStorage::PageReservation<'a>, StorageError> {
