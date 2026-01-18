@@ -29,12 +29,12 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
 {
     fn write<T, const N: usize>(
         &self,
-        indices: [PageIndex; N],
+        indices: impl Into<[PageIndex; N]>,
         write: impl FnOnce([&mut Page; N]) -> T,
     ) -> Result<T, StorageError> {
         let mut storage = self.storage.pages.write().unwrap();
         let pages = storage
-            .get_disjoint_mut(indices.map(|x| x.0 as usize))
+            .get_disjoint_mut(indices.into().map(|x| x.0 as usize))
             .unwrap();
 
         Ok(write(pages))
@@ -79,12 +79,12 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
 
     fn read<T, const N: usize>(
         &self,
-        indices: [PageIndex; N],
+        indices: impl Into<[PageIndex; N]>,
         read: impl FnOnce([&Page; N]) -> T,
     ) -> Result<T, StorageError> {
         let storage = self.storage.pages.read().unwrap();
 
-        let pages = indices.map(|i| storage.get(i.0 as usize).unwrap());
+        let pages = indices.into().map(|i| storage.get(i.0 as usize).unwrap());
 
         Ok(read(pages))
     }
@@ -143,7 +143,7 @@ pub mod test {
     {
         fn read<TReturn, const N: usize>(
             &self,
-            indices: [PageIndex; N],
+            indices: impl Into<[PageIndex; N]>,
             read: impl FnOnce([&Page; N]) -> TReturn,
         ) -> Result<TReturn, StorageError> {
             self.0.read(indices, read)
@@ -151,7 +151,7 @@ pub mod test {
 
         fn write<TReturn, const N: usize>(
             &self,
-            indices: [PageIndex; N],
+            indices: impl Into<[PageIndex; N]>,
             write: impl FnOnce([&mut Page; N]) -> TReturn,
         ) -> Result<TReturn, StorageError> {
             self.0.write(indices, write)

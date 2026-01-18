@@ -33,18 +33,22 @@ pub trait PageReservation<'storage> {
     fn index(&self) -> PageIndex;
 }
 
+impl From<PageIndex> for [PageIndex; 1] {
+    fn from(value: PageIndex) -> Self {
+        [value]
+    }
+}
+
 pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
-    // TODO genericize to take either [PageIndex; N] or just PageIndex for N=1?
     fn read<T, const N: usize>(
         &self,
-        indices: [PageIndex; N],
+        indices: impl Into<[PageIndex; N]>,
         read: impl FnOnce([&Page; N]) -> T,
     ) -> Result<T, StorageError>;
 
-    // TODO genericize to take either [PageIndex; N] or just PageIndex for N=1?
     fn write<T, const N: usize>(
         &self,
-        indices: [PageIndex; N],
+        indices: impl Into<[PageIndex; N]>,
         write: impl FnOnce([&mut Page; N]) -> T,
     ) -> Result<T, StorageError>;
 

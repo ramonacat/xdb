@@ -70,7 +70,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
-            .read([PageIndex::zero()], |[page]| read(page.data()))?)
+            .read(PageIndex::zero(), |[page]| read(page.data()))?)
     }
 
     fn write_header<TReturn>(
@@ -79,7 +79,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
-            .write([PageIndex::zero()], |[page]| write(page.data_mut()))?)
+            .write(PageIndex::zero(), |[page]| write(page.data_mut()))?)
     }
 
     fn read_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
