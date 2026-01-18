@@ -200,7 +200,10 @@ mod test {
     };
 
     use crate::{
-        bplustree::algorithms::{delete::delete, insert::insert},
+        bplustree::{
+            algorithms::{delete::delete, insert::insert},
+            debug::assert_tree_equal,
+        },
         debug::BigKey,
         storage::in_memory::{InMemoryStorage, test::TestStorage},
     };
@@ -346,18 +349,7 @@ mod test {
                 }
             }
 
-            assert_eq!(
-                rust_tree.clone().into_iter().collect::<Vec<_>>(),
-                tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>()
-            );
-            assert_eq!(
-                rust_tree.into_iter().rev().collect::<Vec<_>>(),
-                tree.iter()
-                    .unwrap()
-                    .rev()
-                    .map(|x| x.unwrap())
-                    .collect::<Vec<_>>()
-            );
+            assert_tree_equal(&tree, rust_tree);
         });
 
         if let Err(_) = result {

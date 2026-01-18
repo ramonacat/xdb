@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::insert::insert;
+use xdb::bplustree::debug::assert_tree_equal;
 use xdb::bplustree::{Tree, TreeKey};
 use xdb::debug::BigKey;
 use xdb::storage::in_memory::InMemoryStorage;
@@ -69,37 +70,16 @@ pub fn run_ops<T: TreeKey>(actions: &[TreeAction<T>]) {
         match action {
             TreeAction::Insert { key, value } => {
                 insert(&transaction, *key, &value.0).unwrap();
-                rust_btree.insert(key, value);
+                rust_btree.insert(*key, value.0.clone());
             }
             TreeAction::Delete { key } => {
                 let deleted = delete(&transaction, *key).unwrap();
                 let deleted2 = rust_btree.remove(key);
 
-                assert!(deleted.map(Value).as_ref() == deleted2)
+                assert!(deleted == deleted2)
             }
         };
     }
 
-    assert_eq!(
-        rust_btree
-            .iter()
-            .map(|x| (**x.0, x.1.0.clone()))
-            .collect::<Vec<_>>(),
-        tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>()
-    );
-
-    assert_eq!(
-        rust_btree
-            .iter()
-            .rev()
-            .map(|x| (**x.0, x.1.0.clone()))
-            .map(|x| (x.0, Value(x.1)))
-            .collect::<Vec<_>>(),
-        tree.iter()
-            .unwrap()
-            .rev()
-            .map(|x| x.unwrap())
-            .map(|x| (x.0, Value(x.1)))
-            .collect::<Vec<_>>()
-    );
+    assert_tree_equal(&tree, rust_btree);
 }

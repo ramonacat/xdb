@@ -1,7 +1,34 @@
+use std::collections::BTreeMap;
+
 use crate::{
-    bplustree::{AnyNodeId, TreeKey, TreeTransaction},
+    bplustree::{AnyNodeId, Tree, TreeKey, TreeTransaction},
     storage::Storage,
 };
+
+pub fn assert_tree_equal<TStorage: Storage, TKey: TreeKey>(
+    left: &Tree<TStorage, TKey>,
+    right: BTreeMap<TKey, Vec<u8>>,
+) {
+    assert_eq!(
+        left.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),
+        right
+            .iter()
+            .map(|(x, y)| (*x, y.clone()))
+            .collect::<Vec<_>>(),
+    );
+    assert_eq!(
+        left.iter()
+            .unwrap()
+            .rev()
+            .map(|x| x.unwrap())
+            .collect::<Vec<_>>(),
+        right
+            .iter()
+            .rev()
+            .map(|(x, y)| (*x, y.clone()))
+            .collect::<Vec<_>>(),
+    );
+}
 
 pub fn assert_properties<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,

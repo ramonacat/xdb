@@ -8,6 +8,7 @@ use xdb::{
     bplustree::{
         Tree,
         algorithms::{delete::delete, insert::insert},
+        debug::assert_tree_equal,
     },
     debug::BigKey,
     storage::in_memory::InMemoryStorage,
@@ -45,24 +46,5 @@ fuzz_target!(|keys_to_delete: Vec<KeyToDelete>| {
         delete(&transaction, key).unwrap();
     }
 
-    // TODO extract those comparisons into an fn, as those are repeated all over the place
-    assert_eq!(
-        rust_btree
-            .iter()
-            .map(|(x, y)| (*x, y.clone()))
-            .collect::<Vec<_>>(),
-        tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>()
-    );
-    assert_eq!(
-        rust_btree
-            .iter()
-            .rev()
-            .map(|(x, y)| (*x, y.clone()))
-            .collect::<Vec<_>>(),
-        tree.iter()
-            .unwrap()
-            .rev()
-            .map(|x| x.unwrap())
-            .collect::<Vec<_>>()
-    );
+    assert_tree_equal(&tree, rust_btree);
 });
