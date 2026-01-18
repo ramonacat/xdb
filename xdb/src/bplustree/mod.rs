@@ -3,8 +3,10 @@ pub mod debug;
 pub mod dot;
 mod iterator;
 mod node;
+mod tuples;
 
 use crate::bplustree::iterator::TreeIterator;
+use crate::bplustree::tuples::NodeIds;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
@@ -89,33 +91,16 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
     }
 
     // TODO implementations for more than 2 nodes (probably generate with a macro?)
-    fn write_nodes<TReturn, T1: NodeId, T2: NodeId>(
+    fn write_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
         &self,
-        indices: (T1, T2),
-        write: impl for<'node> FnOnce(&mut T1::Node<TKey>, &mut T2::Node<TKey>) -> TReturn,
+        indices: TIndices,
+        write: impl for<'node> FnOnce(TIndices::NodesMut<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
-            .write_many((indices.0.page(), indices.1.page()), |page1, page2| {
-                write(page1.data_mut(), page2.data_mut())
+            .write_many(indices.to_page_indices(), |pages| {
+                write(TIndices::pages_to_nodes_mut(pages))
             })?)
-    }
-
-    // TODO do some type magic so we can call it just write_nodes and accept tuples of varying
-    // sizes
-    fn write_nodes_3<TReturn, T1: NodeId, T2: NodeId, T3: NodeId>(
-        &self,
-        indices: (T1, T2, T3),
-        write: impl for<'node> FnOnce(
-            &mut T1::Node<TKey>,
-            &mut T2::Node<TKey>,
-            &mut T3::Node<TKey>,
-        ) -> TReturn,
-    ) -> Result<TReturn, TreeError> {
-        Ok(self.transaction.write_many_3(
-            (indices.0.page(), indices.1.page(), indices.2.page()),
-            |page1, page2, page3| write(page1.data_mut(), page2.data_mut(), page3.data_mut()),
-        )?)
     }
 
     fn reserve_node(&self) -> Result<TStorage::PageReservation<'storage>, TreeError> {

@@ -29,7 +29,7 @@ fn merge_leaf_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
 ) -> Result<(), MergeError> {
     // TODO create transaction.read_nodes, as we don't need mut refs here
     // TODO figure out a way to let the closure here return a Result<T, E> wihtout nesting
-    transaction.write_nodes((left_id, right_id), |left, right| {
+    transaction.write_nodes((left_id, right_id), |(left, right)| {
         if left.parent() != right.parent() {
             Err(MergeError::NotSiblings)
         } else if !left.can_fit_merge(right) {
@@ -39,7 +39,7 @@ fn merge_leaf_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
         }
     })??;
 
-    let next = transaction.write_nodes((left_id, right_id), |left, right| {
+    let next = transaction.write_nodes((left_id, right_id), |(left, right)| {
         left.merge_from(right);
 
         left.next()
@@ -68,7 +68,7 @@ fn merge_interior_node_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
     right_id: InteriorNodeId,
     parent_id: InteriorNodeId,
 ) -> Result<(), MergeError> {
-    transaction.write_nodes_3((left_id, right_id, parent_id), |left, right, parent| {
+    transaction.write_nodes((left_id, right_id, parent_id), |(left, right, parent)| {
         if left.parent() != right.parent() || left.parent() != Some(parent_id) {
             return Err(MergeError::NotSiblings);
         }

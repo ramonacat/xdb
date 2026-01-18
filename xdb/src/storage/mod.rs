@@ -42,11 +42,10 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
         write: impl FnOnce(&mut Page) -> T,
     ) -> Result<T, StorageError>;
 
-    // TODO implement for more than 2 indices
-    fn write_many<T>(
+    fn write_many<T, const N: usize>(
         &self,
-        indices: (PageIndex, PageIndex),
-        write: impl FnOnce(&mut Page, &mut Page) -> T,
+        indices: [PageIndex; N],
+        write: impl FnOnce([&mut Page; N]) -> T,
     ) -> Result<T, StorageError>;
 
     // TODO do some type-level magic so that it can just take whatever-sized tuple and still be
