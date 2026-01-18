@@ -51,7 +51,7 @@ fn merge_leaf_with<TStorage: Storage, TKey: Pod + Ord + Debug>(
         })?;
     }
 
-    let parent_id = transaction.read_node(left_id, |x| x.parent())?.unwrap();
+    let parent_id = transaction.read_nodes(left_id, |x| x.parent())?.unwrap();
 
     transaction.write_nodes(parent_id, |parent| parent.delete(right_id.into()))?;
 
@@ -88,21 +88,21 @@ fn merge_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     node_id: InteriorNodeId,
 ) -> Result<(), TreeError> {
-    if !transaction.read_node(node_id, |node| node.needs_merge())? {
+    if !transaction.read_nodes(node_id, |node| node.needs_merge())? {
         return Ok(());
     }
 
-    let parent_id = transaction.read_node(node_id, |node| node.parent())?;
+    let parent_id = transaction.read_nodes(node_id, |node| node.parent())?;
     let Some(parent_id) = parent_id else {
         return Ok(());
     };
 
     let index_in_parent =
-        transaction.read_node(parent_id, |x| x.find_value_index(node_id.into()).unwrap())?;
+        transaction.read_nodes(parent_id, |x| x.find_value_index(node_id.into()).unwrap())?;
 
     if index_in_parent > 0 {
         let left =
-            transaction.read_node(parent_id, |x| x.value_at(index_in_parent - 1).unwrap())?;
+            transaction.read_nodes(parent_id, |x| x.value_at(index_in_parent - 1).unwrap())?;
         let left = InteriorNodeId::from_any(left);
 
         match merge_interior_node_with(transaction, left, node_id, parent_id) {
@@ -114,7 +114,7 @@ fn merge_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
     }
 
     let right_id =
-        transaction.read_node(parent_id, |parent| parent.value_at(index_in_parent + 1))?;
+        transaction.read_nodes(parent_id, |parent| parent.value_at(index_in_parent + 1))?;
 
     if let Some(right_id) = right_id {
         let right_id = InteriorNodeId::from_any(right_id);
@@ -137,7 +137,7 @@ fn merge_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     leaf_id: LeafNodeId,
 ) -> Result<(), TreeError> {
     let (next, previous, parent) =
-        transaction.read_node(leaf_id, |x| (x.next(), x.previous(), x.parent()))?;
+        transaction.read_nodes(leaf_id, |x| (x.next(), x.previous(), x.parent()))?;
 
     if let Some(next) = next {
         match merge_leaf_with(transaction, leaf_id, next) {

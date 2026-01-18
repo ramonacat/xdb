@@ -36,7 +36,7 @@ fn split_leaf_root<TStorage: Storage, TKey: Pod + Ord + Debug>(
 ) -> Result<(), TreeError> {
     let root_id = transaction.get_root()?;
 
-    assert!(transaction.read_node(root_id, |root| root.is_leaf())?);
+    assert!(transaction.read_nodes(root_id, |root| root.is_leaf())?);
 
     let root_id = LeafNodeId::from_any(root_id);
 
@@ -73,17 +73,17 @@ fn split_interior_node<TStorage: Storage, TKey: Pod + Ord + Debug>(
     transaction: &TreeTransaction<TStorage, TKey>,
     target: InteriorNodeId,
 ) -> Result<bool, TreeError> {
-    let parent = transaction.read_node(target, |target_node| target_node.parent())?;
+    let parent = transaction.read_nodes(target, |target_node| target_node.parent())?;
 
     if let Some(parent) = parent
-        && !transaction.read_node(parent, |x| x.has_spare_capacity())?
+        && !transaction.read_nodes(parent, |x| x.has_spare_capacity())?
     {
         let _ = split_interior_node(transaction, parent)?;
 
         return Ok(false);
     }
 
-    let parent = transaction.read_node(target, |target_node| target_node.parent())?;
+    let parent = transaction.read_nodes(target, |target_node| target_node.parent())?;
 
     let new_node_reservation = transaction.reserve_node()?;
     let new_node_id = InteriorNodeId::new(new_node_reservation.index());
@@ -147,10 +147,10 @@ fn split_leaf<TStorage: Storage, TKey: Pod + Ord + Debug>(
     target_node_id: LeafNodeId,
 ) -> Result<(), TreeError> {
     let parent = transaction
-        .read_node(target_node_id, |node| node.parent())?
+        .read_nodes(target_node_id, |node| node.parent())?
         .unwrap();
 
-    let has_spare_capacity = transaction.read_node(parent, |node| node.has_spare_capacity())?;
+    let has_spare_capacity = transaction.read_nodes(parent, |node| node.has_spare_capacity())?;
 
     assert!(has_spare_capacity);
 
@@ -199,13 +199,13 @@ pub fn insert<TStorage: Storage, TKey: Pod + Ord + Debug>(
     let root_index = transaction.get_root()?;
     let target_node_id = leaf_search(transaction, root_index, &key)?;
 
-    let (can_fit, parent) = transaction.read_node(target_node_id, |node| {
+    let (can_fit, parent) = transaction.read_nodes(target_node_id, |node| {
         (node.can_fit(value.len()), node.parent())
     })?;
 
     if !can_fit {
         if let Some(parent) = parent {
-            if !transaction.read_node(parent, |parent| parent.has_spare_capacity())? {
+            if !transaction.read_nodes(parent, |parent| parent.has_spare_capacity())? {
                 let _ = split_interior_node(transaction, parent)?;
 
                 return insert(transaction, key, value);

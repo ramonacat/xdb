@@ -28,7 +28,7 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: Pod + Ord + Debug>(
     let start_id = start_id.unwrap_or_else(|| transaction.get_root().unwrap());
 
     let limits: Vec<(Option<TKey>, Option<TKey>, AnyNodeId)> = transaction
-        .read_node(start_id, |node| {
+        .read_nodes(start_id, |node| {
             let mut result = vec![];
 
             match node.as_any() {

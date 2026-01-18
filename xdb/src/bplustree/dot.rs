@@ -28,7 +28,7 @@ impl<T: Storage, TKey: Pod + Ord + Display + Debug> Tree<T, TKey> {
         node_index: AnyNodeId,
         stringify_value: &impl Fn(&[u8]) -> String,
     ) -> Result<String, TreeError> {
-        let output = transaction.read_node(node_index, |node| {
+        let output = transaction.read_nodes(node_index, |node| {
             let mut output = String::new();
 
             match node.as_any() {

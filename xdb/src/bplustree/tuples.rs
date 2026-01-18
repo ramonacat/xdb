@@ -9,6 +9,7 @@ pub(super) trait NodeIds<const N: usize> {
     type NodesMut<'a, TKey: Pod>;
 
     fn to_page_indices(self) -> [PageIndex; N];
+    fn pages_to_nodes<'a, TKey: Pod>(pages: [&'a Page; N]) -> Self::Nodes<'a, TKey>;
     fn pages_to_nodes_mut<'a, TKey: Pod>(pages: [&'a mut Page; N]) -> Self::NodesMut<'a, TKey>;
 }
 
@@ -21,6 +22,10 @@ where
 
     fn to_page_indices(self) -> [PageIndex; 1] {
         [self.page()]
+    }
+
+    fn pages_to_nodes<'a, TKey: Pod>(pages: [&'a Page; 1]) -> Self::Nodes<'a, TKey> {
+        pages[0].data()
     }
 
     fn pages_to_nodes_mut<'a, TKey: Pod>(pages: [&'a mut Page; 1]) -> Self::NodesMut<'a, TKey> {
@@ -40,6 +45,12 @@ where
         let (i0, i1) = self;
 
         [i0.page(), i1.page()]
+    }
+
+    fn pages_to_nodes<'a, TKey: Pod>(pages: [&'a Page; 2]) -> Self::Nodes<'a, TKey> {
+        let [p0, p1] = pages;
+
+        (p0.data(), p1.data())
     }
 
     fn pages_to_nodes_mut<'a, TKey: Pod>(pages: [&'a mut Page; 2]) -> Self::NodesMut<'a, TKey> {
@@ -70,5 +81,11 @@ where
     fn pages_to_nodes_mut<'a, TKey: Pod>(pages: [&'a mut Page; 3]) -> Self::NodesMut<'a, TKey> {
         let [p0, p1, p2] = pages;
         (p0.data_mut(), p1.data_mut(), p2.data_mut())
+    }
+
+    fn pages_to_nodes<'a, TKey: Pod>(pages: [&'a Page; 3]) -> Self::Nodes<'a, TKey> {
+        let [p0, p1, p2] = pages;
+
+        (p0.data(), p1.data(), p2.data())
     }
 }

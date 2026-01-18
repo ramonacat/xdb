@@ -27,32 +27,6 @@ pub struct InMemoryTransaction<'storage> {
 impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     for InMemoryTransaction<'storage>
 {
-    fn read<TReturn>(
-        &self,
-        index: PageIndex,
-        read: impl FnOnce(&Page) -> TReturn,
-    ) -> Result<TReturn, StorageError> {
-        let storage = self.storage.pages.read().unwrap();
-        let page = storage
-            .get(index.0 as usize)
-            .ok_or(StorageError::PageNotFound(index))?;
-
-        Ok(read(page))
-    }
-
-    fn write<T>(
-        &self,
-        index: PageIndex,
-        write: impl FnOnce(&mut Page) -> T,
-    ) -> Result<T, StorageError> {
-        let mut storage = self.storage.pages.write().unwrap();
-        let page = storage
-            .get_mut(index.0 as usize)
-            .ok_or(StorageError::PageNotFound(index))?;
-
-        Ok(write(page))
-    }
-
     fn write_many<T, const N: usize>(
         &self,
         indices: [PageIndex; N],
@@ -101,6 +75,18 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
 
     fn commit(self) -> Result<(), StorageError> {
         todo!()
+    }
+
+    fn read_many<T, const N: usize>(
+        &self,
+        indices: [PageIndex; N],
+        read: impl FnOnce([&Page; N]) -> T,
+    ) -> Result<T, StorageError> {
+        let storage = self.storage.pages.read().unwrap();
+
+        let pages = indices.map(|i| storage.get(i.0 as usize).unwrap());
+
+        Ok(read(pages))
     }
 }
 
@@ -152,23 +138,15 @@ pub mod test {
         PhantomData<&'a TStorage>,
     );
 
-    impl<'a, T: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
-        Transaction<'a, TStorage::PageReservation<'a>> for TestTransaction<'a, T, TStorage>
+    impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
+        Transaction<'a, TStorage::PageReservation<'a>> for TestTransaction<'a, TTx, TStorage>
     {
-        fn read<TReturn>(
+        fn read_many<TReturn, const N: usize>(
             &self,
-            index: PageIndex,
-            read: impl FnOnce(&Page) -> TReturn,
+            indices: [PageIndex; N],
+            read: impl FnOnce([&Page; N]) -> TReturn,
         ) -> Result<TReturn, StorageError> {
-            self.0.read(index, read)
-        }
-
-        fn write<TReturn>(
-            &self,
-            index: PageIndex,
-            write: impl FnOnce(&mut Page) -> TReturn,
-        ) -> Result<TReturn, StorageError> {
-            self.0.write(index, write)
+            self.0.read_many(indices, read)
         }
 
         fn write_many<TReturn, const N: usize>(

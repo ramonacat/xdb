@@ -58,7 +58,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
-            .read(PageIndex::zero(), |page| read(page.data()))?)
+            .read_many([PageIndex::zero()], |[page]| read(page.data()))?)
     }
 
     fn write_header<TReturn>(
@@ -67,17 +67,19 @@ impl<'storage, TStorage: Storage + 'storage, TKey: Pod + Ord>
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
-            .write(PageIndex::zero(), |page| write(page.data_mut()))?)
+            .write_many([PageIndex::zero()], |[page]| write(page.data_mut()))?)
     }
 
-    fn read_node<TReturn, TNodeId: NodeId>(
+    fn read_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
         &self,
-        index: TNodeId,
-        read: impl for<'node> FnOnce(&TNodeId::Node<TKey>) -> TReturn,
+        indices: TIndices,
+        read: impl for<'node> FnOnce(TIndices::Nodes<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
-            .read(index.page(), |page| read(page.data()))?)
+            .read_many(indices.to_page_indices(), |pages| {
+                read(TIndices::pages_to_nodes(pages))
+            })?)
     }
 
     fn write_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(

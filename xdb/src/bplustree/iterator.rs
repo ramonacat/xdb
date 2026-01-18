@@ -26,7 +26,7 @@ impl<'tree, T: Storage, TKey: Pod + Ord + Debug> TreeIterator<'tree, T, TKey> {
         let starting_leaf_forwards = first_leaf(&transaction, root)?;
         let starting_leaf_backwards = last_leaf(&transaction, root)?;
 
-        let backward_index = transaction.read_node(starting_leaf_backwards, |x| x.len())?;
+        let backward_index = transaction.read_nodes(starting_leaf_backwards, |x| x.len())?;
 
         Ok(Self {
             transaction,
@@ -57,7 +57,7 @@ impl<'tree, T: Storage, TKey: Pod + Ord + Debug> Iterator for TreeIterator<'tree
 
         let read_result = self
             .transaction
-            .read_node(self.current_forward_leaf, |node| {
+            .read_nodes(self.current_forward_leaf, |node| {
                 let entry = node.entry(self.forward_index);
                 match entry {
                     Some(entry) => {
@@ -101,7 +101,7 @@ impl<'tree, T: Storage, TKey: Pod + Ord + Debug> DoubleEndedIterator
 
         let read_result = self
             .transaction
-            .read_node(self.current_backward_leaf, |node| {
+            .read_nodes(self.current_backward_leaf, |node| {
                 let entry = if self.backward_index == 0 {
                     None
                 } else {
@@ -129,7 +129,7 @@ impl<'tree, T: Storage, TKey: Pod + Ord + Debug> DoubleEndedIterator
             IteratorResult::Value(x) => Some(x),
             IteratorResult::Next(next_leaf) => {
                 self.current_backward_leaf = next_leaf;
-                self.backward_index = self.transaction.read_node(next_leaf, |x| x.len()).unwrap();
+                self.backward_index = self.transaction.read_nodes(next_leaf, |x| x.len()).unwrap();
 
                 self.next_back()
             }

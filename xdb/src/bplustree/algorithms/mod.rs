@@ -17,7 +17,7 @@ pub(super) fn leaf_search<TStorage: Storage, TKey: Pod + Ord>(
     node_index: AnyNodeId,
     key: &TKey,
 ) -> Result<LeafNodeId, TreeError> {
-    transaction.read_node(node_index, |node| {
+    transaction.read_nodes(node_index, |node| {
         let node = match node.as_any() {
             AnyNodeKind::Interior(reader) => reader,
             // TODO this should maybe be held by the reader which would do the conversion so we
@@ -43,7 +43,7 @@ pub(super) fn first_leaf<TStorage: Storage, TKey: Pod + Ord>(
     transaction: &TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> Result<LeafNodeId, TreeError> {
-    transaction.read_node(root, |node| match node.as_any() {
+    transaction.read_nodes(root, |node| match node.as_any() {
         AnyNodeKind::Interior(interior_node_reader) => {
             first_leaf(transaction, interior_node_reader.first_value().unwrap())
         }
@@ -55,7 +55,7 @@ pub(super) fn last_leaf<TStorage: Storage, TKey: Pod + Ord>(
     transaction: &TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> Result<LeafNodeId, TreeError> {
-    transaction.read_node(root, |node| match node.as_any() {
+    transaction.read_nodes(root, |node| match node.as_any() {
         AnyNodeKind::Interior(interior_node_reader) => {
             last_leaf(transaction, interior_node_reader.last_value().unwrap())
         }
