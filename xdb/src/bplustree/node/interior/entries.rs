@@ -175,7 +175,6 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     pub fn needs_merge(&self) -> bool {
-        // TODO extract the raw byte operations into InteriorNodeData<TKey>
         2 * (self.key_count() * size_of::<TKey>() + (self.key_count() + 1) * size_of::<PageIndex>())
             < self.data.len()
     }

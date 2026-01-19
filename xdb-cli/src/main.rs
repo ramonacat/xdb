@@ -5,7 +5,10 @@ use std::sync::{
 };
 
 use xdb::{
-    bplustree::{Tree, algorithms::insert::insert},
+    bplustree::{
+        Tree,
+        algorithms::{delete::delete, insert::insert},
+    },
     debug::BigKey,
     storage::in_memory::{InMemoryStorage, test::TestStorage},
 };
@@ -18,7 +21,7 @@ fn main() {
     let transaction = tree.transaction().unwrap();
 
     let mut i: usize = 0;
-    while page_count.load(Ordering::Relaxed) < 1024 {
+    while page_count.load(Ordering::Relaxed) < 500000 {
         insert(
             &transaction,
             BigKey::new(i as u64),
@@ -29,8 +32,9 @@ fn main() {
         i += 1;
     }
 
-    let dot = tree
-        .into_dot(|v| u16::from_be_bytes(v[..v.len() / 64].try_into().unwrap()).to_string())
-        .unwrap();
-    println!("{dot}");
+    for j in i / 2..0 {
+        delete(&transaction, BigKey::new(j as u64)).unwrap();
+    }
+
+    std::hint::black_box(tree);
 }

@@ -12,6 +12,15 @@ log = "0.4.29"
 thiserror = "2.0.17"
 
 [dev-dependencies]
+criterion = "0.8.1"
 env_logger = "0.11.8"
 pretty_assertions = "1.4.1"
 tempfile = "3.24.0"
+
+[[bench]]
+name = "sorted_insert"
+harness = false
+
+[[bench]]
+name = "reverse_delete"
+harness = false
