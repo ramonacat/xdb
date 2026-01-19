@@ -27,6 +27,18 @@ pub struct InMemoryTransaction<'storage> {
 impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     for InMemoryTransaction<'storage>
 {
+    fn read<T, const N: usize>(
+        &self,
+        indices: impl Into<[PageIndex; N]>,
+        read: impl FnOnce([&Page; N]) -> T,
+    ) -> Result<T, StorageError> {
+        let storage = self.storage.pages.read().unwrap();
+
+        let pages = indices.into().map(|i| storage.get(i.0 as usize).unwrap());
+
+        Ok(read(pages))
+    }
+
     fn write<T, const N: usize>(
         &self,
         indices: impl Into<[PageIndex; N]>,
@@ -73,20 +85,16 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         Ok(PageIndex((storage.len() - 1) as u64))
     }
 
-    fn commit(self) -> Result<(), StorageError> {
-        todo!()
+    fn delete(&self, page: PageIndex) -> Result<(), StorageError> {
+        // TODO actually delete the page, instead of just zeroing!
+
+        let mut storage = self.storage.pages.write().unwrap();
+        *storage.get_mut(page.0 as usize).unwrap() = Page::zeroed();
+        Ok(())
     }
 
-    fn read<T, const N: usize>(
-        &self,
-        indices: impl Into<[PageIndex; N]>,
-        read: impl FnOnce([&Page; N]) -> T,
-    ) -> Result<T, StorageError> {
-        let storage = self.storage.pages.read().unwrap();
-
-        let pages = indices.into().map(|i| storage.get(i.0 as usize).unwrap());
-
-        Ok(read(pages))
+    fn commit(self) -> Result<(), StorageError> {
+        todo!()
     }
 }
 
@@ -175,6 +183,10 @@ pub mod test {
             self.1.fetch_add(1, Ordering::Relaxed);
 
             self.0.insert(page)
+        }
+
+        fn delete(&self, page: PageIndex) -> Result<(), StorageError> {
+            self.0.delete(page)
         }
 
         fn commit(self) -> Result<(), StorageError> {

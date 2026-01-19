@@ -27,9 +27,7 @@ fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
     left_id: LeafNodeId,
     right_id: LeafNodeId,
 ) -> Result<(), MergeError> {
-    // TODO create transaction.read_nodes, as we don't need mut refs here
-    // TODO figure out a way to let the closure here return a Result<T, E> wihtout nesting
-    transaction.write_nodes((left_id, right_id), |(left, right)| {
+    transaction.read_nodes((left_id, right_id), |(left, right)| {
         if left.parent() != right.parent() {
             Err(MergeError::NotSiblings)
         } else if !left.can_fit_merge(right) {
@@ -54,8 +52,7 @@ fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
     let parent_id = transaction.read_nodes(left_id, |x| x.parent())?.unwrap();
 
     transaction.write_nodes(parent_id, |parent| parent.delete(right_id.into()))?;
-
-    // TODO delete the sibling_id node
+    transaction.delete_node(right_id.into())?;
 
     debug!("merged leaf {left_id:?} with {right_id:?}");
 

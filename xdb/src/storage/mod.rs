@@ -62,6 +62,8 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
 
     fn insert(&self, page: Page) -> Result<PageIndex, StorageError>;
 
+    fn delete(&self, page: PageIndex) -> Result<(), StorageError>;
+
     // TODO actually make this useful and ensure transactional consistency
     #[allow(unused)]
     fn commit(self) -> Result<(), StorageError>;

@@ -109,9 +109,15 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     fn insert_reserved(
         &self,
         reservation: TStorage::PageReservation<'storage>,
-        page: Page,
+        page: Page, // TODO take a Node and convert to page internally
     ) -> Result<(), TreeError> {
         self.transaction.insert_reserved(reservation, page)?;
+
+        Ok(())
+    }
+
+    fn delete_node(&self, node_id: AnyNodeId) -> Result<(), TreeError> {
+        self.transaction.delete(node_id.page())?;
 
         Ok(())
     }

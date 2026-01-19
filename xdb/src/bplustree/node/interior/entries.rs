@@ -9,7 +9,7 @@ use crate::{
 
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
-pub struct InteriorNodeEntries<TKey: TreeKey> {
+pub struct InteriorNodeEntries<TKey> {
     key_count: u16,
     _unused1: u16,
     _unused2: u32,
