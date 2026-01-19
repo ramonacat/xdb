@@ -1,4 +1,5 @@
-// TODO enable clippy pedantic
+#![deny(clippy::all, clippy::pedantic, clippy::nursery, warnings)]
+
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -21,11 +22,13 @@ fn main() {
     let transaction = tree.transaction().unwrap();
 
     let mut i: usize = 0;
-    while page_count.load(Ordering::Relaxed) < 500000 {
+    while page_count.load(Ordering::Relaxed) < 500_000 {
         insert(
             &transaction,
-            BigKey::new(i as u64),
-            &(u16::MAX - (i as u16)).to_be_bytes().repeat(64),
+            BigKey::new(u64::try_from(i).unwrap()),
+            &(u16::MAX - u16::try_from(i).unwrap())
+                .to_be_bytes()
+                .repeat(64),
         )
         .unwrap();
 
@@ -33,7 +36,7 @@ fn main() {
     }
 
     for j in i / 2..0 {
-        delete(&transaction, BigKey::new(j as u64)).unwrap();
+        delete(&transaction, BigKey::new(u64::try_from(j).unwrap())).unwrap();
     }
 
     std::hint::black_box(tree);

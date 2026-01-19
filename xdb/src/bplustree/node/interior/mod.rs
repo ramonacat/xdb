@@ -17,7 +17,7 @@ use crate::{
 
 impl From<Option<InteriorNodeId>> for PageIndex {
     fn from(value: Option<InteriorNodeId>) -> Self {
-        value.map_or_else(PageIndex::zero, |x| x.0)
+        value.map_or_else(Self::zero, |x| x.0)
     }
 }
 
@@ -34,7 +34,7 @@ where
 unsafe impl<TKey: TreeKey + 'static> NoUninit for InteriorNode<TKey> {}
 
 impl<TKey: TreeKey> InteriorNode<TKey> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             // TODO create a constructor for NodeHeader so that we don't have to directly touch the
             // internals here
@@ -48,10 +48,9 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         }
     }
 
-    fn from_entries(
-        parent: Option<InteriorNodeId>,
-        entries: InteriorNodeEntries<TKey>,
-    ) -> InteriorNode<TKey> {
+    // TODO construct the entries in pre-allocated memory?
+    #[allow(clippy::large_types_passed_by_value)]
+    fn from_entries(parent: Option<InteriorNodeId>, entries: InteriorNodeEntries<TKey>) -> Self {
         Self {
             header: NodeHeader {
                 flags: NodeFlags::INTERNAL,
@@ -85,9 +84,10 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
     pub(crate) fn insert_node(&mut self, key: &TKey, value: AnyNodeId) {
         let mut insert_at = self.entries.key_count();
 
-        if !self.has_spare_capacity() {
-            panic!("no capacity for insert, split the node first");
-        }
+        assert!(
+            self.has_spare_capacity(),
+            "no capacity for insert, split the node first"
+        );
 
         for (index, current_key) in self.keys().enumerate() {
             if key < current_key {
@@ -99,7 +99,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         self.entries.insert_at(insert_at, key, value.page());
     }
 
-    pub fn split(&mut self) -> (TKey, InteriorNode<TKey>) {
+    pub fn split(&mut self) -> (TKey, Self) {
         let (split_key, new_node_entries) = self.entries.split();
 
         (
@@ -121,7 +121,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
     }
 
     pub(crate) fn values(&self) -> impl Iterator<Item = AnyNodeId> {
-        (0..(self.entries.key_count() + 1)).map(|x| self.value_at(x).unwrap())
+        (0..=self.entries.key_count()).map(|x| self.value_at(x).unwrap())
     }
 
     pub(crate) fn delete(&mut self, child: AnyNodeId) {
@@ -152,12 +152,14 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         None
     }
 
-    pub(crate) fn can_fit_merge(&self, right: &InteriorNode<TKey>) -> bool {
+    pub(crate) fn can_fit_merge(&self, right: &Self) -> bool {
         self.entries.can_fit_merge(&right.entries)
     }
 
-    pub(crate) fn merge_from(&self, right: &mut InteriorNode<TKey>) {
+    pub(crate) fn merge_from(&self, right: &Self) {
         assert!(self.can_fit_merge(right));
+
+        // TODO implement this lol
     }
 
     // TODO rename -> delete_value for consistency

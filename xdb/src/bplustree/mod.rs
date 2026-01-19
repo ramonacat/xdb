@@ -106,6 +106,8 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         Ok(self.transaction.reserve()?)
     }
 
+    #[allow(clippy::large_types_passed_by_value)] // TODO perhaps we should do something to avoid
+    // passing whole pages here?
     fn insert_reserved(
         &self,
         reservation: TStorage::PageReservation<'storage>,
@@ -126,12 +128,12 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
 impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
     // TODO also create a "new_read" method, or something like that (that reads a tree that already
     // exists from storage)
-    pub fn new(mut storage: T) -> Result<Self, TreeError> {
+    pub fn new(storage: T) -> Result<Self, TreeError> {
         // TODO assert that the storage is empty, and that the header get's the 0th page, as we
         // depend on that invariant (i.e. PageIndex=0 must always refer to the TreeData and not to
         // a node)!
 
-        TreeHeader::new_in(&mut storage, size_of::<TKey>())?;
+        TreeHeader::new_in(&storage, size_of::<TKey>())?;
 
         Ok(Self {
             storage,
@@ -139,6 +141,7 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
         })
     }
 
+    #[allow(clippy::iter_not_returning_iterator)]
     pub fn iter(
         &self,
     ) -> Result<impl DoubleEndedIterator<Item = TreeIteratorItem<TKey>>, TreeError> {
@@ -173,7 +176,7 @@ pub enum TreeError {
 }
 
 impl TreeHeader {
-    pub fn new_in<T: Storage>(storage: &mut T, key_size: usize) -> Result<(), TreeError> {
+    pub fn new_in<T: Storage>(storage: &T, key_size: usize) -> Result<(), TreeError> {
         let transaction = storage.transaction()?;
 
         let header_page = transaction.reserve()?;
@@ -225,7 +228,7 @@ mod test {
 
         assert!(matches!(node.entries().next(), None));
 
-        node.insert(1usize, &[2; 16]).unwrap();
+        node.insert(1usize, &[2; 16]);
 
         let mut iter = node.entries();
         let first = iter.next().unwrap();
@@ -236,7 +239,7 @@ mod test {
 
         drop(iter);
 
-        node.insert(2usize, &[1; 16]).unwrap();
+        node.insert(2usize, &[1; 16]);
 
         let mut iter = node.entries();
 
@@ -339,9 +342,9 @@ mod test {
         let tree = Tree::new(storage).unwrap();
         let transaction = tree.transaction().unwrap();
 
-        let mut rust_tree = BTreeMap::new();
-
         let result = catch_unwind(|| {
+            let mut rust_tree = BTreeMap::new();
+
             for action in data {
                 match action {
                     TestAction::Insert(key, value) => {
@@ -355,7 +358,7 @@ mod test {
                 }
             }
 
-            assert_tree_equal(&tree, rust_tree);
+            assert_tree_equal(&tree, &rust_tree);
         });
 
         if let Err(_) = result {

@@ -7,7 +7,7 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::{
     bplustree::{
-        LeafNodeId, NodeId, TreeError, TreeKey,
+        LeafNodeId, NodeId, TreeKey,
         node::{
             InteriorNodeId, NODE_DATA_SIZE, Node, NodeFlags, NodeHeader,
             leaf::{
@@ -21,7 +21,7 @@ use crate::{
 
 impl From<Option<LeafNodeId>> for PageIndex {
     fn from(value: Option<LeafNodeId>) -> Self {
-        value.map_or_else(PageIndex::zero, |x| x.0)
+        value.map_or_else(Self::zero, |x| x.0)
     }
 }
 
@@ -43,7 +43,7 @@ where
 unsafe impl<TKey: TreeKey> Pod for LeafNode<TKey> {}
 
 impl<TKey: TreeKey> LeafNode<TKey> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             header: NodeHeader {
                 flags: NodeFlags::empty(),
@@ -108,7 +108,7 @@ impl<TKey: TreeKey> LeafNode<TKey> {
         None
     }
 
-    pub fn insert(&mut self, key: TKey, value: &[u8]) -> Result<(), TreeError> {
+    pub fn insert(&mut self, key: TKey, value: &[u8]) {
         let mut insert_index = self.data.len();
 
         let mut delete_index = None;
@@ -131,8 +131,7 @@ impl<TKey: TreeKey> LeafNode<TKey> {
         let size_increase = value.len().saturating_sub(
             delete_index
                 .and_then(|x| self.data.entry(x))
-                .map(|x| x.value_size())
-                .unwrap_or(0),
+                .map_or(0, |x| x.value_size()),
         );
 
         assert!(
@@ -144,9 +143,7 @@ impl<TKey: TreeKey> LeafNode<TKey> {
             self.data.delete_at(delete_index);
         }
 
-        self.data.insert_at(insert_index, key, value)?;
-
-        Ok(())
+        self.data.insert_at(insert_index, key, value);
     }
 
     pub fn split(&'_ mut self) -> LeafNodeBuilder<TKey, (), MaterializedData<'_, TKey>> {
@@ -163,7 +160,7 @@ impl<TKey: TreeKey> LeafNode<TKey> {
     ) {
         self.set_parent(parent);
         self.leaf_header.previous = previous.map_or(PageIndex::zero(), |x| x.page());
-        self.leaf_header.next = next.map_or(PageIndex::zero(), |x| x.page())
+        self.leaf_header.next = next.map_or(PageIndex::zero(), |x| x.page());
     }
 
     pub(in crate::bplustree) fn first_key(&self) -> Option<TKey> {
@@ -174,19 +171,19 @@ impl<TKey: TreeKey> LeafNode<TKey> {
         self.data.can_fit(value_size)
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub(crate) const fn len(&self) -> usize {
         self.data.len()
     }
 
-    pub(crate) fn merge_from(&mut self, right: &mut LeafNode<TKey>) {
+    pub(crate) fn merge_from(&mut self, right: &Self) {
         for entry in right.entries() {
-            self.insert(entry.key(), entry.value()).unwrap();
+            self.insert(entry.key(), entry.value());
         }
 
         self.set_links(self.parent(), self.previous(), right.next());
     }
 
-    pub(crate) fn can_fit_merge(&self, right: &LeafNode<TKey>) -> bool {
+    pub(crate) fn can_fit_merge(&self, right: &Self) -> bool {
         self.data.can_fit_merge(right.data)
     }
 }
@@ -227,8 +224,8 @@ mod test {
     #[test]
     fn insert_reverse() {
         let mut node = LeafNode::new();
-        let _ = node.insert(1, &[0]).unwrap();
-        let _ = node.insert(0, &[0]).unwrap();
+        let _ = node.insert(1, &[0]);
+        let _ = node.insert(0, &[0]);
 
         assert_eq!(collect_entries(&node), &[(0, vec![0]), (1, vec![0])]);
     }

@@ -4,6 +4,7 @@ use crate::{
     bplustree::{Tree, TreeError},
     storage::Storage,
 };
+use std::fmt::Write;
 
 impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
     pub fn into_dot(self, stringify_value: impl Fn(&[u8]) -> String) -> Result<String, TreeError> {
@@ -44,10 +45,10 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 
                     let label = label.join("\\n");
 
-                    output += &format!("N{node_index}[label=\"{label}\"];\n");
+                    writeln!(output, "N{node_index}[label=\"{label}\"];").unwrap();
 
                     for (index, value) in node.values().enumerate() {
-                        output += &format!("N{node_index} -> N{value}[label=\"{index}\"];\n");
+                        writeln!(output, "N{node_index} -> N{value}[label=\"{index}\"];").unwrap();
 
                         output += &Self::node_to_dot(transaction, value, stringify_value)?;
                     }
@@ -80,7 +81,7 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 
                     let label = label.join("\\n");
 
-                    output += &format!("N{node_index}[label=\"{label}\"];\n");
+                    writeln!(output, "N{node_index}[label=\"{label}\"];").unwrap();
                 }
             }
 

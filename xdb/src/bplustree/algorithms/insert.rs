@@ -34,7 +34,7 @@ fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
 ) -> Result<(), TreeError> {
     let root_id = transaction.get_root()?;
 
-    assert!(transaction.read_nodes(root_id, |root| root.is_leaf())?);
+    assert!(transaction.read_nodes(root_id, super::super::node::AnyNode::is_leaf)?);
 
     let root_id = LeafNodeId::from_any(root_id);
 
@@ -71,22 +71,26 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     target: InteriorNodeId,
 ) -> Result<bool, TreeError> {
-    let parent = transaction.read_nodes(target, |target_node| target_node.parent())?;
+    let parent = transaction.read_nodes(target, super::super::node::Node::parent)?;
 
     if let Some(parent) = parent
-        && !transaction.read_nodes(parent, |x| x.has_spare_capacity())?
+        && !transaction.read_nodes(
+            parent,
+            super::super::node::interior::InteriorNode::has_spare_capacity,
+        )?
     {
         let _ = split_interior_node(transaction, parent)?;
 
         return Ok(false);
     }
 
-    let parent = transaction.read_nodes(target, |target_node| target_node.parent())?;
+    let parent = transaction.read_nodes(target, super::super::node::Node::parent)?;
 
     let new_node_reservation = transaction.reserve_node()?;
     let new_node_id = InteriorNodeId::new(new_node_reservation.index());
 
-    let (split_key, new_node) = transaction.write_nodes(target, |node| node.split())?;
+    let (split_key, new_node) =
+        transaction.write_nodes(target, super::super::node::interior::InteriorNode::split)?;
 
     for child in new_node.values() {
         transaction.write_nodes(child, |node| node.set_parent(Some(new_node_id)))?;
@@ -94,34 +98,29 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
 
     transaction.insert_reserved(new_node_reservation, Page::from_data(new_node))?;
 
-    match parent {
-        Some(parent) => {
-            debug!("split interior node {target:?} into new node {new_node_id:?}");
-            insert_child(transaction, parent, split_key, new_node_id.into())?;
+    if let Some(parent) = parent {
+        debug!("split interior node {target:?} into new node {new_node_id:?}");
+        insert_child(transaction, parent, split_key, new_node_id.into())?;
+    } else {
+        assert_properties(transaction);
 
-            assert_properties(transaction);
-        }
-        None => {
-            assert_properties(transaction);
+        let new_root_reservation = transaction.reserve_node()?;
+        let new_root_id = InteriorNodeId::new(new_root_reservation.index());
 
-            let new_root_reservation = transaction.reserve_node()?;
-            let new_root_id = InteriorNodeId::new(new_root_reservation.index());
+        transaction.write_nodes(target, |node| node.set_parent(Some(new_root_id)))?;
+        transaction.write_nodes(new_node_id, |node| node.set_parent(Some(new_root_id)))?;
 
-            transaction.write_nodes(target, |node| node.set_parent(Some(new_root_id)))?;
-            transaction.write_nodes(new_node_id, |node| node.set_parent(Some(new_root_id)))?;
+        create_new_root(
+            transaction,
+            new_root_reservation,
+            target.into(),
+            split_key,
+            new_node_id.into(),
+        )?;
+        debug!("created new root {new_root_id:?} at split key {split_key:?}");
+    }
 
-            create_new_root(
-                transaction,
-                new_root_reservation,
-                target.into(),
-                split_key,
-                new_node_id.into(),
-            )?;
-            debug!("created new root {new_root_id:?} at split key {split_key:?}");
-
-            assert_properties(transaction);
-        }
-    };
+    assert_properties(transaction);
 
     Ok(true)
 }
@@ -145,10 +144,13 @@ fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     target_node_id: LeafNodeId,
 ) -> Result<(), TreeError> {
     let parent = transaction
-        .read_nodes(target_node_id, |node| node.parent())?
+        .read_nodes(target_node_id, super::super::node::Node::parent)?
         .unwrap();
 
-    let has_spare_capacity = transaction.read_nodes(parent, |node| node.has_spare_capacity())?;
+    let has_spare_capacity = transaction.read_nodes(
+        parent,
+        super::super::node::interior::InteriorNode::has_spare_capacity,
+    )?;
 
     assert!(has_spare_capacity);
 
@@ -175,10 +177,7 @@ fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     }
 
     let split_key = new_leaf.first_key().unwrap();
-    debug!(
-        "split {:?} into {:?} at key {:?}",
-        target_node_id, new_leaf_id, split_key
-    );
+    debug!("split {target_node_id:?} into {new_leaf_id:?} at key {split_key:?}");
 
     transaction.insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
 
@@ -203,25 +202,26 @@ pub fn insert<TStorage: Storage, TKey: TreeKey>(
 
     if !can_fit {
         if let Some(parent) = parent {
-            if !transaction.read_nodes(parent, |parent| parent.has_spare_capacity())? {
+            if !transaction.read_nodes(
+                parent,
+                super::super::node::interior::InteriorNode::has_spare_capacity,
+            )? {
                 let _ = split_interior_node(transaction, parent)?;
 
                 return insert(transaction, key, value);
-            } else {
-                split_leaf(transaction, target_node_id)?;
-
-                return insert(transaction, key, value);
             }
-        } else {
-            assert!(root_index == target_node_id.into());
-
-            split_leaf_root(transaction)?;
+            split_leaf(transaction, target_node_id)?;
 
             return insert(transaction, key, value);
         }
+        assert!(root_index == target_node_id.into());
+
+        split_leaf_root(transaction)?;
+
+        return insert(transaction, key, value);
     }
 
-    transaction.write_nodes(target_node_id, |node| node.insert(key, value))??;
+    transaction.write_nodes(target_node_id, |node| node.insert(key, value))?;
 
     debug!("inserted {key:?} into {target_node_id:?}");
 

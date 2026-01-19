@@ -52,7 +52,7 @@ pub(in crate::bplustree) struct MaterializedData<'data, TKey> {
 }
 
 impl<'data, TKey> MaterializedData<'data, TKey> {
-    pub(crate) fn new(entry_count: usize, data: &'data [u8]) -> Self {
+    pub(crate) const fn new(entry_count: usize, data: &'data [u8]) -> Self {
         Self {
             data,
             entry_count,
@@ -74,7 +74,7 @@ impl<'data, TKey> Data<'data, TKey> for MaterializedData<'data, TKey> {
 }
 
 impl<TKey> LeafNodeBuilder<TKey, (), ()> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             topology: (),
             data: (),

@@ -18,7 +18,8 @@ pub enum StorageError {
 pub struct PageIndex(u64);
 
 impl PageIndex {
-    pub fn zero() -> Self {
+    #[must_use]
+    pub const fn zero() -> Self {
         Self(0)
     }
 }
@@ -77,7 +78,7 @@ pub trait Storage {
     where
         Self: 'storage;
 
-    fn transaction<'storage>(&'storage self) -> Result<Self::Transaction<'storage>, StorageError>
+    fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError>
     where
         Self: Sized;
 }

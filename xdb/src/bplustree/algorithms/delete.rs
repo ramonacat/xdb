@@ -45,11 +45,13 @@ fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
 
     if let Some(next) = next {
         transaction.write_nodes(next, |node| {
-            node.set_links(node.parent(), Some(left_id), node.next())
+            node.set_links(node.parent(), Some(left_id), node.next());
         })?;
     }
 
-    let parent_id = transaction.read_nodes(left_id, |x| x.parent())?.unwrap();
+    let parent_id = transaction
+        .read_nodes(left_id, super::super::node::Node::parent)?
+        .unwrap();
 
     transaction.write_nodes(parent_id, |parent| parent.delete(right_id.into()))?;
     transaction.delete_node(right_id.into())?;
@@ -85,11 +87,14 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     node_id: InteriorNodeId,
 ) -> Result<(), TreeError> {
-    if !transaction.read_nodes(node_id, |node| node.needs_merge())? {
+    if !transaction.read_nodes(
+        node_id,
+        super::super::node::interior::InteriorNode::needs_merge,
+    )? {
         return Ok(());
     }
 
-    let parent_id = transaction.read_nodes(node_id, |node| node.parent())?;
+    let parent_id = transaction.read_nodes(node_id, super::super::node::Node::parent)?;
     let Some(parent_id) = parent_id else {
         return Ok(());
     };
@@ -107,7 +112,7 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
             Err(MergeError::NotEnoughCapacity) => {}
             Err(MergeError::NotSiblings) => todo!(), // this should probably just panic?
             Err(MergeError::Tree(err)) => return Err(err),
-        };
+        }
     }
 
     let right_id =
@@ -121,7 +126,7 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
             Err(MergeError::NotEnoughCapacity) => {}
             Err(MergeError::NotSiblings) => todo!(), // this should probably just panic?
             Err(MergeError::Tree(err)) => return Err(err),
-        };
+        }
     }
 
     merge_interior_node(transaction, parent_id)?;
@@ -138,7 +143,7 @@ fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
 
     if let Some(next) = next {
         match merge_leaf_with(transaction, leaf_id, next) {
-            Ok(_) => {
+            Ok(()) => {
                 if let Some(parent) = parent {
                     merge_interior_node(transaction, parent)?;
                 }
@@ -146,8 +151,7 @@ fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
                 return Ok(());
             }
             Err(err) => match err {
-                MergeError::NotSiblings => {}
-                MergeError::NotEnoughCapacity => {}
+                MergeError::NotSiblings | MergeError::NotEnoughCapacity => {}
                 MergeError::Tree(tree_error) => return Err(tree_error),
             },
         }
@@ -155,7 +159,7 @@ fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
 
     if let Some(previous) = previous {
         match merge_leaf_with(transaction, previous, leaf_id) {
-            Ok(_) => {
+            Ok(()) => {
                 if let Some(parent) = parent {
                     merge_interior_node(transaction, parent)?;
                 }
@@ -163,8 +167,7 @@ fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
                 return Ok(());
             }
             Err(err) => match err {
-                MergeError::NotSiblings => {}
-                MergeError::NotEnoughCapacity => {}
+                MergeError::NotSiblings | MergeError::NotEnoughCapacity => {}
                 MergeError::Tree(tree_error) => return Err(tree_error),
             },
         }

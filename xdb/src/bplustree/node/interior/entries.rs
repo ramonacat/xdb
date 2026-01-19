@@ -23,7 +23,7 @@ pub struct InteriorNodeEntries<TKey> {
 unsafe impl<TKey: TreeKey> Pod for InteriorNodeEntries<TKey> {}
 
 impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             key_count: 0,
             _unused1: 0,
@@ -47,7 +47,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         self.key_count() + 1 < self.key_capacity()
     }
 
-    pub fn split(&mut self) -> (TKey, InteriorNodeEntries<TKey>) {
+    pub fn split(&mut self) -> (TKey, Self) {
         let key_count = self.key_count();
         let keys_to_leave = key_count.div_ceil(2);
         let keys_to_move = key_count - keys_to_leave - 1;
@@ -66,9 +66,9 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
             ..value_data_to_move_start + values_to_move * size_of::<PageIndex>()]
             .to_vec();
 
-        self.key_count = keys_to_leave as u16;
+        self.key_count = u16::try_from(keys_to_leave).unwrap();
 
-        let mut split_node = InteriorNodeEntries::new();
+        let mut split_node = Self::new();
         let split_node_values_offset = split_node.values_offset();
 
         // TODO The first key here is not set, as that child must be created, enforce this via the
@@ -77,7 +77,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         split_node.data
             [split_node_values_offset..split_node_values_offset + value_data_to_move.len()]
             .copy_from_slice(&value_data_to_move);
-        split_node.key_count = keys_to_move as u16;
+        split_node.key_count = u16::try_from(keys_to_move).unwrap();
 
         let split_key_offset = (keys_to_leave) * size_of::<TKey>();
         (
@@ -95,8 +95,8 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         let key_offset = size_of::<TKey>() * (index);
         let value_offset = self.values_offset() + size_of::<PageIndex>() * (index + 1);
 
-        self.move_keys(index, size_of::<TKey>() as isize);
-        self.move_values(index + 1, size_of::<PageIndex>() as isize);
+        self.move_keys(index, isize::try_from(size_of::<TKey>()).unwrap());
+        self.move_values(index + 1, isize::try_from(size_of::<PageIndex>()).unwrap());
 
         self.data[key_offset..key_offset + size_of::<TKey>()].copy_from_slice(bytes_of(key));
         self.data[value_offset..value_offset + size_of::<PageIndex>()]
@@ -119,11 +119,11 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
             .copy_from_slice(&keys_to_move);
     }
 
-    fn values_offset(&self) -> usize {
+    const fn values_offset(&self) -> usize {
         self.key_capacity() * size_of::<TKey>()
     }
 
-    fn key_capacity(&self) -> usize {
+    const fn key_capacity(&self) -> usize {
         // n - max number of keys
         //
         // size = key_size*n + value_size*(n+1)
@@ -167,8 +167,8 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         assert!(index > 0); // TODO we should handle this situation as well
 
         if index < self.key_count() {
-            self.move_keys(index, -(size_of::<TKey>() as isize));
-            self.move_values(index + 1, -(size_of::<PageIndex>() as isize));
+            self.move_keys(index, -isize::try_from(size_of::<TKey>()).unwrap());
+            self.move_values(index + 1, -isize::try_from(size_of::<PageIndex>()).unwrap());
         }
 
         self.key_count -= 1;
@@ -179,7 +179,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
             < self.data.len()
     }
 
-    pub fn can_fit_merge(&self, right: &InteriorNodeEntries<TKey>) -> bool {
+    pub fn can_fit_merge(&self, right: &Self) -> bool {
         self.key_count() + right.key_count() > self.key_capacity()
     }
 

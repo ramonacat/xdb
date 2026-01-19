@@ -34,7 +34,9 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     ) -> Result<T, StorageError> {
         let storage = self.storage.pages.read().unwrap();
 
-        let pages = indices.into().map(|i| storage.get(i.0 as usize).unwrap());
+        let pages = indices
+            .into()
+            .map(|i| storage.get(usize::try_from(i.0).unwrap()).unwrap());
 
         Ok(read(pages))
     }
@@ -46,7 +48,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     ) -> Result<T, StorageError> {
         let mut storage = self.storage.pages.write().unwrap();
         let pages = storage
-            .get_disjoint_mut(indices.into().map(|x| x.0 as usize))
+            .get_disjoint_mut(indices.into().map(|x| usize::try_from(x.0).unwrap()))
             .unwrap();
 
         Ok(write(pages))
@@ -57,6 +59,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         storage.push(Page::zeroed());
 
         let index = PageIndex((storage.len() - 1) as u64);
+        drop(storage);
 
         Ok(InMemoryPageReservation {
             storage: self.storage,
@@ -69,10 +72,12 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         reservation: InMemoryPageReservation<'storage>,
         page: Page,
     ) -> Result<(), StorageError> {
-        let mut storage = self.storage.pages.write().unwrap();
-
-        *storage
-            .get_mut(reservation.index.0 as usize)
+        *self
+            .storage
+            .pages
+            .write()
+            .unwrap()
+            .get_mut(usize::try_from(reservation.index.0).unwrap())
             .ok_or_else(|| StorageError::PageNotFound(reservation.index()))? = page;
 
         Ok(())
@@ -88,8 +93,14 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     fn delete(&self, page: PageIndex) -> Result<(), StorageError> {
         // TODO actually delete the page, instead of just zeroing!
 
-        let mut storage = self.storage.pages.write().unwrap();
-        *storage.get_mut(page.0 as usize).unwrap() = Page::zeroed();
+        *self
+            .storage
+            .pages
+            .write()
+            .unwrap()
+            .get_mut(usize::try_from(page.0).unwrap())
+            .unwrap() = Page::zeroed();
+
         Ok(())
     }
 
@@ -111,7 +122,8 @@ impl Default for InMemoryStorage {
 }
 
 impl InMemoryStorage {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             pages: RwLock::new(vec![]),
         }
@@ -122,7 +134,7 @@ impl Storage for InMemoryStorage {
     type Transaction<'a> = InMemoryTransaction<'a>;
     type PageReservation<'a> = InMemoryPageReservation<'a>;
 
-    fn transaction<'storage>(&'storage self) -> Result<Self::Transaction<'storage>, StorageError> {
+    fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError> {
         Ok(InMemoryTransaction { storage: self })
     }
 }
@@ -137,7 +149,7 @@ pub mod test {
         },
     };
 
-    use super::*;
+    use super::{Page, PageIndex, StorageError, Transaction};
     use crate::storage::Storage;
 
     pub struct TestTransaction<'a, T: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>(
@@ -201,7 +213,7 @@ pub mod test {
     }
 
     impl<T: Storage> TestStorage<T> {
-        pub fn new(inner: T, page_count: Arc<AtomicUsize>) -> Self {
+        pub const fn new(inner: T, page_count: Arc<AtomicUsize>) -> Self {
             Self { page_count, inner }
         }
     }
@@ -217,9 +229,7 @@ pub mod test {
         where
             T: 'a;
 
-        fn transaction<'storage>(
-            &'storage self,
-        ) -> Result<Self::Transaction<'storage>, StorageError> {
+        fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError> {
             Ok(TestTransaction(
                 self.inner.transaction()?,
                 self.page_count.clone(),

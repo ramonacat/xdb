@@ -68,11 +68,11 @@ impl Display for LeafNodeId {
 
 impl LeafNodeId {
     // TODO is there a way to enforce validity in this API?
-    pub fn from_any(unknown: AnyNodeId) -> LeafNodeId {
+    pub const fn from_any(unknown: AnyNodeId) -> Self {
         Self(unknown.0)
     }
 
-    pub fn new(index: PageIndex) -> Self {
+    pub const fn new(index: PageIndex) -> Self {
         Self(index)
     }
 }
@@ -104,7 +104,7 @@ impl InteriorNodeId {
         Self(index)
     }
 
-    pub(crate) fn from_any(other: AnyNodeId) -> InteriorNodeId {
+    pub(crate) fn from_any(other: AnyNodeId) -> Self {
         Self::new(other.0)
     }
 }
@@ -190,11 +190,11 @@ pub(super) enum AnyNodeKind<'node, TKey: TreeKey> {
 }
 
 impl<TKey: TreeKey> AnyNode<TKey> {
-    pub fn is_leaf(&self) -> bool {
+    pub const fn is_leaf(&self) -> bool {
         !self.header.flags.contains(NodeFlags::INTERNAL)
     }
 
-    pub(crate) fn as_any(&self) -> AnyNodeKind<'_, TKey> {
+    pub(crate) const fn as_any(&self) -> AnyNodeKind<'_, TKey> {
         if self.is_leaf() {
             AnyNodeKind::Leaf(must_cast_ref(self))
         } else {

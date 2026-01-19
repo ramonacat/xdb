@@ -36,6 +36,8 @@ pub enum TreeAction<T: TreeKey> {
     Delete { key: BigKey<T> },
 }
 
+// TODO figure something out so that we can encourage interior node splits, perhaps bigger value,
+// smaller key?
 pub fn run_ops<T: TreeKey>(actions: &[TreeAction<T>]) {
     #[cfg(true)]
     {
@@ -81,5 +83,5 @@ pub fn run_ops<T: TreeKey>(actions: &[TreeAction<T>]) {
         };
     }
 
-    assert_tree_equal(&tree, rust_btree);
+    assert_tree_equal(&tree, &rust_btree);
 }

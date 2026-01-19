@@ -22,7 +22,8 @@ impl<'tree, T: Storage, TKey: TreeKey> TreeIterator<'tree, T, TKey> {
         let starting_leaf_forwards = first_leaf(&transaction, root)?;
         let starting_leaf_backwards = last_leaf(&transaction, root)?;
 
-        let backward_index = transaction.read_nodes(starting_leaf_backwards, |x| x.len())?;
+        let backward_index =
+            transaction.read_nodes(starting_leaf_backwards, super::node::leaf::LeafNode::len)?;
 
         Ok(Self {
             transaction,
@@ -40,7 +41,7 @@ enum IteratorResult<TKey> {
     None,
 }
 
-impl<'tree, T: Storage, TKey: TreeKey> Iterator for TreeIterator<'tree, T, TKey> {
+impl<T: Storage, TKey: TreeKey> Iterator for TreeIterator<'_, T, TKey> {
     type Item = Result<(TKey, Vec<u8>), TreeError>;
 
     // TODO get rid of all the unwraps!
@@ -61,13 +62,9 @@ impl<'tree, T: Storage, TKey: TreeKey> Iterator for TreeIterator<'tree, T, TKey>
 
                         IteratorResult::Value(Ok((entry.key(), entry.value().to_vec())))
                     }
-                    None => {
-                        if let Some(next_leaf) = node.next() {
-                            IteratorResult::Next(next_leaf)
-                        } else {
-                            IteratorResult::None
-                        }
-                    }
+                    None => node
+                        .next()
+                        .map_or(IteratorResult::None, IteratorResult::Next),
                 }
             })
             .unwrap();
@@ -85,7 +82,7 @@ impl<'tree, T: Storage, TKey: TreeKey> Iterator for TreeIterator<'tree, T, TKey>
     }
 }
 
-impl<'tree, T: Storage, TKey: TreeKey> DoubleEndedIterator for TreeIterator<'tree, T, TKey> {
+impl<T: Storage, TKey: TreeKey> DoubleEndedIterator for TreeIterator<'_, T, TKey> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.current_forward_leaf == self.current_backward_leaf
             && self.forward_index == self.backward_index
@@ -108,13 +105,9 @@ impl<'tree, T: Storage, TKey: TreeKey> DoubleEndedIterator for TreeIterator<'tre
 
                         IteratorResult::Value(Ok((entry.key(), entry.value().to_vec())))
                     }
-                    None => {
-                        if let Some(next_leaf) = node.previous() {
-                            IteratorResult::Next(next_leaf)
-                        } else {
-                            IteratorResult::None
-                        }
-                    }
+                    None => node
+                        .previous()
+                        .map_or(IteratorResult::None, IteratorResult::Next),
                 }
             })
             .unwrap();
@@ -123,7 +116,10 @@ impl<'tree, T: Storage, TKey: TreeKey> DoubleEndedIterator for TreeIterator<'tre
             IteratorResult::Value(x) => Some(x),
             IteratorResult::Next(next_leaf) => {
                 self.current_backward_leaf = next_leaf;
-                self.backward_index = self.transaction.read_nodes(next_leaf, |x| x.len()).unwrap();
+                self.backward_index = self
+                    .transaction
+                    .read_nodes(next_leaf, super::node::leaf::LeafNode::len)
+                    .unwrap();
 
                 self.next_back()
             }

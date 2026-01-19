@@ -37,7 +37,7 @@ impl<T: Display + Pod> Display for BigKey<T> {
 }
 
 impl<T: Pod> BigKey<T> {
-    const VALUE_COUNT: usize = size_of::<BigKey<T>>() / size_of::<T>();
+    const VALUE_COUNT: usize = size_of::<Self>() / size_of::<T>();
 
     pub fn new(value: T) -> Self {
         let bytes = bytes_of(&value).repeat(Self::VALUE_COUNT);
@@ -45,6 +45,7 @@ impl<T: Pod> BigKey<T> {
         Self(bytes.try_into().unwrap(), PhantomData)
     }
 
+    #[must_use]
     pub fn value(&self) -> T {
         self.validate();
 

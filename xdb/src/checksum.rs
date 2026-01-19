@@ -6,7 +6,7 @@ use crc32c::crc32c;
 pub struct Checksum(u32);
 
 impl Checksum {
-    pub fn from_bytes(bytes: [u8; 4]) -> Self {
+    pub const fn from_bytes(bytes: [u8; 4]) -> Self {
         Self(u32::from_le_bytes(bytes))
     }
 
@@ -14,7 +14,7 @@ impl Checksum {
         Self(crc32c(bytes))
     }
 
-    pub fn clear(&mut self) {
+    pub const fn clear(&mut self) {
         self.0 = 0;
     }
 }

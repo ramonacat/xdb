@@ -7,7 +7,7 @@ use crate::{
 
 pub fn assert_tree_equal<TStorage: Storage, TKey: TreeKey>(
     left: &Tree<TStorage, TKey>,
-    right: BTreeMap<TKey, Vec<u8>>,
+    right: &BTreeMap<TKey, Vec<u8>>,
 ) {
     assert_eq!(
         left.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),
@@ -72,10 +72,10 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
                         let keys = interior_node.keys().collect::<Vec<_>>();
 
                         result.push((
-                            if !keys.is_empty() {
-                                keys.last().map(|x| **x)
-                            } else {
+                            if keys.is_empty() {
                                 start_min_key
+                            } else {
+                                keys.last().map(|x| **x)
                             },
                             start_max_key,
                             last_value,
@@ -93,7 +93,7 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
                         }
                     }
                 }
-            };
+            }
 
             result
         })
