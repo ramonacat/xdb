@@ -162,8 +162,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         // TODO implement this lol
     }
 
-    // TODO rename -> delete_value for consistency
-    pub(crate) fn remove_value(&mut self, value: AnyNodeId) {
+    pub(crate) fn delete_value(&mut self, value: AnyNodeId) {
         let index = self.find_value_index(value).unwrap();
 
         self.entries.delete_at(index);

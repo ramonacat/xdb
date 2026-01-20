@@ -77,7 +77,7 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
         }
 
         left.merge_from(right);
-        parent.remove_value(right_id.into());
+        parent.delete_value(right_id.into());
 
         Ok(())
     })?

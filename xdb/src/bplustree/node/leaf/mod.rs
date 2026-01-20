@@ -108,14 +108,13 @@ impl<TKey: TreeKey> LeafNode<TKey> {
         None
     }
 
-    pub fn insert(&mut self, key: TKey, value: &[u8]) {
+    pub fn insert(&mut self, key: TKey, value: &[u8]) -> Option<Vec<u8>> {
         let mut insert_index = self.data.len();
 
         let mut delete_index = None;
 
         for (index, entry) in self.entries().enumerate() {
             if key == entry.key() {
-                // TODO return a different result type for replaced?
                 delete_index = Some(index);
 
                 insert_index = index;
@@ -128,11 +127,12 @@ impl<TKey: TreeKey> LeafNode<TKey> {
             }
         }
 
-        let size_increase = value.len().saturating_sub(
-            delete_index
-                .and_then(|x| self.data.entry(x))
-                .map_or(0, |x| x.value_size()),
-        );
+        let deleted_entry = delete_index.and_then(|x| self.data.entry(x));
+        let result = deleted_entry.as_ref().map(|x| x.value().to_vec());
+
+        let size_increase = value
+            .len()
+            .saturating_sub(deleted_entry.map_or(0, |x| x.value_size()));
 
         assert!(
             self.data.can_fit(size_increase),
@@ -144,6 +144,8 @@ impl<TKey: TreeKey> LeafNode<TKey> {
         }
 
         self.data.insert_at(insert_index, key, value);
+
+        result
     }
 
     pub fn split(&'_ mut self) -> LeafNodeBuilder<TKey, (), MaterializedData<'_, TKey>> {

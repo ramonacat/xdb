@@ -164,8 +164,6 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     pub fn delete_at(&mut self, index: usize) {
-        assert!(index > 0); // TODO we should handle this situation as well
-
         if index < self.key_count() {
             self.move_keys(index, -isize::try_from(size_of::<TKey>()).unwrap());
             self.move_values(index + 1, -isize::try_from(size_of::<PageIndex>()).unwrap());
