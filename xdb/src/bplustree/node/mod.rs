@@ -124,6 +124,7 @@ bitflags::bitflags! {
     #[derive(Debug, Pod, Zeroable, Clone, Copy)]
     #[repr(transparent)]
     struct NodeFlags: u16 {
+        // TODO rename -> INTERIOR
         const INTERNAL = 1 << 0;
     }
 }
