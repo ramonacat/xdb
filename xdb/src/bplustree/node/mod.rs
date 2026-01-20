@@ -124,8 +124,7 @@ bitflags::bitflags! {
     #[derive(Debug, Pod, Zeroable, Clone, Copy)]
     #[repr(transparent)]
     struct NodeFlags: u16 {
-        // TODO rename -> INTERIOR
-        const INTERNAL = 1 << 0;
+        const INTERIOR = 1 << 0;
     }
 }
 
@@ -192,7 +191,7 @@ pub(super) enum AnyNodeKind<'node, TKey: TreeKey> {
 
 impl<TKey: TreeKey> AnyNode<TKey> {
     pub const fn is_leaf(&self) -> bool {
-        !self.header.flags.contains(NodeFlags::INTERNAL)
+        !self.header.flags.contains(NodeFlags::INTERIOR)
     }
 
     pub(crate) const fn as_any(&self) -> AnyNodeKind<'_, TKey> {

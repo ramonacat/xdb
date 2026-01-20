@@ -39,7 +39,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
             // TODO create a constructor for NodeHeader so that we don't have to directly touch the
             // internals here
             header: NodeHeader {
-                flags: NodeFlags::INTERNAL,
+                flags: NodeFlags::INTERIOR,
                 _unused1: 0,
                 _unused2: 0,
                 parent: PageIndex::zero(),
@@ -53,7 +53,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
     fn from_entries(parent: Option<InteriorNodeId>, entries: InteriorNodeEntries<TKey>) -> Self {
         Self {
             header: NodeHeader {
-                flags: NodeFlags::INTERNAL,
+                flags: NodeFlags::INTERIOR,
                 _unused1: 0,
                 _unused2: 0,
                 parent: parent.into(),
