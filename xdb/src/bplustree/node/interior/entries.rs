@@ -43,9 +43,16 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
     const KEY_CAPACITY: usize = (INTERIOR_NODE_DATA_SIZE - size_of::<PageIndex>())
         / (size_of::<TKey>() + size_of::<PageIndex>());
 
-    const fn new() -> Self {
+    fn from_raw_data(keys: &[u8], values: &[u8]) -> Self {
+        assert!(keys.len() < Self::VALUES_OFFSET);
+
+        let mut data = [0; _];
+
+        data[..keys.len()].copy_from_slice(keys);
+        data[Self::VALUES_OFFSET..Self::VALUES_OFFSET + values.len()].copy_from_slice(values);
+
         Self {
-            data: [0; _],
+            data,
             _key: PhantomData,
         }
     }
@@ -68,22 +75,23 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
 }
 
 impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
-    // TODO get rid of this, don't allow creating an invalid node
-    pub const fn new() -> Self {
+    pub fn new(left: PageIndex, key: TKey, right: PageIndex) -> Self {
+        let values = bytes_of(&left)
+            .iter()
+            .chain(bytes_of(&right))
+            .copied()
+            .collect::<Vec<_>>();
+
         Self {
-            key_count: 0,
+            key_count: 1,
             _unused1: 0,
             _unused2: 0,
-            data: InteriorNodeData::new(),
+            data: InteriorNodeData::from_raw_data(bytes_of(&key), &values),
         }
     }
 
     pub fn key_count(&self) -> usize {
         usize::from(self.key_count)
-    }
-
-    pub fn set_first_pointer(&mut self, value: PageIndex) {
-        self.data.values_mut()[..size_of::<PageIndex>()].copy_from_slice(bytes_of(&value));
     }
 
     pub fn has_spare_capacity(&self) -> bool {
@@ -110,10 +118,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
 
         self.key_count = u16::try_from(keys_to_leave).unwrap();
 
-        let mut new_node_data = InteriorNodeData::new();
-
-        new_node_data.keys_mut()[..key_data_to_move.len()].copy_from_slice(&key_data_to_move);
-        new_node_data.values_mut()[..value_data_to_move.len()].copy_from_slice(&value_data_to_move);
+        let new_node_data = InteriorNodeData::from_raw_data(&key_data_to_move, &value_data_to_move);
 
         let split_key_offset = (keys_to_leave) * size_of::<TKey>();
         (

@@ -17,13 +17,9 @@ fn create_new_root<'storage, TStorage: Storage, TKey: TreeKey>(
     right: AnyNodeId,
 ) -> Result<(), TreeError> {
     let new_root_id = InteriorNodeId::new(reservation.index());
-    let mut new_root = InteriorNode::<TKey>::new();
-
-    new_root.set_first_pointer(left);
-    new_root.insert_node(&key, right);
+    let new_root = InteriorNode::<TKey>::new(left, key, right);
 
     transaction.insert_reserved(reservation, Page::from_data(new_root))?;
-
     transaction.write_header(|header| header.root = new_root_id.page())?;
 
     Ok(())

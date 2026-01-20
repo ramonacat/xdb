@@ -34,7 +34,7 @@ where
 unsafe impl<TKey: TreeKey + 'static> NoUninit for InteriorNode<TKey> {}
 
 impl<TKey: TreeKey> InteriorNode<TKey> {
-    pub const fn new() -> Self {
+    pub fn new(left: AnyNodeId, key: TKey, right: AnyNodeId) -> Self {
         Self {
             // TODO create a constructor for NodeHeader so that we don't have to directly touch the
             // internals here
@@ -44,7 +44,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
                 _unused2: 0,
                 parent: PageIndex::zero(),
             },
-            entries: InteriorNodeEntries::new(),
+            entries: InteriorNodeEntries::new(left.page(), key, right.page()),
         }
     }
 
@@ -71,10 +71,6 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
             node: self,
             index: 0,
         }
-    }
-
-    pub(crate) fn set_first_pointer(&mut self, index: AnyNodeId) {
-        self.entries.set_first_pointer(index.page());
     }
 
     pub fn has_spare_capacity(&self) -> bool {
