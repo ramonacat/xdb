@@ -33,18 +33,19 @@ fuzz_target!(|keys_to_delete: Vec<KeyToDelete>| {
     let mut rust_btree = BTreeMap::new();
 
     for i in 0..MAX_KEYS {
-        let key = BigKey::new(i);
+        let key = BigKey::<u32, 512>::new(i);
         let value = vec![0; (i % 8) as usize];
 
         insert(&transaction, key, &value).unwrap();
-        rust_btree.insert(key, value);
+        rust_btree.insert(i, value);
     }
 
     for key in keys_to_delete {
+        rust_btree.remove(&key.0);
+
         let key = BigKey::new(key.0);
-        rust_btree.remove(&key);
         delete(&transaction, key).unwrap();
     }
 
-    assert_tree_equal(&tree, &rust_btree);
+    assert_tree_equal(&tree, &rust_btree, |k| k.value());
 });

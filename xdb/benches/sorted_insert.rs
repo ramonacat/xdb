@@ -15,7 +15,7 @@ fn sorted_insert(c: &mut Criterion) {
     c.bench_function("sorted_insert (8 byte value)", |b| {
         b.iter(|| {
             for i in 0..5000 {
-                insert::insert(&transaction, BigKey::<u64>::new(i), &i.to_ne_bytes()).unwrap();
+                insert::insert(&transaction, BigKey::<u64, 256>::new(i), &i.to_ne_bytes()).unwrap();
             }
         })
     });
@@ -29,7 +29,7 @@ fn sorted_insert(c: &mut Criterion) {
     c.bench_function("sorted_insert (512 byte value)", |b| {
         b.iter(|| {
             for i in 0..5000 {
-                insert::insert(&transaction, BigKey::<u64>::new(i), &vec![0xff; 512]).unwrap();
+                insert::insert(&transaction, BigKey::<u64, 256>::new(i), &vec![0xff; 512]).unwrap();
             }
         })
     });

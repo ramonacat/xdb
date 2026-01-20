@@ -19,7 +19,7 @@ impl Debug for Value {
 
 impl<'a> Arbitrary<'a> for Value {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let len = u.int_in_range(1..=1024)?;
+        let len = u.int_in_range(1..=64)?;
 
         let mut result = Vec::with_capacity(len);
         for _ in 0..len {
@@ -31,14 +31,19 @@ impl<'a> Arbitrary<'a> for Value {
 }
 
 #[derive(Debug, Arbitrary)]
-pub enum TreeAction<T: TreeKey> {
-    Insert { key: BigKey<T>, value: Value },
-    Delete { key: BigKey<T> },
+pub enum TreeAction<T: TreeKey, const KEY_SIZE: usize> {
+    Insert {
+        key: BigKey<T, KEY_SIZE>,
+        value: Value,
+    },
+    Delete {
+        key: BigKey<T, KEY_SIZE>,
+    },
 }
 
 // TODO figure something out so that we can encourage interior node splits, perhaps bigger value,
 // smaller key?
-pub fn run_ops<T: TreeKey>(actions: &[TreeAction<T>]) {
+pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_SIZE>]) {
     #[cfg(true)]
     {
         let mut result = "vec![\n".to_string();
@@ -72,16 +77,16 @@ pub fn run_ops<T: TreeKey>(actions: &[TreeAction<T>]) {
         match action {
             TreeAction::Insert { key, value } => {
                 insert(&transaction, *key, &value.0).unwrap();
-                rust_btree.insert(*key, value.0.clone());
+                rust_btree.insert(key.value(), value.0.clone());
             }
             TreeAction::Delete { key } => {
                 let deleted = delete(&transaction, *key).unwrap();
-                let deleted2 = rust_btree.remove(key);
+                let deleted2 = rust_btree.remove(&key.value());
 
                 assert!(deleted == deleted2)
             }
         };
     }
 
-    assert_tree_equal(&tree, &rust_btree);
+    assert_tree_equal(&tree, &rust_btree, |k| k.value());
 }

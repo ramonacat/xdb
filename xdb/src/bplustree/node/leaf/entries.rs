@@ -214,6 +214,8 @@ impl<TKey: TreeKey> LeafNodeEntries<TKey> {
             entries_to_leave += 1;
         }
 
+        entries_to_leave -= 1;
+
         let entries_to_move = initial_len - entries_to_leave;
 
         MaterializedData::new(entries_to_move, self.split_at(entries_to_leave))

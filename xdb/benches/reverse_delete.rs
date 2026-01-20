@@ -15,7 +15,7 @@ fn reverse_delete(c: &mut Criterion) {
     let tree = Tree::new(storage).unwrap();
     let transaction = tree.transaction().unwrap();
     for i in 0..50000 {
-        insert(&transaction, BigKey::<u64>::new(i), &i.to_ne_bytes()).unwrap();
+        insert(&transaction, BigKey::<u64, 256>::new(i), &i.to_ne_bytes()).unwrap();
     }
 
     c.bench_function("reverse delete", |b| {

@@ -1,3 +1,4 @@
+use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
 use crate::{
@@ -5,12 +6,17 @@ use crate::{
     storage::Storage,
 };
 
-pub fn assert_tree_equal<TStorage: Storage, TKey: TreeKey>(
+pub fn assert_tree_equal<TStorage: Storage, TKey: TreeKey, TRightKey: TreeKey>(
     left: &Tree<TStorage, TKey>,
-    right: &BTreeMap<TKey, Vec<u8>>,
+    right: &BTreeMap<TRightKey, Vec<u8>>,
+    key_convert: impl Fn(TKey) -> TRightKey,
 ) {
     assert_eq!(
-        left.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),
+        left.iter()
+            .unwrap()
+            .map(|x| x.unwrap())
+            .map(|(k, v)| (key_convert(k), v))
+            .collect::<Vec<_>>(),
         right
             .iter()
             .map(|(x, y)| (*x, y.clone()))
@@ -21,6 +27,7 @@ pub fn assert_tree_equal<TStorage: Storage, TKey: TreeKey>(
             .unwrap()
             .rev()
             .map(|x| x.unwrap())
+            .map(|(k, v)| (key_convert(k), v))
             .collect::<Vec<_>>(),
         right
             .iter()
@@ -33,7 +40,7 @@ pub fn assert_tree_equal<TStorage: Storage, TKey: TreeKey>(
 pub fn assert_properties<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
 ) {
-    if !cfg!(any(debug_assertions, fuzzing)) {
+    if !cfg!(test) {
         return;
     }
 

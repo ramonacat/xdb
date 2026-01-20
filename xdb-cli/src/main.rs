@@ -22,10 +22,10 @@ fn main() {
     let transaction = tree.transaction().unwrap();
 
     let mut i: usize = 0;
-    while page_count.load(Ordering::Relaxed) < 500_000 {
+    while page_count.load(Ordering::Relaxed) < 5000 {
         insert(
             &transaction,
-            BigKey::new(u64::try_from(i).unwrap()),
+            BigKey::<u64, 512>::new(u64::try_from(i).unwrap()),
             &(u16::MAX - u16::try_from(i).unwrap())
                 .to_be_bytes()
                 .repeat(64),
@@ -39,5 +39,5 @@ fn main() {
         delete(&transaction, BigKey::new(u64::try_from(j).unwrap())).unwrap();
     }
 
-    std::hint::black_box(tree);
+    println!("{}", tree.into_dot(|x| format!("({})", x.len())).unwrap());
 }

@@ -8,19 +8,39 @@ use bytemuck::{Pod, Zeroable, bytes_of, pod_read_unaligned};
 
 use crate::bplustree::TreeKey;
 
-#[derive(Clone, Copy, Pod, Zeroable, Ord, PartialOrd, PartialEq, Eq)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(transparent)]
-pub struct BigKey<T>([u8; 256], PhantomData<T>);
+pub struct BigKey<T, const SIZE: usize>([u8; SIZE], PhantomData<T>);
 
-impl<T: TreeKey> TreeKey for BigKey<T> {}
+impl<T: TreeKey, const SIZE: usize> PartialOrd for BigKey<T, SIZE> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
-impl<T: Pod + Debug> Debug for BigKey<T> {
+impl<T: TreeKey, const SIZE: usize> Ord for BigKey<T, SIZE> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.value().cmp(&other.value())
+    }
+}
+
+impl<T: TreeKey, const SIZE: usize> Eq for BigKey<T, SIZE> {}
+
+impl<T: TreeKey, const SIZE: usize> PartialEq for BigKey<T, SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value() == other.value()
+    }
+}
+
+impl<T: TreeKey, const SIZE: usize> TreeKey for BigKey<T, SIZE> {}
+
+impl<T: TreeKey, const SIZE: usize> Debug for BigKey<T, SIZE> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "BigKey({:?})", self.value())
     }
 }
 
-impl<'a, T: Arbitrary<'a> + Pod> Arbitrary<'a> for BigKey<T> {
+impl<'a, T: Arbitrary<'a> + TreeKey, const SIZE: usize> Arbitrary<'a> for BigKey<T, SIZE> {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
         let value = u.arbitrary()?;
 
@@ -28,7 +48,7 @@ impl<'a, T: Arbitrary<'a> + Pod> Arbitrary<'a> for BigKey<T> {
     }
 }
 
-impl<T: Display + Pod> Display for BigKey<T> {
+impl<T: Display + TreeKey, const SIZE: usize> Display for BigKey<T, SIZE> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.validate();
 
@@ -36,7 +56,7 @@ impl<T: Display + Pod> Display for BigKey<T> {
     }
 }
 
-impl<T: Pod> BigKey<T> {
+impl<T: TreeKey, const SIZE: usize> BigKey<T, SIZE> {
     const VALUE_COUNT: usize = size_of::<Self>() / size_of::<T>();
 
     pub fn new(value: T) -> Self {

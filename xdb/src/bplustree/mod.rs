@@ -261,7 +261,7 @@ mod test {
         for i in 0..1024 {
             // make the value bigger with repeat so fewer inserts are needed and the test runs faster
             data.push(TestAction::Insert(
-                BigKey::<usize>::new(i),
+                BigKey::<usize, 256>::new(i),
                 (u16::max_value() - i as u16).to_be_bytes().repeat(8),
             ));
         }
@@ -273,9 +273,12 @@ mod test {
     fn delete_first_from_big_tree() {
         let mut data = vec![];
 
-        for i in 0..256 {
+        for i in 0..2048 {
             // make the value bigger with repeat so fewer inserts are needed and the test runs faster
-            data.push(TestAction::Insert(BigKey::<usize>::new(i), vec![0; i % 8]));
+            data.push(TestAction::Insert(
+                BigKey::<u32, 1200>::new(i),
+                vec![0; usize::try_from(i % 8).unwrap()],
+            ));
         }
 
         data.push(TestAction::Delete(BigKey::new(0)));
@@ -296,7 +299,10 @@ mod test {
                 _ => unreachable!(),
             };
 
-            data.push(TestAction::Insert(BigKey::new(i), value.repeat(8)));
+            data.push(TestAction::Insert(
+                BigKey::<_, 256>::new(i),
+                value.repeat(8),
+            ));
         }
 
         test_from_data(data);
@@ -335,7 +341,9 @@ mod test {
         Delete(TKey),
     }
 
-    fn test_from_data<TKey: TreeKey + UnwindSafe + RefUnwindSafe>(data: Vec<TestAction<TKey>>) {
+    fn test_from_data<TKey: TreeKey + UnwindSafe + RefUnwindSafe, const SIZE: usize>(
+        data: Vec<TestAction<BigKey<TKey, SIZE>>>,
+    ) {
         let _ = env_logger::builder().is_test(true).try_init();
 
         let storage = InMemoryStorage::new();
@@ -349,16 +357,16 @@ mod test {
                 match action {
                     TestAction::Insert(key, value) => {
                         insert(&transaction, key, &value).unwrap();
-                        rust_tree.insert(key, value);
+                        rust_tree.insert(key.value(), value);
                     }
                     TestAction::Delete(key) => {
                         delete(&transaction, key).unwrap();
-                        rust_tree.remove(&key);
+                        rust_tree.remove(&key.value());
                     }
                 }
             }
 
-            assert_tree_equal(&tree, &rust_tree);
+            assert_tree_equal(&tree, &rust_tree, |k| k.value());
         });
 
         if let Err(_) = result {
@@ -414,7 +422,7 @@ mod test {
     fn reverse_with_splits() {
         // this case came from fuzzing, hence the slightly unhinged input
         let to_insert = vec![
-            TestAction::Insert(BigKey::<u64>::new(1095228325891), vec![0u8; 2]),
+            TestAction::Insert(BigKey::<u64, 256>::new(1095228325891), vec![0u8; 2]),
             TestAction::Insert(BigKey::new(23552), vec![0u8; 2]),
             TestAction::Insert(BigKey::new(749004913038733311), vec![0u8; 1]),
             TestAction::Insert(BigKey::new(11730937), vec![0u8; 1]),
@@ -486,7 +494,7 @@ mod test {
     fn fuzzer_a() {
         // this case came from fuzzing, hence the slightly unhinged input
         let to_insert = vec![
-            TestAction::Insert(BigKey::<u64>::new(1095228325891), vec![0u8; 2]),
+            TestAction::Insert(BigKey::<u64, 256>::new(1095228325891), vec![0u8; 2]),
             TestAction::Insert(BigKey::new(3096224743840768), vec![0u8; 2]),
             TestAction::Insert(BigKey::new(749004913038733311), vec![0u8; 1]),
             TestAction::Insert(BigKey::new(18230289816630788089), vec![0u8; 1]),
@@ -642,7 +650,7 @@ mod test {
     #[test]
     fn fuzzer_b() {
         let data = vec![
-            TestAction::Insert(BigKey::<u64>::new(1095228325891), vec![0u8; 2]),
+            TestAction::Insert(BigKey::<u64, 256>::new(1095228325891), vec![0u8; 2]),
             TestAction::Insert(BigKey::new(3096224743840768), vec![0u8; 2]),
             TestAction::Insert(BigKey::new(749004913038733311), vec![0u8; 1]),
             TestAction::Insert(BigKey::new(18230289816630788089), vec![0u8; 1]),
@@ -807,7 +815,7 @@ mod test {
         let tree = Tree::new(storage).unwrap();
         let transaction = tree.transaction().unwrap();
 
-        insert(&transaction, BigKey::new(1), &[1, 2, 3]).unwrap();
+        insert(&transaction, BigKey::<_, 256>::new(1), &[1, 2, 3]).unwrap();
         insert(&transaction, BigKey::new(2), &[4, 5, 6]).unwrap();
 
         let deleted_value = delete(&transaction, BigKey::new(2)).unwrap();
@@ -831,7 +839,7 @@ mod test {
         let mut data = vec![];
 
         while page_count.load(Ordering::Relaxed) < 3 {
-            let key = BigKey::new(i);
+            let key = BigKey::<_, 256>::new(i);
             let value = vec![1, 2, 3];
             insert(&transaction, key, &value).unwrap();
             data.push((key, value));
@@ -851,7 +859,7 @@ mod test {
     #[test]
     fn fuzzer_c() {
         let data = vec![
-            TestAction::Insert(BigKey::<u64>::new(18446744030759919616), vec![0u8; 1]),
+            TestAction::Insert(BigKey::<u64, 256>::new(18446744030759919616), vec![0u8; 1]),
             TestAction::Insert(BigKey::new(4251399053270056960), vec![0u8; 5]),
             TestAction::Insert(BigKey::new(18201297895007745287), vec![0u8; 1]),
             TestAction::Insert(BigKey::new(42784197198217216), vec![0u8; 1]),
@@ -876,7 +884,7 @@ mod test {
     #[test]
     fn fuzzer_d() {
         let data = vec![
-            TestAction::Insert(BigKey::<u64>::new(72057594021191680), vec![0u8; 1]),
+            TestAction::Insert(BigKey::<u64, 256>::new(72057594021191680), vec![0u8; 1]),
             TestAction::Insert(BigKey::new(4251399053270056960), vec![0u8; 5]),
             TestAction::Insert(BigKey::new(18201297895007745287), vec![0u8; 1]),
             TestAction::Insert(BigKey::new(42784197198217216), vec![0u8; 1]),
@@ -912,7 +920,7 @@ mod test {
     #[test]
     fn fuzzer_e() {
         let data = vec![
-            TestAction::Insert(BigKey::<u64>::new(291326600879931392), vec![0u8; 1]),
+            TestAction::Insert(BigKey::<u64, 256>::new(291326600879931392), vec![0u8; 1]),
             TestAction::Delete(BigKey::new(3170534137752715140)),
             TestAction::Insert(BigKey::new(18324302742308257536), vec![0u8; 1]),
             TestAction::Insert(BigKey::new(21673582219952384), vec![0u8; 1]),
@@ -933,6 +941,16 @@ mod test {
             TestAction::Delete(BigKey::new(18446744073709551615)),
             TestAction::Delete(BigKey::new(18374755856278355967)),
         ];
+        test_from_data(data);
+    }
+
+    #[test]
+    fn fuzzer_f() {
+        let data = vec![
+            TestAction::Insert(BigKey::<u64, 1024>::new(72056679496225041), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(255), vec![0u8; 1]),
+        ];
+
         test_from_data(data);
     }
 }
