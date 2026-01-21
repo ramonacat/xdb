@@ -47,8 +47,9 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 
                     writeln!(output, "N{node_index}[label=\"{label}\"];").unwrap();
 
-                    for (index, value) in node.values().enumerate() {
-                        writeln!(output, "N{node_index} -> N{value}[label=\"{index}\"];").unwrap();
+                    for (index, value) in node.values() {
+                        writeln!(output, "N{node_index} -> N{value}[label=\"{index:?}\"];")
+                            .unwrap();
 
                         output += &Self::node_to_dot(transaction, value, stringify_value)?;
                     }

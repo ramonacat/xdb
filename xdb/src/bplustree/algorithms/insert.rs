@@ -88,7 +88,7 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
     let (split_key, new_node) =
         transaction.write_nodes(target, super::super::node::interior::InteriorNode::split)?;
 
-    for child in new_node.values() {
+    for (_, child) in new_node.values() {
         transaction.write_nodes(child, |node| node.set_parent(Some(new_node_id)))?;
     }
 

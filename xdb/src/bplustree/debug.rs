@@ -53,7 +53,6 @@ pub fn assert_properties<TStorage: Storage, TKey: TreeKey>(
     assert_keys_lower_than_parent(transaction, None, None, None);
     assert_tree_balanced(transaction, None);
     assert_correct_topology(transaction, None, None, None, None);
-    // TODO verify all the leaf nodes are at least half-full
 }
 
 fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
@@ -70,15 +69,15 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
 
             match node.as_any() {
                 AnyNodeKind::Interior(interior_node) => {
-                    for (index, key) in interior_node.keys().enumerate() {
+                    for (index, key) in interior_node.keys() {
                         result.push((
-                            if index > 0 {
-                                interior_node.keys().nth(index - 1)
-                            } else {
+                            if index.is_first() {
                                 start_min_key
+                            } else {
+                                interior_node.key_at(index.key_before())
                             },
                             Some(key),
-                            interior_node.value_at(index).unwrap(),
+                            interior_node.value_at(index.value_before()).unwrap(),
                         ));
                     }
 
@@ -89,7 +88,7 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
                             if keys.is_empty() {
                                 start_min_key
                             } else {
-                                keys.last().copied()
+                                keys.last().copied().map(|x| x.1)
                             },
                             start_max_key,
                             last_value,
@@ -138,7 +137,7 @@ fn assert_tree_balanced<TStorage: Storage, TKey: TreeKey>(
         .unwrap();
 
     let mut heights = vec![];
-    for child in root_children {
+    for (_, child) in root_children {
         assert_tree_balanced(transaction, Some(child));
         heights.push(calculate_height(transaction, child));
     }
@@ -164,7 +163,7 @@ fn calculate_height<TStorage: Storage, TKey: TreeKey>(
 
     let max_height = children
         .iter()
-        .map(|x| calculate_height(transaction, *x))
+        .map(|x| calculate_height(transaction, x.1))
         .max();
 
     1 + max_height.unwrap_or(0)
@@ -204,9 +203,9 @@ fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
         assert_correct_topology(
             transaction,
             Some(InteriorNodeId::from_any(node_id)),
-            Some(child[1]),
-            Some(child[0]),
-            Some(child[2]),
+            Some(child[1].1),
+            Some(child[0].1),
+            Some(child[2].1),
         );
     }
 
@@ -214,11 +213,11 @@ fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
         assert_correct_topology(
             transaction,
             Some(InteriorNodeId::from_any(node_id)),
-            Some(*first),
+            Some(first.1),
             previous.map(|x| last_leaf(transaction, x).unwrap().into()),
             children
                 .get(1)
-                .copied()
+                .map(|x| x.1)
                 .or_else(|| next.map(|x| first_leaf(transaction, x).unwrap().into())),
         );
     }
@@ -229,12 +228,12 @@ fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
         assert_correct_topology(
             transaction,
             Some(InteriorNodeId::from_any(node_id)),
-            Some(*last),
+            Some(last.1),
             children
                 .len()
                 .checked_sub(2)
                 .map(|x| children.get(x).unwrap())
-                .copied(),
+                .map(|x| x.1),
             next.map(|x| first_leaf(transaction, x).unwrap().into()),
         );
     }

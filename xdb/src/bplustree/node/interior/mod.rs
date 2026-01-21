@@ -2,7 +2,10 @@ mod entries;
 
 use crate::bplustree::{
     TreeKey,
-    node::{NodeFlags, interior::entries::InteriorNodeEntries},
+    node::{
+        NodeFlags,
+        interior::entries::{InteriorNodeEntries, KeyIndex, ValueIndex},
+    },
 };
 
 use bytemuck::{AnyBitPattern, NoUninit};
@@ -66,7 +69,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         self.header.parent = parent.map_or_else(PageIndex::zero, |x| x.page());
     }
 
-    pub(in crate::bplustree) fn keys(&self) -> impl Iterator<Item = TKey> {
+    pub(in crate::bplustree) fn keys(&self) -> impl Iterator<Item = (KeyIndex, TKey)> {
         InteriorNodeKeysIterator {
             node: self,
             index: 0,
@@ -78,14 +81,14 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
     }
 
     pub(crate) fn insert_node(&mut self, key: TKey, value: AnyNodeId) {
-        let mut insert_at = self.entries.key_count();
+        let mut insert_at = self.entries.key_after_last();
 
         assert!(
             self.has_spare_capacity(),
             "no capacity for insert, split the node first"
         );
 
-        for (index, current_key) in self.keys().enumerate() {
+        for (index, current_key) in self.keys() {
             if key < current_key {
                 insert_at = index;
                 break;
@@ -104,25 +107,27 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         )
     }
 
-    pub(in crate::bplustree) fn value_at(&self, index: usize) -> Option<AnyNodeId> {
+    pub(in crate::bplustree) fn value_at(&self, index: ValueIndex) -> Option<AnyNodeId> {
         self.entries.value_at(index).map(AnyNodeId::new)
     }
 
     pub(crate) fn first_value(&self) -> Option<AnyNodeId> {
-        self.value_at(0)
+        self.value_at(ValueIndex::new(0))
     }
 
     pub(crate) fn last_value(&self) -> Option<AnyNodeId> {
-        self.value_at(self.entries.key_count())
+        self.value_at(self.entries.last_value())
     }
 
-    pub(crate) fn values(&self) -> impl Iterator<Item = AnyNodeId> {
-        (0..=self.entries.key_count()).map(|x| self.value_at(x).unwrap())
+    pub(crate) fn values(&self) -> impl Iterator<Item = (ValueIndex, AnyNodeId)> {
+        (0..=self.entries.key_count())
+            .map(ValueIndex::new)
+            .map(|x| (x, self.value_at(x).unwrap()))
     }
 
     pub(crate) fn delete(&mut self, child: AnyNodeId) {
         let mut delete_index = None;
-        for (index, value) in self.values().enumerate() {
+        for (index, value) in self.values() {
             if value == child {
                 delete_index = Some(index);
                 break;
@@ -138,8 +143,8 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         self.entries.needs_merge()
     }
 
-    pub(crate) fn find_value_index(&self, node_id: AnyNodeId) -> Option<usize> {
-        for (index, value) in self.values().enumerate() {
+    pub(crate) fn find_value_index(&self, node_id: AnyNodeId) -> Option<ValueIndex> {
+        for (index, value) in self.values() {
             if value == node_id {
                 return Some(index);
             }
@@ -158,12 +163,11 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         self.entries.merge_from(&right.entries, at_key);
     }
 
-    // TODO we should really differentiate between key and value indices
-    pub(crate) fn delete_at(&mut self, index: usize) {
+    pub(crate) fn delete_at(&mut self, index: ValueIndex) {
         self.entries.delete_at(index);
     }
 
-    pub(crate) fn key_at(&self, index: usize) -> Option<TKey> {
+    pub(crate) fn key_at(&self, index: KeyIndex) -> Option<TKey> {
         self.entries.key_at(index)
     }
 }
@@ -184,16 +188,18 @@ struct InteriorNodeKeysIterator<'node, TKey: TreeKey> {
 }
 
 impl<TKey: TreeKey> Iterator for InteriorNodeKeysIterator<'_, TKey> {
-    type Item = TKey;
+    type Item = (KeyIndex, TKey);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.node.entries.key_count() {
             return None;
         }
 
+        let index = KeyIndex::new(self.index);
+
         self.index += 1;
 
-        self.node.entries.key_at(self.index - 1)
+        self.node.entries.key_at(index).map(|x| (index, x))
     }
 }
 
@@ -219,12 +225,12 @@ mod test {
 
         node_a.merge_from(&node_b, 2usize);
 
-        let keys = node_a.keys().collect::<Vec<_>>();
+        let keys = node_a.keys().map(|x| x.1).collect::<Vec<_>>();
         let values = node_a.values().collect::<Vec<_>>();
 
         assert_eq!(keys, vec![1usize, 2usize, 3usize]);
         assert_eq!(
-            values,
+            values.iter().map(|x| x.1).collect::<Vec<_>>(),
             vec![
                 AnyNodeId::new(PageIndex::value(1)),
                 AnyNodeId::new(PageIndex::value(2)),

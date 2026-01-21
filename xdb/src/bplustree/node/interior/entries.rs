@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, ops::Add};
 
 use bytemuck::{Pod, Zeroable, bytes_of, from_bytes, pod_read_unaligned};
 
@@ -72,6 +72,93 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
 
     fn values_mut(&mut self) -> &mut [u8] {
         &mut self.data[Self::VALUES_OFFSET..]
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub(in crate::bplustree) struct KeyIndex(usize);
+
+impl KeyIndex {
+    pub(crate) const fn value_after(self) -> ValueIndex {
+        ValueIndex(self.0.strict_add(1))
+    }
+
+    pub(crate) const fn value_before(self) -> ValueIndex {
+        ValueIndex(self.0)
+    }
+
+    pub const fn new(index: usize) -> Self {
+        Self(index)
+    }
+
+    pub(crate) const fn key_before(self) -> Self {
+        Self(self.0.strict_sub(1))
+    }
+
+    // TODO we could probably get rid of it by returning an option from key_before, etc.?
+    pub(crate) const fn is_first(self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl Add<usize> for KeyIndex {
+    type Output = Self;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl Add<isize> for KeyIndex {
+    type Output = Self;
+
+    fn add(self, rhs: isize) -> Self::Output {
+        Self(self.0.strict_add_signed(rhs))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub(in crate::bplustree) struct ValueIndex(usize);
+
+impl ValueIndex {
+    pub const fn value_after(self) -> Self {
+        Self(self.0 + 1)
+    }
+
+    pub(super) const fn new(x: usize) -> Self {
+        Self(x)
+    }
+
+    pub(crate) const fn key_before(self) -> KeyIndex {
+        // TODO return Option<KeyIndex> instead?
+        KeyIndex(self.0.strict_sub(1))
+    }
+
+    pub(crate) const fn is_first(self) -> bool {
+        self.0 == 0
+    }
+
+    pub(crate) const fn value_before(self) -> Self {
+        Self(self.0.strict_sub(1))
+    }
+
+    const fn key_after(self) -> KeyIndex {
+        KeyIndex(self.0)
+    }
+}
+impl Add<usize> for ValueIndex {
+    type Output = Self;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl Add<isize> for ValueIndex {
+    type Output = Self;
+
+    fn add(self, rhs: isize) -> Self::Output {
+        Self(self.0.strict_add_signed(rhs))
     }
 }
 
@@ -155,17 +242,20 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         self.key_count += entries.key_count + 1;
     }
 
-    pub fn insert_at(&mut self, index: usize, key: TKey, value: PageIndex) {
+    pub fn insert_at(&mut self, index: KeyIndex, key: TKey, value: PageIndex) {
         let key_len = self.key_count();
         assert!(key_len < InteriorNodeData::<TKey>::KEY_CAPACITY);
 
         debug_assert!(bytes_of(&key) != vec![0; size_of::<TKey>()]);
 
-        let key_offset = size_of::<TKey>() * (index);
-        let value_offset = size_of::<PageIndex>() * (index + 1);
+        let key_offset = size_of::<TKey>() * (index.0);
+        let value_offset = size_of::<PageIndex>() * (index.value_after().0);
 
         self.move_keys(index, isize::try_from(size_of::<TKey>()).unwrap());
-        self.move_values(index + 1, isize::try_from(size_of::<PageIndex>()).unwrap());
+        self.move_values(
+            index.value_after(),
+            isize::try_from(size_of::<PageIndex>()).unwrap(),
+        );
 
         self.data.keys_mut()[key_offset..key_offset + size_of::<TKey>()]
             .copy_from_slice(bytes_of(&key));
@@ -175,8 +265,8 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         self.key_count += 1;
     }
 
-    fn move_keys(&mut self, start_index: usize, offset: isize) {
-        let start_offset = start_index * size_of::<TKey>();
+    fn move_keys(&mut self, start_index: KeyIndex, offset: isize) {
+        let start_offset = start_index.0 * size_of::<TKey>();
         let end_offset = self.key_count() * size_of::<TKey>();
 
         let keys_to_move = self.data.keys()[start_offset..end_offset].to_vec();
@@ -186,8 +276,8 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
             .copy_from_slice(&keys_to_move);
     }
 
-    fn move_values(&mut self, start_index: usize, offset: isize) {
-        let start_offset = size_of::<PageIndex>() * start_index;
+    fn move_values(&mut self, start_index: ValueIndex, offset: isize) {
+        let start_offset = size_of::<PageIndex>() * start_index.0;
         let end_offset = size_of::<PageIndex>() * (self.key_count() + 1);
 
         let values_to_move = self.data.values()[start_offset..end_offset].to_vec();
@@ -198,12 +288,12 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
             .copy_from_slice(&values_to_move);
     }
 
-    pub fn value_at(&self, index: usize) -> Option<PageIndex> {
-        if index > self.key_count() {
+    pub fn value_at(&self, index: ValueIndex) -> Option<PageIndex> {
+        if index.0 > self.key_count() {
             return None;
         }
 
-        let value_start = index * size_of::<PageIndex>();
+        let value_start = index.0 * size_of::<PageIndex>();
 
         let value: PageIndex = pod_read_unaligned(
             &self.data.values()[value_start..value_start + size_of::<PageIndex>()],
@@ -214,11 +304,17 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         Some(value)
     }
 
-    pub fn delete_at(&mut self, index: usize) {
-        // TODO assert!(index < self.key_count());
+    pub fn delete_at(&mut self, index: ValueIndex) {
+        assert!(index.0 <= self.key_count());
 
-        self.move_keys(index, -isize::try_from(size_of::<TKey>()).unwrap());
-        self.move_values(index + 1, -isize::try_from(size_of::<PageIndex>()).unwrap());
+        self.move_keys(
+            index.key_after(),
+            -isize::try_from(size_of::<TKey>()).unwrap(),
+        );
+        self.move_values(
+            index.value_after(),
+            -isize::try_from(size_of::<PageIndex>()).unwrap(),
+        );
 
         self.key_count -= 1;
     }
@@ -233,14 +329,22 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
                 <= InteriorNodeData::<TKey>::VALUES_CAPACITY
     }
 
-    pub fn key_at(&self, index: usize) -> Option<TKey> {
-        if index >= self.key_count() {
+    pub fn key_at(&self, index: KeyIndex) -> Option<TKey> {
+        if index.0 >= self.key_count() {
             return None;
         }
 
         // TODO is the alignment here guaranteed? could this cause trouble with funny-sized keys?
         Some(*from_bytes(
-            &self.data.keys()[(index) * size_of::<TKey>()..(index + 1) * size_of::<TKey>()],
+            &self.data.keys()[(index.0) * size_of::<TKey>()..(index.0 + 1) * size_of::<TKey>()],
         ))
+    }
+
+    pub(crate) fn key_after_last(&self) -> KeyIndex {
+        KeyIndex(self.key_count())
+    }
+
+    pub(crate) fn last_value(&self) -> ValueIndex {
+        ValueIndex(self.key_count())
     }
 }

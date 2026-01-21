@@ -78,15 +78,15 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
             return Err(MergeError::NotEnoughCapacity);
         }
 
-        let parent_key_index = parent.find_value_index(right_id.into()).unwrap() - 1;
+        let parent_key_index = parent.find_value_index(right_id.into()).unwrap().key_before();
         let parent_key = parent.key_at(parent_key_index).unwrap();
 
         left.merge_from(right, parent_key);
-        parent.delete_at(parent_key_index+1);
+        parent.delete_at(parent_key_index.value_after());
 
         // TODO actually remove the Dispaly impls for NodeIds, as we don't print them outside of
         // debug contexts
-        debug!("merged interior node {left_id:?} from {right_id:?} (parent: {parent_id}, key: {parent_key:?}, index: {parent_key_index})");
+        debug!("merged interior node {left_id:?} from {right_id:?} (parent: {parent_id}, key: {parent_key:?}, index: {parent_key_index:?})");
         dbg!(parent.keys().collect::<Vec<_>>(), parent.values().collect::<Vec<_>>());
 
         Ok(())
@@ -98,7 +98,7 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
 
     let children = transaction.read_nodes(left_id, |node| node.values().collect::<Vec<_>>())?;
 
-    for child in children {
+    for (_, child) in children {
         transaction.write_nodes(child, |child| {
             child.set_parent(Some(left_id));
         })?;
@@ -123,9 +123,10 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
     let index_in_parent =
         transaction.read_nodes(parent_id, |x| x.find_value_index(node_id.into()).unwrap())?;
 
-    if index_in_parent > 0 {
-        let left =
-            transaction.read_nodes(parent_id, |x| x.value_at(index_in_parent - 1).unwrap())?;
+    if !index_in_parent.is_first() {
+        let left = transaction.read_nodes(parent_id, |x| {
+            x.value_at(index_in_parent.value_before()).unwrap()
+        })?;
         let left = InteriorNodeId::from_any(left);
 
         match merge_interior_node_with(transaction, left, node_id, parent_id) {
@@ -139,8 +140,9 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
         }
     }
 
-    let right_id =
-        transaction.read_nodes(parent_id, |parent| parent.value_at(index_in_parent + 1))?;
+    let right_id = transaction.read_nodes(parent_id, |parent| {
+        parent.value_at(index_in_parent.value_after())
+    })?;
 
     if let Some(right_id) = right_id {
         let right_id = InteriorNodeId::from_any(right_id);

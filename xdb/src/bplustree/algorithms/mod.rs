@@ -26,9 +26,9 @@ pub(super) fn leaf_search<TStorage: Storage, TKey: TreeKey>(
             }
         };
 
-        for (key_index, node_key) in node.keys().enumerate() {
+        for (key_index, node_key) in node.keys() {
             if key < node_key {
-                let child_page = node.value_at(key_index).unwrap();
+                let child_page = node.value_at(key_index.value_before()).unwrap();
 
                 return leaf_search(transaction, child_page, key);
             }
