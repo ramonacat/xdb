@@ -87,6 +87,7 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
         // TODO actually remove the Dispaly impls for NodeIds, as we don't print them outside of
         // debug contexts
         debug!("merged interior node {left_id:?} from {right_id:?} (parent: {parent_id}, key: {parent_key:?}, index: {parent_key_index})");
+        dbg!(parent.keys().collect::<Vec<_>>(), parent.values().collect::<Vec<_>>());
 
         Ok(())
     })??;
@@ -128,7 +129,10 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
         let left = InteriorNodeId::from_any(left);
 
         match merge_interior_node_with(transaction, left, node_id, parent_id) {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                merge_interior_node(transaction, parent_id)?;
+                return Ok(());
+            }
             Err(MergeError::NotEnoughCapacity) => {}
             Err(MergeError::NotSiblings) => todo!(), // this should probably just panic?
             Err(MergeError::Tree(err)) => return Err(err),
@@ -142,14 +146,15 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
         let right_id = InteriorNodeId::from_any(right_id);
 
         match merge_interior_node_with(transaction, node_id, right_id, parent_id) {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                merge_interior_node(transaction, parent_id)?;
+                return Ok(());
+            }
             Err(MergeError::NotEnoughCapacity) => {}
             Err(MergeError::NotSiblings) => todo!(), // this should probably just panic?
             Err(MergeError::Tree(err)) => return Err(err),
         }
     }
-
-    merge_interior_node(transaction, parent_id)?;
 
     Ok(())
 }

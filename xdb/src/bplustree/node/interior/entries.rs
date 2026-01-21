@@ -215,16 +215,16 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     pub fn delete_at(&mut self, index: usize) {
-        if index < self.key_count() {
-            self.move_keys(index, -isize::try_from(size_of::<TKey>()).unwrap());
-            self.move_values(index + 1, -isize::try_from(size_of::<PageIndex>()).unwrap());
-        }
+        // TODO assert!(index < self.key_count());
+
+        self.move_keys(index, -isize::try_from(size_of::<TKey>()).unwrap());
+        self.move_values(index + 1, -isize::try_from(size_of::<PageIndex>()).unwrap());
 
         self.key_count -= 1;
     }
 
     pub fn needs_merge(&self) -> bool {
-        2 * self.key_count() < InteriorNodeData::<TKey>::KEY_CAPACITY
+        2 * self.key_count() <= InteriorNodeData::<TKey>::KEY_CAPACITY
     }
 
     pub fn can_fit_merge(&self, right: &Self) -> bool {

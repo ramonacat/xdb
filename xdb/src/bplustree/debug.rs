@@ -1,8 +1,12 @@
+use log::debug;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
 use crate::{
-    bplustree::{AnyNodeId, Tree, TreeKey, TreeTransaction},
+    bplustree::{
+        AnyNodeId, InteriorNodeId, Node as _, Tree, TreeKey, TreeTransaction,
+        algorithms::{first_leaf, last_leaf},
+    },
     storage::Storage,
 };
 
@@ -48,8 +52,8 @@ pub fn assert_properties<TStorage: Storage, TKey: TreeKey>(
 
     assert_keys_lower_than_parent(transaction, None, None, None);
     assert_tree_balanced(transaction, None);
-    // TODO verify the topology
-    // TODO verify all the nodes are at least half-full
+    assert_correct_topology(transaction, None, None, None, None);
+    // TODO verify all the leaf nodes are at least half-full
 }
 
 fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
@@ -164,4 +168,74 @@ fn calculate_height<TStorage: Storage, TKey: TreeKey>(
         .max();
 
     1 + max_height.unwrap_or(0)
+}
+
+fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
+    transaction: &TreeTransaction<TStorage, TKey>,
+    parent_id: Option<InteriorNodeId>,
+    node_id: Option<AnyNodeId>,
+    previous: Option<AnyNodeId>,
+    next: Option<AnyNodeId>,
+) {
+    let node_id = node_id.unwrap_or_else(|| transaction.get_root().unwrap());
+
+    debug!(
+        "assert_correct_topology for {node_id:?} (parent: {parent_id:?}, previous: {previous:?}, next: {next:?})"
+    );
+
+    let children = transaction
+        .read_nodes(node_id, |node| {
+            assert_eq!(node.parent(), parent_id);
+
+            match node.as_any() {
+                AnyNodeKind::Interior(interior_node) => interior_node.values().collect::<Vec<_>>(),
+                AnyNodeKind::Leaf(leaf_node) => {
+                    assert_eq!(previous, leaf_node.previous().map(Into::into));
+                    assert_eq!(next, leaf_node.next().map(Into::into));
+
+                    vec![]
+                }
+            }
+        })
+        .unwrap();
+
+    for child in children.windows(3) {
+        dbg!(child);
+        assert_correct_topology(
+            transaction,
+            Some(InteriorNodeId::from_any(node_id)),
+            Some(child[1]),
+            Some(child[0]),
+            Some(child[2]),
+        );
+    }
+
+    if let Some(first) = children.first() {
+        assert_correct_topology(
+            transaction,
+            Some(InteriorNodeId::from_any(node_id)),
+            Some(*first),
+            previous.map(|x| last_leaf(transaction, x).unwrap().into()),
+            children
+                .get(1)
+                .copied()
+                .or_else(|| next.map(|x| first_leaf(transaction, x).unwrap().into())),
+        );
+    }
+
+    if children.len() > 1
+        && let Some(last) = children.last()
+    {
+        assert_correct_topology(
+            transaction,
+            Some(InteriorNodeId::from_any(node_id)),
+            Some(*last),
+            children
+                .len()
+                .checked_sub(2)
+                .map(|x| children.get(x).unwrap())
+                .copied(),
+            next.map(|x| first_leaf(transaction, x).unwrap().into()),
+        );
+    }
 }

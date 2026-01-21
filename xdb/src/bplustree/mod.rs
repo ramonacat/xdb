@@ -991,4 +991,71 @@ mod test {
 
         test_from_data(data);
     }
+
+    #[test]
+    fn fuzzer_h() {
+        let data = vec![
+            TestAction::Insert(BigKey::<u32, 1024>::new(4009754624), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(31275), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(42244), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(788529219), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(1191247872), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(2114339119), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(1128481545), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(2030633027), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(1126956806), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(1124810751), vec![0u8; 7]),
+            TestAction::Insert(BigKey::new(822362947), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(1124665616), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(4408131), vec![0u8; 10]),
+            TestAction::Insert(BigKey::new(1128481741), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(3442212614), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(155386238), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(17573185), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(0), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(1124675393), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(4294967295), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(1094795585), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(592137), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(1105806147), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(1124204543), vec![0u8; 64]),
+            TestAction::Insert(BigKey::new(4027055105), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(1061241153), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(2), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(125), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(1094797633), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(1228357953), vec![0u8; 2]),
+            TestAction::Delete(BigKey::new(1161905217)),
+            TestAction::Insert(BigKey::new(16772721), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(1094796609), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(1093215045), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(50660099), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(1128350017), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(1128997641), vec![0u8; 4]),
+            TestAction::Insert(BigKey::new(4294918986), vec![0u8; 64]),
+        ];
+        test_from_data(data);
+    }
+
+    #[test]
+    fn fuzzer_i() {
+        let data = vec![
+            TestAction::Insert(BigKey::<u32, 1024>::new(4538293), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(84215045), vec![0u8; 6]),
+            TestAction::Insert(BigKey::new(8388608), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(84215045), vec![0u8; 6]),
+            TestAction::Insert(BigKey::new(18944257), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(33488897), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16843009), vec![0u8; 2]),
+            TestAction::Delete(BigKey::new(16843009)),
+            TestAction::Insert(BigKey::new(16852993), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(21037313), vec![0u8; 2]),
+            TestAction::Delete(BigKey::new(17891839)),
+            TestAction::Insert(BigKey::new(16843011), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(17105153), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(4278255873), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(0), vec![0u8; 1]),
+        ];
+        test_from_data(data);
+    }
 }
