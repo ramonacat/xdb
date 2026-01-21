@@ -7,7 +7,7 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::{
     bplustree::{
-        LeafNodeId, NodeId, TreeKey,
+        LeafNodeId, TreeKey,
         node::{
             InteriorNodeId, NODE_DATA_SIZE, Node, NodeFlags, NodeHeader,
             leaf::{
@@ -154,15 +154,12 @@ impl<TKey: TreeKey> LeafNode<TKey> {
         LeafNodeBuilder::new().with_data(new_node_entries)
     }
 
-    pub fn set_links(
-        &mut self,
-        parent: Option<InteriorNodeId>,
-        previous: Option<LeafNodeId>,
-        next: Option<LeafNodeId>,
-    ) {
-        self.set_parent(parent);
-        self.leaf_header.previous = previous.map_or(PageIndex::zero(), |x| x.page());
-        self.leaf_header.next = next.map_or(PageIndex::zero(), |x| x.page());
+    pub fn set_previous(&mut self, previous: Option<LeafNodeId>) {
+        self.leaf_header.previous = previous.into();
+    }
+
+    pub fn set_next(&mut self, next: Option<LeafNodeId>) {
+        self.leaf_header.next = next.into();
     }
 
     pub(in crate::bplustree) fn first_key(&self) -> Option<TKey> {
@@ -182,7 +179,7 @@ impl<TKey: TreeKey> LeafNode<TKey> {
             self.insert(entry.key(), entry.value());
         }
 
-        self.set_links(self.parent(), self.previous(), right.next());
+        self.set_next(right.next());
     }
 
     pub(crate) fn can_fit_merge(&self, right: &Self) -> bool {

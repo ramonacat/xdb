@@ -42,11 +42,14 @@ fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
 
     let new_leaf = transaction.write_nodes(root_id, |root| {
         let new_leaf = root
+            // TODO this should require the new topology for root as an argument!
             .split()
             .with_topology(Some(new_root_id), Some(root_id), None)
             .build();
 
-        root.set_links(Some(new_root_id), None, Some(new_leaf_id));
+        root.set_parent(Some(new_root_id));
+        root.set_previous(None);
+        root.set_next(Some(new_leaf_id));
 
         new_leaf
     })?;
@@ -155,14 +158,15 @@ fn split_leaf<TStorage: Storage, TKey: TreeKey>(
             .with_topology(Some(parent), Some(target_node_id), next)
             .build();
 
-        target_node.set_links(Some(parent), target_node.previous(), Some(new_leaf_id));
+        target_node.set_parent(Some(parent));
+        target_node.set_next(Some(new_leaf_id));
 
         new_leaf
     })?;
 
     if let Some(next_leaf) = new_leaf.next() {
         transaction.write_nodes(next_leaf, |node| {
-            node.set_links(node.parent(), Some(new_leaf_id), node.next());
+            node.set_previous(Some(new_leaf_id));
         })?;
     }
 

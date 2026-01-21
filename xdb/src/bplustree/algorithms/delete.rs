@@ -46,7 +46,7 @@ fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
 
     if let Some(next) = next {
         transaction.write_nodes(next, |node| {
-            node.set_links(node.parent(), Some(left_id), node.next());
+            node.set_previous(Some(left_id));
         })?;
     }
 
@@ -91,9 +91,8 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
         Ok(())
     })??;
 
-    // TODO split set_links into `set_next`, `set_previous` (`set_parent` already exists)
     transaction.write_nodes(last_right_leaf, |leaf| {
-        leaf.set_links(leaf.parent(), leaf.previous(), next);
+        leaf.set_next(next);
     })?;
 
     let children = transaction.read_nodes(left_id, |node| node.values().collect::<Vec<_>>())?;
