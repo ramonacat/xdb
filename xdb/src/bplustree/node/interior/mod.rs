@@ -159,9 +159,8 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         self.entries.merge_from(&right.entries, at_key);
     }
 
-    pub(crate) fn delete_value(&mut self, value: AnyNodeId) {
-        let index = self.find_value_index(value).unwrap();
-
+    // TODO we should really differentiate between key and value indices
+    pub(crate) fn delete_at(&mut self, index: usize) {
         self.entries.delete_at(index);
     }
 

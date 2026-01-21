@@ -82,8 +82,7 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
         let parent_key = parent.key_at(parent_key_index).unwrap();
 
         left.merge_from(right, parent_key);
-        // TODO this should be delete_at(), since we've already figured out the index anyway
-        parent.delete_value(right_id.into());
+        parent.delete_at(parent_key_index+1);
 
         // TODO actually remove the Dispaly impls for NodeIds, as we don't print them outside of
         // debug contexts
