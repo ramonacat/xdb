@@ -42,15 +42,13 @@ fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
     let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
 
     let new_leaf = transaction.write_nodes(root_id, |root| {
-        root
-            // TODO this should require the new topology for root as an argument!
-            .split(&MaterializedTopology::new(
-                Some(new_root_id),
-                None,
-                Some(new_leaf_id),
-            ))
-            .with_topology(Some(new_root_id), Some(root_id), None)
-            .build()
+        root.split(&MaterializedTopology::new(
+            Some(new_root_id),
+            None,
+            Some(new_leaf_id),
+        ))
+        .with_topology(Some(new_root_id), Some(root_id), None)
+        .build()
     })?;
 
     transaction.insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
@@ -125,7 +123,7 @@ fn insert_child<TStorage: Storage, TKey: TreeKey>(
     key: TKey,
     child_id: AnyNodeId,
 ) -> Result<(), TreeError> {
-    transaction.write_nodes(target, |node| node.insert_node(&key, child_id))?;
+    transaction.write_nodes(target, |node| node.insert_node(key, child_id))?;
     transaction.write_nodes(child_id, |x| x.set_parent(Some(target)))?;
 
     Ok(())
@@ -184,7 +182,7 @@ pub fn insert<TStorage: Storage, TKey: TreeKey>(
     value: &[u8],
 ) -> Result<(), TreeError> {
     let root_index = transaction.get_root()?;
-    let target_node_id = leaf_search(transaction, root_index, &key)?;
+    let target_node_id = leaf_search(transaction, root_index, key)?;
 
     let (can_fit, parent) = transaction.read_nodes(target_node_id, |node| {
         (node.can_fit(value.len()), node.parent())

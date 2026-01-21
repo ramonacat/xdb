@@ -155,11 +155,11 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         self.key_count += entries.key_count + 1;
     }
 
-    pub fn insert_at(&mut self, index: usize, key: &TKey, value: PageIndex) {
+    pub fn insert_at(&mut self, index: usize, key: TKey, value: PageIndex) {
         let key_len = self.key_count();
         assert!(key_len < InteriorNodeData::<TKey>::KEY_CAPACITY);
 
-        debug_assert!(bytes_of(key) != vec![0; size_of::<TKey>()]);
+        debug_assert!(bytes_of(&key) != vec![0; size_of::<TKey>()]);
 
         let key_offset = size_of::<TKey>() * (index);
         let value_offset = size_of::<PageIndex>() * (index + 1);
@@ -168,7 +168,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         self.move_values(index + 1, isize::try_from(size_of::<PageIndex>()).unwrap());
 
         self.data.keys_mut()[key_offset..key_offset + size_of::<TKey>()]
-            .copy_from_slice(bytes_of(key));
+            .copy_from_slice(bytes_of(&key));
         self.data.values_mut()[value_offset..value_offset + size_of::<PageIndex>()]
             .copy_from_slice(bytes_of(&value));
 
@@ -233,13 +233,13 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
                 <= InteriorNodeData::<TKey>::VALUES_CAPACITY
     }
 
-    pub fn key_at(&self, index: usize) -> Option<&TKey> {
+    pub fn key_at(&self, index: usize) -> Option<TKey> {
         if index >= self.key_count() {
             return None;
         }
 
         // TODO is the alignment here guaranteed? could this cause trouble with funny-sized keys?
-        Some(from_bytes(
+        Some(*from_bytes(
             &self.data.keys()[(index) * size_of::<TKey>()..(index + 1) * size_of::<TKey>()],
         ))
     }

@@ -67,11 +67,11 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
                     for (index, key) in interior_node.keys().enumerate() {
                         result.push((
                             if index > 0 {
-                                interior_node.keys().nth(index - 1).copied()
+                                interior_node.keys().nth(index - 1)
                             } else {
                                 start_min_key
                             },
-                            Some(*key),
+                            Some(key),
                             interior_node.value_at(index).unwrap(),
                         ));
                     }
@@ -83,7 +83,7 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
                             if keys.is_empty() {
                                 start_min_key
                             } else {
-                                keys.last().map(|x| **x)
+                                keys.last().copied()
                             },
                             start_max_key,
                             last_value,

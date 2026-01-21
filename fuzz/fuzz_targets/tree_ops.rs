@@ -41,8 +41,6 @@ pub enum TreeAction<T: TreeKey, const KEY_SIZE: usize> {
     },
 }
 
-// TODO figure something out so that we can encourage interior node splits, perhaps bigger value,
-// smaller key?
 pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_SIZE>]) {
     #[cfg(true)]
     {

@@ -14,7 +14,7 @@ use crate::{
 pub(super) fn leaf_search<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     node_index: AnyNodeId,
-    key: &TKey,
+    key: TKey,
 ) -> Result<LeafNodeId, TreeError> {
     transaction.read_nodes(node_index, |node| {
         let node = match node.as_any() {

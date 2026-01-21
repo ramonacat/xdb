@@ -66,8 +66,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         self.header.parent = parent.map_or_else(PageIndex::zero, |x| x.page());
     }
 
-    // TODO return by value, since TKey must be Copy anyway
-    pub(in crate::bplustree) fn keys(&self) -> impl Iterator<Item = &TKey> {
+    pub(in crate::bplustree) fn keys(&self) -> impl Iterator<Item = TKey> {
         InteriorNodeKeysIterator {
             node: self,
             index: 0,
@@ -78,7 +77,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         self.entries.has_spare_capacity()
     }
 
-    pub(crate) fn insert_node(&mut self, key: &TKey, value: AnyNodeId) {
+    pub(crate) fn insert_node(&mut self, key: TKey, value: AnyNodeId) {
         let mut insert_at = self.entries.key_count();
 
         assert!(
@@ -165,7 +164,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
     }
 
     pub(crate) fn key_at(&self, index: usize) -> Option<TKey> {
-        self.entries.key_at(index).copied()
+        self.entries.key_at(index)
     }
 }
 
@@ -184,8 +183,8 @@ struct InteriorNodeKeysIterator<'node, TKey: TreeKey> {
     index: usize,
 }
 
-impl<'node, TKey: TreeKey> Iterator for InteriorNodeKeysIterator<'node, TKey> {
-    type Item = &'node TKey;
+impl<TKey: TreeKey> Iterator for InteriorNodeKeysIterator<'_, TKey> {
+    type Item = TKey;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= self.node.entries.key_count() {
@@ -220,7 +219,7 @@ mod test {
 
         node_a.merge_from(&node_b, 2usize);
 
-        let keys = node_a.keys().copied().collect::<Vec<_>>();
+        let keys = node_a.keys().collect::<Vec<_>>();
         let values = node_a.values().collect::<Vec<_>>();
 
         assert_eq!(keys, vec![1usize, 2usize, 3usize]);

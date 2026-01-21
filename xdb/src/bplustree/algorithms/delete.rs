@@ -200,7 +200,7 @@ pub fn delete<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     key: TKey,
 ) -> Result<Option<Vec<u8>>, TreeError> {
-    let starting_leaf = leaf_search(transaction, transaction.get_root()?, &key)?;
+    let starting_leaf = leaf_search(transaction, transaction.get_root()?, key)?;
 
     let result = transaction.write_nodes(starting_leaf, |node| node.delete(key))?;
 
