@@ -11,7 +11,7 @@ use crate::{
         node::{
             InteriorNodeId, NODE_DATA_SIZE, Node, NodeFlags, NodeHeader,
             leaf::{
-                builder::{LeafNodeBuilder, MaterializedData},
+                builder::{LeafNodeBuilder, MaterializedData, MaterializedTopology, Topology},
                 entries::{LeafNodeEntries, LeafNodeEntry},
             },
         },
@@ -148,7 +148,14 @@ impl<TKey: TreeKey> LeafNode<TKey> {
         result
     }
 
-    pub fn split(&'_ mut self) -> LeafNodeBuilder<TKey, (), MaterializedData<'_, TKey>> {
+    pub fn split(
+        &'_ mut self,
+        new_topology: &MaterializedTopology,
+    ) -> LeafNodeBuilder<TKey, (), MaterializedData<'_, TKey>> {
+        self.set_parent(new_topology.parent());
+        self.set_previous(new_topology.previous());
+        self.set_next(new_topology.next());
+
         let new_node_entries = self.data.split();
 
         LeafNodeBuilder::new().with_data(new_node_entries)

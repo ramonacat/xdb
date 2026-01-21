@@ -4,6 +4,7 @@ use crate::{
     bplustree::{
         AnyNodeId, InteriorNode, InteriorNodeId, LeafNodeId, Node as _, NodeId as _, TreeError,
         TreeKey, TreeTransaction, algorithms::leaf_search,
+        node::leaf::builder::MaterializedTopology,
     },
     page::Page,
     storage::{PageReservation as _, Storage},
@@ -41,17 +42,15 @@ fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
     let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
 
     let new_leaf = transaction.write_nodes(root_id, |root| {
-        let new_leaf = root
+        root
             // TODO this should require the new topology for root as an argument!
-            .split()
+            .split(&MaterializedTopology::new(
+                Some(new_root_id),
+                None,
+                Some(new_leaf_id),
+            ))
             .with_topology(Some(new_root_id), Some(root_id), None)
-            .build();
-
-        root.set_parent(Some(new_root_id));
-        root.set_previous(None);
-        root.set_next(Some(new_leaf_id));
-
-        new_leaf
+            .build()
     })?;
 
     transaction.insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
@@ -153,15 +152,14 @@ fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     let new_leaf = transaction.write_nodes(target_node_id, |target_node| {
         let next = target_node.next();
 
-        let new_leaf = target_node
-            .split()
+        target_node
+            .split(&MaterializedTopology::new(
+                Some(parent),
+                target_node.previous(),
+                Some(new_leaf_id),
+            ))
             .with_topology(Some(parent), Some(target_node_id), next)
-            .build();
-
-        target_node.set_parent(Some(parent));
-        target_node.set_next(Some(new_leaf_id));
-
-        new_leaf
+            .build()
     })?;
 
     if let Some(next_leaf) = new_leaf.next() {

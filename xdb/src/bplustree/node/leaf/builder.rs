@@ -19,6 +19,19 @@ pub(in crate::bplustree) struct MaterializedTopology {
     previous: Option<LeafNodeId>,
     next: Option<LeafNodeId>,
 }
+impl MaterializedTopology {
+    pub(crate) const fn new(
+        parent: Option<InteriorNodeId>,
+        previous: Option<LeafNodeId>,
+        next: Option<LeafNodeId>,
+    ) -> Self {
+        Self {
+            parent,
+            previous,
+            next,
+        }
+    }
+}
 
 impl Topology for MaterializedTopology {
     fn parent(&self) -> Option<InteriorNodeId> {
