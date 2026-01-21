@@ -40,13 +40,14 @@ pub fn assert_tree_equal<TStorage: Storage, TKey: TreeKey, TRightKey: TreeKey>(
 pub fn assert_properties<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
 ) {
-    if !cfg!(test) {
+    if !cfg!(debug_assertions) {
         return;
     }
 
     assert_keys_lower_than_parent(transaction, None, None, None);
     // TODO verify the topology
     // TODO verify the tree is balanced
+    // TODO verify all the nodes are at least half-full
 }
 
 fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(

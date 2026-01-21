@@ -8,13 +8,13 @@ use xdb::{
     bplustree::{
         Tree,
         algorithms::{delete::delete, insert::insert},
-        debug::assert_tree_equal,
+        debug::{assert_properties, assert_tree_equal},
     },
     debug::BigKey,
     storage::in_memory::InMemoryStorage,
 };
 
-const MAX_KEYS: u32 = 4096;
+const MAX_KEYS: u32 = 8192;
 
 #[derive(Debug)]
 struct KeyToDelete(u32);
@@ -33,8 +33,8 @@ fuzz_target!(|keys_to_delete: Vec<KeyToDelete>| {
     let mut rust_btree = BTreeMap::new();
 
     for i in 0..MAX_KEYS {
-        let key = BigKey::<u32, 512>::new(i);
-        let value = vec![0; (i % 8) as usize];
+        let key = BigKey::<u32, 1024>::new(i);
+        let value = vec![0xff; 1];
 
         insert(&transaction, key, &value).unwrap();
         rust_btree.insert(i, value);
@@ -48,4 +48,5 @@ fuzz_target!(|keys_to_delete: Vec<KeyToDelete>| {
     }
 
     assert_tree_equal(&tree, &rust_btree, |k| k.value());
+    assert_properties(&transaction);
 });

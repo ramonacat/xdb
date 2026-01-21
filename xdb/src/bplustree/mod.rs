@@ -211,7 +211,7 @@ mod test {
     use crate::{
         bplustree::{
             algorithms::{delete::delete, insert::insert},
-            debug::assert_tree_equal,
+            debug::{assert_properties, assert_tree_equal},
         },
         debug::BigKey,
         storage::in_memory::{InMemoryStorage, test::TestStorage},
@@ -282,6 +282,23 @@ mod test {
         }
 
         data.push(TestAction::Delete(BigKey::new(0)));
+
+        test_from_data(data);
+    }
+
+    #[test]
+    fn delete_with_interior_node_merge() {
+        let mut data = vec![];
+
+        for i in 0..8192 {
+            // make the value bigger with repeat so fewer inserts are needed and the test runs faster
+            data.push(TestAction::Insert(
+                BigKey::<u32, 1024>::new(i),
+                vec![0xff; 1],
+            ));
+        }
+
+        data.push(TestAction::Delete(BigKey::new(8188)));
 
         test_from_data(data);
     }
@@ -367,6 +384,7 @@ mod test {
             }
 
             assert_tree_equal(&tree, &rust_tree, |k| k.value());
+            assert_properties(&tree.transaction().unwrap());
         });
 
         if let Err(_) = result {
@@ -825,6 +843,7 @@ mod test {
             tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),
             &[(BigKey::new(1), vec![1, 2, 3])]
         );
+        assert_properties(&tree.transaction().unwrap());
     }
 
     #[test]
@@ -854,6 +873,7 @@ mod test {
             tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),
             data
         );
+        assert_properties(&tree.transaction().unwrap());
     }
 
     #[test]
@@ -949,6 +969,24 @@ mod test {
         let data = vec![
             TestAction::Insert(BigKey::<u64, 1024>::new(72056679496225041), vec![0u8; 1]),
             TestAction::Insert(BigKey::new(255), vec![0u8; 1]),
+        ];
+
+        test_from_data(data);
+    }
+
+    #[test]
+    fn fuzzer_g() {
+        let data = vec![
+            TestAction::Insert(BigKey::<u16, 1024>::new(256), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(15616), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(573), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(16426), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16705), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16705), vec![0u8; 2]),
+            TestAction::Delete(BigKey::new(16705)),
+            TestAction::Delete(BigKey::new(16895)),
+            TestAction::Insert(BigKey::new(16705), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16705), vec![0u8; 26]),
         ];
 
         test_from_data(data);

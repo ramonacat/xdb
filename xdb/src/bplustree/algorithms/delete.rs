@@ -5,8 +5,9 @@ use thiserror::Error;
 
 use crate::{
     bplustree::{
-        InteriorNodeId, LeafNodeId, Node, TreeError, TreeKey, TreeTransaction,
-        algorithms::leaf_search,
+        InteriorNodeId, LeafNodeId, TreeError, TreeKey, TreeTransaction,
+        algorithms::{last_leaf, leaf_search},
+        node::{Node, interior::InteriorNode, leaf::LeafNode},
     },
     storage::Storage,
 };
@@ -49,9 +50,7 @@ fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
         })?;
     }
 
-    let parent_id = transaction
-        .read_nodes(left_id, super::super::node::Node::parent)?
-        .unwrap();
+    let parent_id = transaction.read_nodes(left_id, Node::parent)?.unwrap();
 
     transaction.write_nodes(parent_id, |parent| parent.delete(right_id.into()))?;
     transaction.delete_node(right_id.into())?;
@@ -67,6 +66,9 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
     right_id: InteriorNodeId,
     parent_id: InteriorNodeId,
 ) -> Result<(), MergeError> {
+    let last_right_leaf = last_leaf(transaction, right_id.into())?;
+    let next = transaction.read_nodes(last_right_leaf, LeafNode::next)?;
+
     transaction.write_nodes((left_id, right_id, parent_id), |(left, right, parent)| {
         if left.parent() != right.parent() || left.parent() != Some(parent_id) {
             return Err(MergeError::NotSiblings);
@@ -76,25 +78,45 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
             return Err(MergeError::NotEnoughCapacity);
         }
 
-        left.merge_from(right);
+        let parent_key_index = parent.find_value_index(right_id.into()).unwrap() - 1;
+        let parent_key = parent.key_at(parent_key_index).unwrap();
+
+        left.merge_from(right, parent_key);
+        // TODO this should be delete_at(), since we've already figured out the index anyway
         parent.delete_value(right_id.into());
 
+        // TODO actually remove the Dispaly impls for NodeIds, as we don't print them outside of
+        // debug contexts
+        debug!("merged interior node {left_id:?} from {right_id:?} (parent: {parent_id}, key: {parent_key:?}, index: {parent_key_index})");
+
         Ok(())
-    })?
+    })??;
+
+    // TODO split set_links into `set_next`, `set_previous` (`set_parent` already exists)
+    transaction.write_nodes(last_right_leaf, |leaf| {
+        leaf.set_links(leaf.parent(), leaf.previous(), next);
+    })?;
+
+    let children = transaction.read_nodes(left_id, |node| node.values().collect::<Vec<_>>())?;
+
+    for child in children {
+        transaction.write_nodes(child, |child| {
+            child.set_parent(Some(left_id));
+        })?;
+    }
+
+    Ok(())
 }
 
 fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     node_id: InteriorNodeId,
 ) -> Result<(), TreeError> {
-    if !transaction.read_nodes(
-        node_id,
-        super::super::node::interior::InteriorNode::needs_merge,
-    )? {
+    if !transaction.read_nodes(node_id, InteriorNode::needs_merge)? {
         return Ok(());
     }
 
-    let parent_id = transaction.read_nodes(node_id, super::super::node::Node::parent)?;
+    let parent_id = transaction.read_nodes(node_id, Node::parent)?;
     let Some(parent_id) = parent_id else {
         return Ok(());
     };

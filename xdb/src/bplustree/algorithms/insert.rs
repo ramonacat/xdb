@@ -3,7 +3,7 @@ use log::debug;
 use crate::{
     bplustree::{
         AnyNodeId, InteriorNode, InteriorNodeId, LeafNodeId, Node as _, NodeId as _, TreeError,
-        TreeKey, TreeTransaction, algorithms::leaf_search, debug::assert_properties,
+        TreeKey, TreeTransaction, algorithms::leaf_search,
     },
     page::Page,
     storage::{PageReservation as _, Storage},
@@ -98,8 +98,6 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
         debug!("split interior node {target:?} into new node {new_node_id:?}");
         insert_child(transaction, parent, split_key, new_node_id.into())?;
     } else {
-        assert_properties(transaction);
-
         let new_root_reservation = transaction.reserve_node()?;
         let new_root_id = InteriorNodeId::new(new_root_reservation.index());
 
@@ -116,8 +114,6 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
         debug!("created new root {new_root_id:?} at split key {split_key:?}");
     }
 
-    assert_properties(transaction);
-
     Ok(true)
 }
 
@@ -127,8 +123,6 @@ fn insert_child<TStorage: Storage, TKey: TreeKey>(
     key: TKey,
     child_id: AnyNodeId,
 ) -> Result<(), TreeError> {
-    assert_properties(transaction);
-
     transaction.write_nodes(target, |node| node.insert_node(&key, child_id))?;
     transaction.write_nodes(child_id, |x| x.set_parent(Some(target)))?;
 
@@ -187,8 +181,6 @@ pub fn insert<TStorage: Storage, TKey: TreeKey>(
     key: TKey,
     value: &[u8],
 ) -> Result<(), TreeError> {
-    assert_properties(transaction);
-
     let root_index = transaction.get_root()?;
     let target_node_id = leaf_search(transaction, root_index, &key)?;
 
@@ -220,8 +212,6 @@ pub fn insert<TStorage: Storage, TKey: TreeKey>(
     transaction.write_nodes(target_node_id, |node| node.insert(key, value))?;
 
     debug!("inserted {key:?} into {target_node_id:?}");
-
-    assert_properties(transaction);
 
     Ok(())
 }

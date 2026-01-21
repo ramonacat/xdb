@@ -22,6 +22,11 @@ impl PageIndex {
     pub const fn zero() -> Self {
         Self(0)
     }
+
+    #[cfg(test)]
+    pub const fn value(value: u64) -> Self {
+        Self(value)
+    }
 }
 
 impl Display for PageIndex {

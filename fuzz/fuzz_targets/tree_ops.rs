@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::insert::insert;
-use xdb::bplustree::debug::assert_tree_equal;
+use xdb::bplustree::debug::{assert_properties, assert_tree_equal};
 use xdb::bplustree::{Tree, TreeKey};
 use xdb::debug::BigKey;
 use xdb::storage::in_memory::InMemoryStorage;
@@ -88,5 +88,6 @@ pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_S
         };
     }
 
+    assert_properties(&transaction);
     assert_tree_equal(&tree, &rust_btree, |k| k.value());
 }

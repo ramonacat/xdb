@@ -66,6 +66,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         self.header.parent = parent.map_or_else(PageIndex::zero, |x| x.page());
     }
 
+    // TODO return by value, since TKey must be Copy anyway
     pub(in crate::bplustree) fn keys(&self) -> impl Iterator<Item = &TKey> {
         InteriorNodeKeysIterator {
             node: self,
@@ -152,16 +153,20 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         self.entries.can_fit_merge(&right.entries)
     }
 
-    pub(crate) fn merge_from(&self, right: &Self) {
+    pub(crate) fn merge_from(&mut self, right: &Self, at_key: TKey) {
         assert!(self.can_fit_merge(right));
 
-        // TODO implement this lol
+        self.entries.merge_from(&right.entries, at_key);
     }
 
     pub(crate) fn delete_value(&mut self, value: AnyNodeId) {
         let index = self.find_value_index(value).unwrap();
 
         self.entries.delete_at(index);
+    }
+
+    pub(crate) fn key_at(&self, index: usize) -> Option<TKey> {
+        self.entries.key_at(index).copied()
     }
 }
 
@@ -191,5 +196,43 @@ impl<'node, TKey: TreeKey> Iterator for InteriorNodeKeysIterator<'node, TKey> {
         self.index += 1;
 
         self.node.entries.key_at(self.index - 1)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        bplustree::{AnyNodeId, InteriorNode},
+        storage::PageIndex,
+    };
+
+    #[test]
+    fn merge_with() {
+        let mut node_a = InteriorNode::new(
+            AnyNodeId::new(PageIndex::value(1)),
+            1usize,
+            AnyNodeId::new(PageIndex::value(2)),
+        );
+        let node_b = InteriorNode::new(
+            AnyNodeId::new(PageIndex::value(3)),
+            3usize,
+            AnyNodeId::new(PageIndex::value(4)),
+        );
+
+        node_a.merge_from(&node_b, 2usize);
+
+        let keys = node_a.keys().copied().collect::<Vec<_>>();
+        let values = node_a.values().collect::<Vec<_>>();
+
+        assert_eq!(keys, vec![1usize, 2usize, 3usize]);
+        assert_eq!(
+            values,
+            vec![
+                AnyNodeId::new(PageIndex::value(1)),
+                AnyNodeId::new(PageIndex::value(2)),
+                AnyNodeId::new(PageIndex::value(3)),
+                AnyNodeId::new(PageIndex::value(4)),
+            ]
+        );
     }
 }

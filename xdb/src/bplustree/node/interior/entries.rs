@@ -42,6 +42,7 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
     // (size - value_size)/(key_size + value_size) = n
     const KEY_CAPACITY: usize = (INTERIOR_NODE_DATA_SIZE - size_of::<PageIndex>())
         / (size_of::<TKey>() + size_of::<PageIndex>());
+    const VALUES_CAPACITY: usize = Self::KEY_CAPACITY + 1;
 
     fn from_raw_data(keys: &[u8], values: &[u8]) -> Self {
         assert!(keys.len() < Self::VALUES_OFFSET);
@@ -134,6 +135,26 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         )
     }
 
+    // TODO methods like `write_key_at` and `write_value_at` to contain the index arithmetic?
+    pub(crate) fn merge_from(&mut self, entries: &Self, at_key: TKey) {
+        let new_keys_offset = self.key_count() * size_of::<TKey>();
+        let keys_size = entries.key_count() * size_of::<TKey>();
+
+        self.data.keys_mut()[new_keys_offset..new_keys_offset + size_of::<TKey>()]
+            .copy_from_slice(bytes_of(&at_key));
+
+        let new_keys_offset = new_keys_offset + size_of::<TKey>();
+        self.data.keys_mut()[new_keys_offset..new_keys_offset + keys_size]
+            .copy_from_slice(&entries.data.keys()[..keys_size]);
+
+        let new_values_offset = (self.key_count() + 1) * size_of::<PageIndex>();
+        let values_size = (entries.key_count() + 1) * size_of::<PageIndex>();
+        self.data.values_mut()[new_values_offset..new_values_offset + values_size]
+            .copy_from_slice(&entries.data.values()[..values_size]);
+
+        self.key_count += entries.key_count + 1;
+    }
+
     pub fn insert_at(&mut self, index: usize, key: &TKey, value: PageIndex) {
         let key_len = self.key_count();
         assert!(key_len < InteriorNodeData::<TKey>::KEY_CAPACITY);
@@ -203,12 +224,13 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     pub fn needs_merge(&self) -> bool {
-        2 * (self.key_count() * size_of::<TKey>() + (self.key_count() + 1) * size_of::<PageIndex>())
-            < INTERIOR_NODE_DATA_SIZE
+        2 * self.key_count() < InteriorNodeData::<TKey>::KEY_CAPACITY
     }
 
     pub fn can_fit_merge(&self, right: &Self) -> bool {
-        self.key_count() + right.key_count() > InteriorNodeData::<TKey>::KEY_CAPACITY
+        self.key_count() + right.key_count() <= InteriorNodeData::<TKey>::KEY_CAPACITY
+            && (self.key_count() + 1) + (right.key_count() + 1)
+                <= InteriorNodeData::<TKey>::VALUES_CAPACITY
     }
 
     pub fn key_at(&self, index: usize) -> Option<&TKey> {
