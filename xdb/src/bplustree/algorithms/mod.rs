@@ -11,31 +11,43 @@ use crate::{
     storage::Storage,
 };
 
+enum LeafSearchResult {
+    Recurse(AnyNodeId),
+    Done(LeafNodeId),
+}
+
 pub(super) fn leaf_search<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
-    node_index: AnyNodeId,
+    start_id: AnyNodeId,
     key: TKey,
 ) -> Result<LeafNodeId, TreeError> {
-    transaction.read_nodes(node_index, |node| {
-        let node = match node.as_any() {
-            AnyNodeKind::Interior(reader) => reader,
-            // TODO this should maybe be held by the reader which would do the conversion so we
-            // don't share the `From`???
-            AnyNodeKind::Leaf(_) => {
-                return Ok(LeafNodeId::from_any(node_index));
+    let result = transaction.read_nodes(start_id, |node| {
+        match node.as_any() {
+            AnyNodeKind::Interior(node) => {
+                for (key_index, node_key) in node.keys() {
+                    if key < node_key {
+                        return LeafSearchResult::Recurse(
+                            node.value_at(key_index.value_before()).unwrap(),
+                        );
+                    }
+                }
+
+                LeafSearchResult::Recurse(node.last_value().unwrap())
             }
-        };
-
-        for (key_index, node_key) in node.keys() {
-            if key < node_key {
-                let child_page = node.value_at(key_index.value_before()).unwrap();
-
-                return leaf_search(transaction, child_page, key);
+            AnyNodeKind::Leaf(_) => {
+                // TODO can we avoid from_any here and instead make the conversion happen higher in
+                // the transaction API?
+                LeafSearchResult::Done(LeafNodeId::from_any(start_id))
             }
         }
+    })?;
 
-        leaf_search(transaction, node.last_value().unwrap(), key)
-    })?
+    match result {
+        LeafSearchResult::Recurse(interior_node_id) => {
+            leaf_search(transaction, interior_node_id, key)
+        }
+        LeafSearchResult::Done(leaf_node_id) => Ok(leaf_node_id),
+    }
 }
 
 pub(super) fn first_leaf<TStorage: Storage, TKey: TreeKey>(

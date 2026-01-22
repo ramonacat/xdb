@@ -85,6 +85,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     fn read_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
         &self,
         indices: TIndices,
+        // TODO make this + 'static, so that the nodes reference cannot escape
         read: impl for<'node> FnOnce(TIndices::Nodes<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self.transaction.read(indices.to_page_indices(), |pages| {
