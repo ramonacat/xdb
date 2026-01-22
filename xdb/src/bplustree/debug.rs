@@ -71,11 +71,9 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
                 AnyNodeKind::Interior(interior_node) => {
                     for (index, key) in interior_node.keys() {
                         result.push((
-                            if index.is_first() {
-                                start_min_key
-                            } else {
-                                interior_node.key_at(index.key_before())
-                            },
+                            index.key_before().map_or(start_min_key, |key_before| {
+                                interior_node.key_at(key_before)
+                            }),
                             Some(key),
                             interior_node.value_at(index.value_before()).unwrap(),
                         ));

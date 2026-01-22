@@ -91,13 +91,8 @@ impl KeyIndex {
         Self(index)
     }
 
-    pub(crate) const fn key_before(self) -> Self {
-        Self(self.0.strict_sub(1))
-    }
-
-    // TODO we could probably get rid of it by returning an option from key_before, etc.?
-    pub(crate) const fn is_first(self) -> bool {
-        self.0 == 0
+    pub(crate) fn key_before(self) -> Option<Self> {
+        self.0.checked_sub(1).map(Self)
     }
 
     const fn as_offset<TKey: TreeKey>(self) -> usize {
@@ -121,17 +116,12 @@ impl ValueIndex {
         Self(x)
     }
 
-    pub(crate) const fn key_before(self) -> KeyIndex {
-        // TODO return Option<KeyIndex> instead?
-        KeyIndex(self.0.strict_sub(1))
+    pub fn key_before(self) -> Option<KeyIndex> {
+        self.0.checked_sub(1).map(KeyIndex)
     }
 
-    pub(crate) const fn is_first(self) -> bool {
-        self.0 == 0
-    }
-
-    pub(crate) const fn value_before(self) -> Self {
-        Self(self.0.strict_sub(1))
+    pub(crate) fn value_before(self) -> Option<Self> {
+        self.0.checked_sub(1).map(Self)
     }
 
     const fn key_after(self) -> KeyIndex {

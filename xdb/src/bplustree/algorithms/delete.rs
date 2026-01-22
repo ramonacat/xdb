@@ -78,7 +78,7 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
             return Err(MergeError::NotEnoughCapacity);
         }
 
-        let parent_key_index = parent.find_value_index(right_id.into()).unwrap().key_before();
+        let parent_key_index = parent.find_value_index(right_id.into()).unwrap().key_before().unwrap();
         let parent_key = parent.key_at(parent_key_index).unwrap();
 
         left.merge_from(right, parent_key);
@@ -123,10 +123,8 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
     let index_in_parent =
         transaction.read_nodes(parent_id, |x| x.find_value_index(node_id.into()).unwrap())?;
 
-    if !index_in_parent.is_first() {
-        let left = transaction.read_nodes(parent_id, |x| {
-            x.value_at(index_in_parent.value_before()).unwrap()
-        })?;
+    if let Some(value_before) = index_in_parent.value_before() {
+        let left = transaction.read_nodes(parent_id, |x| x.value_at(value_before).unwrap())?;
         let left = InteriorNodeId::from_any(left);
 
         match merge_interior_node_with(transaction, left, node_id, parent_id) {
