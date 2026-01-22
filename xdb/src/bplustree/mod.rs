@@ -85,7 +85,6 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     fn read_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
         &self,
         indices: TIndices,
-        // TODO make this + 'static, so that the nodes reference cannot escape
         read: impl for<'node> FnOnce(TIndices::Nodes<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self.transaction.read(indices.to_page_indices(), |pages| {
@@ -108,13 +107,14 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     }
 
     #[allow(clippy::large_types_passed_by_value)] // TODO perhaps we should do something to avoid
-    // passing whole pages here?
+    // passing whole nodes here?
     fn insert_reserved(
         &self,
         reservation: TStorage::PageReservation<'storage>,
-        page: Page, // TODO take a Node and convert to page internally
+        page: impl Node<TKey>,
     ) -> Result<(), TreeError> {
-        self.transaction.insert_reserved(reservation, page)?;
+        self.transaction
+            .insert_reserved(reservation, Page::from_data(page))?;
 
         Ok(())
     }

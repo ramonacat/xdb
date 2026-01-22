@@ -6,7 +6,6 @@ use crate::{
         TreeKey, TreeTransaction, algorithms::leaf_search,
         node::leaf::builder::MaterializedTopology,
     },
-    page::Page,
     storage::{PageReservation as _, Storage},
 };
 
@@ -20,7 +19,7 @@ fn create_new_root<'storage, TStorage: Storage, TKey: TreeKey>(
     let new_root_id = InteriorNodeId::new(reservation.index());
     let new_root = InteriorNode::<TKey>::new(left, key, right);
 
-    transaction.insert_reserved(reservation, Page::from_data(new_root))?;
+    transaction.insert_reserved(reservation, new_root)?;
     transaction.write_header(|header| header.root = new_root_id.page())?;
 
     Ok(())
@@ -51,7 +50,7 @@ fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
         .build()
     })?;
 
-    transaction.insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
+    transaction.insert_reserved(new_leaf_reservation, new_leaf)?;
     create_new_root(
         transaction,
         new_root_reservation,
@@ -92,7 +91,7 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
         transaction.write_nodes(child, |node| node.set_parent(Some(new_node_id)))?;
     }
 
-    transaction.insert_reserved(new_node_reservation, Page::from_data(new_node))?;
+    transaction.insert_reserved(new_node_reservation, new_node)?;
 
     if let Some(parent) = parent {
         debug!("split interior node {target:?} into new node {new_node_id:?}");
@@ -169,7 +168,7 @@ fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     let split_key = new_leaf.first_key().unwrap();
     debug!("split {target_node_id:?} into {new_leaf_id:?} at key {split_key:?}");
 
-    transaction.insert_reserved(new_leaf_reservation, Page::from_data(new_leaf))?;
+    transaction.insert_reserved(new_leaf_reservation, new_leaf)?;
 
     insert_child(transaction, parent, split_key, new_leaf_id.into())?;
 
