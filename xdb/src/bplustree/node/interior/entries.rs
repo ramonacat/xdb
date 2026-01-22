@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use bytemuck::{Pod, Zeroable, bytes_of, from_bytes, pod_read_unaligned};
+use bytemuck::{Pod, Zeroable, bytes_of, cast_slice, cast_slice_mut};
 
 use crate::{
     bplustree::{TreeKey, node::NODE_DATA_SIZE},
@@ -43,13 +43,14 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
     const KEY_CAPACITY: usize = (INTERIOR_NODE_DATA_SIZE - size_of::<PageIndex>())
         / (size_of::<TKey>() + size_of::<PageIndex>());
 
-    fn from_raw_data(keys: &[u8], values: &[u8]) -> Self {
-        assert!(keys.len() < Self::VALUES_OFFSET);
+    fn from_raw_data(keys: &[TKey], values: &[PageIndex]) -> Self {
+        assert!(size_of_val(keys) < Self::VALUES_OFFSET);
 
         let mut data = [0; _];
 
-        data[..keys.len()].copy_from_slice(keys);
-        data[Self::VALUES_OFFSET..Self::VALUES_OFFSET + values.len()].copy_from_slice(values);
+        data[..size_of_val(keys)].copy_from_slice(cast_slice(keys));
+        data[Self::VALUES_OFFSET..Self::VALUES_OFFSET + size_of_val(values)]
+            .copy_from_slice(cast_slice(values));
 
         Self {
             data,
@@ -57,20 +58,20 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
         }
     }
 
-    fn keys(&self) -> &[u8] {
-        &self.data[..Self::VALUES_OFFSET]
+    fn keys(&self) -> &[TKey] {
+        cast_slice(&self.data[..Self::VALUES_OFFSET])
     }
 
-    fn values(&self) -> &[u8] {
-        &self.data[Self::VALUES_OFFSET..]
+    fn values(&self) -> &[PageIndex] {
+        cast_slice(&self.data[Self::VALUES_OFFSET..])
     }
 
-    fn keys_mut(&mut self) -> &mut [u8] {
-        &mut self.data[..Self::VALUES_OFFSET]
+    fn keys_mut(&mut self) -> &mut [TKey] {
+        cast_slice_mut(&mut self.data[..Self::VALUES_OFFSET])
     }
 
-    fn values_mut(&mut self) -> &mut [u8] {
-        &mut self.data[Self::VALUES_OFFSET..]
+    fn values_mut(&mut self) -> &mut [PageIndex] {
+        cast_slice_mut(&mut self.data[Self::VALUES_OFFSET..])
     }
 }
 
@@ -94,14 +95,12 @@ impl KeyIndex {
         self.0.checked_sub(1).map(Self)
     }
 
-    // TODO should we pull TKey to be a type argument of the struct, to avoid passing it
-    // everywhere?
-    const fn as_offset<TKey: TreeKey>(self) -> usize {
-        self.0.strict_mul(size_of::<TKey>())
-    }
-
     const fn key_after(self) -> Self {
         Self(self.0.strict_add(1))
+    }
+
+    const fn offset(self, offset: isize) -> Self {
+        Self(self.0.strict_add_signed(offset))
     }
 }
 
@@ -129,24 +128,18 @@ impl ValueIndex {
         KeyIndex(self.0)
     }
 
-    const fn as_offset(self) -> usize {
-        self.0 * size_of::<PageIndex>()
+    const fn offset(self, offset: isize) -> Self {
+        Self(self.0.strict_add_signed(offset))
     }
 }
 
 impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     pub fn new(left: PageIndex, key: TKey, right: PageIndex) -> Self {
-        let values = bytes_of(&left)
-            .iter()
-            .chain(bytes_of(&right))
-            .copied()
-            .collect::<Vec<_>>();
-
         Self {
             key_count: 1,
             _unused1: 0,
             _unused2: 0,
-            data: InteriorNodeData::from_raw_data(bytes_of(&key), &values),
+            data: InteriorNodeData::from_raw_data(&[key], &[left, right]),
         }
     }
 
@@ -166,25 +159,19 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         let values_to_leave = keys_to_leave + 1;
         let values_to_move = (key_count + 1) - values_to_leave;
 
-        let key_data_to_move_start = (keys_to_leave + 1) * size_of::<TKey>();
-        let value_data_to_move_start = values_to_leave * size_of::<PageIndex>();
+        let split_key = self.data.keys()[keys_to_leave];
 
-        let key_data_to_move = self.data.keys()
-            [key_data_to_move_start..key_data_to_move_start + keys_to_move * size_of::<TKey>()]
-            .to_vec();
-        let value_data_to_move = self.data.values()[value_data_to_move_start
-            ..value_data_to_move_start + values_to_move * size_of::<PageIndex>()]
-            .to_vec();
+        let key_data_to_move =
+            self.data.keys()[(keys_to_leave + 1)..(keys_to_leave + 1) + keys_to_move].to_vec();
+        let value_data_to_move =
+            self.data.values()[values_to_leave..values_to_leave + values_to_move].to_vec();
 
         self.key_count = u16::try_from(keys_to_leave).unwrap();
 
         let new_node_data = InteriorNodeData::from_raw_data(&key_data_to_move, &value_data_to_move);
 
-        let split_key_offset = (keys_to_leave) * size_of::<TKey>();
         (
-            pod_read_unaligned(
-                &self.data.keys()[split_key_offset..split_key_offset + size_of::<TKey>()],
-            ),
+            split_key,
             Self {
                 key_count: u16::try_from(keys_to_move).unwrap(),
                 _unused1: 0,
@@ -195,73 +182,53 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     // TODO methods like `write_key_at` and `write_value_at` to contain the index arithmetic?
-    pub(crate) fn merge_from(&mut self, entries: &Self, at_key: TKey) {
-        let keys_size = entries.key_count() * size_of::<TKey>();
-        let new_keys_offset = self.key_after_last();
+    pub(crate) fn merge_from(&mut self, entries: &Self, merge_key: TKey) {
+        let merge_key_offset = self.key_after_last();
 
-        self.data.keys_mut()
-            [new_keys_offset.as_offset::<TKey>()..new_keys_offset.key_after().as_offset::<TKey>()]
-            .copy_from_slice(bytes_of(&at_key));
+        self.data.keys_mut()[merge_key_offset.0] = merge_key;
 
-        let new_keys_offset = new_keys_offset.key_after();
-        self.data.keys_mut()
-            [new_keys_offset.as_offset::<TKey>()..new_keys_offset.as_offset::<TKey>() + keys_size]
-            .copy_from_slice(&entries.data.keys()[..keys_size]);
+        let new_keys_offset = merge_key_offset.key_after();
+        self.data.keys_mut()[new_keys_offset.0..new_keys_offset.0 + entries.key_count()]
+            .copy_from_slice(&entries.data.keys()[..entries.key_count()]);
 
-        let new_values_offset = self.value_after_last().as_offset();
-        let values_size = (entries.key_count() + 1) * size_of::<PageIndex>();
-        self.data.values_mut()[new_values_offset..new_values_offset + values_size]
+        let new_values_offset = self.value_after_last();
+        let values_size = entries.key_count() + 1;
+
+        self.data.values_mut()[new_values_offset.0..new_values_offset.0 + values_size]
             .copy_from_slice(&entries.data.values()[..values_size]);
 
         self.key_count += entries.key_count + 1;
     }
 
     pub fn insert_at(&mut self, index: KeyIndex, key: TKey, value: PageIndex) {
-        let key_len = self.key_count();
-        assert!(key_len < InteriorNodeData::<TKey>::KEY_CAPACITY);
+        assert!(self.key_count() < InteriorNodeData::<TKey>::KEY_CAPACITY);
 
         debug_assert!(bytes_of(&key) != vec![0; size_of::<TKey>()]);
 
-        self.move_keys(index, isize::try_from(size_of::<TKey>()).unwrap());
-        self.move_values(
-            index.value_after(),
-            isize::try_from(size_of::<PageIndex>()).unwrap(),
-        );
+        self.move_keys(index, 1);
+        self.move_values(index.value_after(), 1);
 
-        let key_offset = index.as_offset::<TKey>();
-        let value_offset = index.value_after().as_offset();
-
-        self.data.keys_mut()[key_offset..key_offset + size_of::<TKey>()]
-            .copy_from_slice(bytes_of(&key));
-        self.data.values_mut()[value_offset..value_offset + size_of::<PageIndex>()]
-            .copy_from_slice(bytes_of(&value));
+        self.data.keys_mut()[index.0] = key;
+        self.data.values_mut()[index.value_after().0] = value;
 
         self.key_count += 1;
     }
 
     fn move_keys(&mut self, start_index: KeyIndex, offset: isize) {
-        let keys_to_move = self.data.keys()
-            [start_index.as_offset::<TKey>()..self.key_after_last().as_offset::<TKey>()]
-            .to_vec();
+        let keys_to_move = self.data.keys()[start_index.0..self.key_after_last().0].to_vec();
 
-        let target_end_offset = self
-            .key_after_last()
-            .as_offset::<TKey>()
-            .strict_add_signed(offset);
-        self.data.keys_mut()
-            [start_index.as_offset::<TKey>().strict_add_signed(offset)..target_end_offset]
+        let target_end_index = self.key_after_last().offset(offset).0;
+
+        self.data.keys_mut()[start_index.0.strict_add_signed(offset)..target_end_index]
             .copy_from_slice(&keys_to_move);
     }
 
     fn move_values(&mut self, start_index: ValueIndex, offset: isize) {
-        let start_offset = start_index.as_offset();
-        let end_offset = self.value_after_last().as_offset();
+        let end_index = self.value_after_last();
 
-        let values_to_move = self.data.values()[start_offset..end_offset].to_vec();
+        let values_to_move = self.data.values()[start_index.0..end_index.0].to_vec();
 
-        let target_start_offset = start_offset.strict_add_signed(offset);
-
-        self.data.values_mut()[target_start_offset..end_offset.strict_add_signed(offset)]
+        self.data.values_mut()[start_index.offset(offset).0..end_index.0.strict_add_signed(offset)]
             .copy_from_slice(&values_to_move);
     }
 
@@ -270,9 +237,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
             return None;
         }
 
-        let value: PageIndex = pod_read_unaligned(
-            &self.data.values()[index.as_offset()..index.value_after().as_offset()],
-        );
+        let value = self.data.values()[index.0];
 
         assert!(value != PageIndex::zero());
 
@@ -282,14 +247,8 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     pub fn delete_at(&mut self, index: ValueIndex) {
         assert!(index.0 <= self.key_count());
 
-        self.move_keys(
-            index.key_after(),
-            -isize::try_from(size_of::<TKey>()).unwrap(),
-        );
-        self.move_values(
-            index.value_after(),
-            -isize::try_from(size_of::<PageIndex>()).unwrap(),
-        );
+        self.move_keys(index.key_after(), -1);
+        self.move_values(index.value_after(), -1);
 
         self.key_count -= 1;
     }
@@ -303,14 +262,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     pub fn key_at(&self, index: KeyIndex) -> Option<TKey> {
-        if index.0 >= self.key_count() {
-            return None;
-        }
-
-        // TODO is the alignment here guaranteed? could this cause trouble with funny-sized keys?
-        Some(*from_bytes(
-            &self.data.keys()[index.as_offset::<TKey>()..index.key_after().as_offset::<TKey>()],
-        ))
+        self.data.keys().get(index.0).copied()
     }
 
     pub(crate) fn key_after_last(&self) -> KeyIndex {
