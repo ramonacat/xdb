@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, ops::Add};
+use std::marker::PhantomData;
 
 use bytemuck::{Pod, Zeroable, bytes_of, from_bytes, pod_read_unaligned};
 
@@ -99,21 +99,13 @@ impl KeyIndex {
     pub(crate) const fn is_first(self) -> bool {
         self.0 == 0
     }
-}
 
-impl Add<usize> for KeyIndex {
-    type Output = Self;
-
-    fn add(self, rhs: usize) -> Self::Output {
-        Self(self.0 + rhs)
+    const fn as_offset<TKey: TreeKey>(self) -> usize {
+        self.0.strict_mul(size_of::<TKey>())
     }
-}
 
-impl Add<isize> for KeyIndex {
-    type Output = Self;
-
-    fn add(self, rhs: isize) -> Self::Output {
-        Self(self.0.strict_add_signed(rhs))
+    const fn key_after(self) -> Self {
+        Self(self.0.strict_add(1))
     }
 }
 
@@ -145,20 +137,9 @@ impl ValueIndex {
     const fn key_after(self) -> KeyIndex {
         KeyIndex(self.0)
     }
-}
-impl Add<usize> for ValueIndex {
-    type Output = Self;
 
-    fn add(self, rhs: usize) -> Self::Output {
-        Self(self.0 + rhs)
-    }
-}
-
-impl Add<isize> for ValueIndex {
-    type Output = Self;
-
-    fn add(self, rhs: isize) -> Self::Output {
-        Self(self.0.strict_add_signed(rhs))
+    const fn as_offset(self) -> usize {
+        self.0 * size_of::<PageIndex>()
     }
 }
 
@@ -248,8 +229,8 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
 
         debug_assert!(bytes_of(&key) != vec![0; size_of::<TKey>()]);
 
-        let key_offset = size_of::<TKey>() * (index.0);
-        let value_offset = size_of::<PageIndex>() * (index.value_after().0);
+        let key_offset = index.as_offset::<TKey>();
+        let value_offset = index.value_after().as_offset();
 
         self.move_keys(index, isize::try_from(size_of::<TKey>()).unwrap());
         self.move_values(
@@ -266,8 +247,8 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     fn move_keys(&mut self, start_index: KeyIndex, offset: isize) {
-        let start_offset = start_index.0 * size_of::<TKey>();
-        let end_offset = self.key_count() * size_of::<TKey>();
+        let start_offset = start_index.as_offset::<TKey>();
+        let end_offset = self.key_after_last().as_offset::<TKey>();
 
         let keys_to_move = self.data.keys()[start_offset..end_offset].to_vec();
 
@@ -277,8 +258,8 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     fn move_values(&mut self, start_index: ValueIndex, offset: isize) {
-        let start_offset = size_of::<PageIndex>() * start_index.0;
-        let end_offset = size_of::<PageIndex>() * (self.key_count() + 1);
+        let start_offset = start_index.as_offset();
+        let end_offset = self.value_after_last().as_offset();
 
         let values_to_move = self.data.values()[start_offset..end_offset].to_vec();
 
@@ -293,7 +274,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
             return None;
         }
 
-        let value_start = index.0 * size_of::<PageIndex>();
+        let value_start = index.as_offset();
 
         let value: PageIndex = pod_read_unaligned(
             &self.data.values()[value_start..value_start + size_of::<PageIndex>()],
@@ -336,7 +317,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
 
         // TODO is the alignment here guaranteed? could this cause trouble with funny-sized keys?
         Some(*from_bytes(
-            &self.data.keys()[(index.0) * size_of::<TKey>()..(index.0 + 1) * size_of::<TKey>()],
+            &self.data.keys()[index.as_offset::<TKey>()..index.key_after().as_offset::<TKey>()],
         ))
     }
 
@@ -346,5 +327,9 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
 
     pub(crate) fn last_value(&self) -> ValueIndex {
         ValueIndex(self.key_count())
+    }
+
+    fn value_after_last(&self) -> ValueIndex {
+        ValueIndex(self.key_count() + 1)
     }
 }
