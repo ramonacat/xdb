@@ -4,6 +4,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
+use xdb::storage::instrumented::InstrumentedStorage;
 
 use xdb::{
     bplustree::{
@@ -11,13 +12,13 @@ use xdb::{
         algorithms::{delete::delete, insert::insert},
     },
     debug::BigKey,
-    storage::in_memory::{InMemoryStorage, test::TestStorage},
+    storage::in_memory::InMemoryStorage,
 };
 
 fn main() {
     let page_count = Arc::new(AtomicUsize::new(0));
 
-    let storage = TestStorage::new(InMemoryStorage::new(), page_count.clone());
+    let storage = InstrumentedStorage::new(InMemoryStorage::new(), page_count.clone());
     let tree = Tree::new(storage).unwrap();
     let transaction = tree.transaction().unwrap();
 

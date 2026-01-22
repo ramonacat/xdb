@@ -199,6 +199,7 @@ impl TreeHeader {
 
 #[cfg(test)]
 mod test {
+    use crate::storage::instrumented::InstrumentedStorage;
     use std::{
         collections::BTreeMap,
         io::Write,
@@ -215,7 +216,7 @@ mod test {
             debug::{assert_properties, assert_tree_equal},
         },
         debug::BigKey,
-        storage::in_memory::{InMemoryStorage, test::TestStorage},
+        storage::in_memory::InMemoryStorage,
     };
     use log::info;
     use pretty_assertions::assert_eq;
@@ -851,7 +852,7 @@ mod test {
     fn delete_with_merge() {
         let page_count = Arc::new(AtomicUsize::new(0));
         let storage = InMemoryStorage::new();
-        let storage = TestStorage::new(storage, page_count.clone());
+        let storage = InstrumentedStorage::new(storage, page_count.clone());
         let tree = Tree::new(storage).unwrap();
         let transaction = tree.transaction().unwrap();
 
