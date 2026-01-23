@@ -1,22 +1,25 @@
-use std::sync::RwLock;
+mod mmaped_block;
 
 use bytemuck::Zeroable;
 
 use crate::{
     page::Page,
-    storage::{PageIndex, PageReservation, Storage, StorageError, Transaction},
+    storage::{
+        PageIndex, PageReservation, Storage, StorageError, Transaction,
+        in_memory::mmaped_block::{Block, PageGuard, PageGuardMut, UninitializedPageGuard},
+    },
 };
 
 // TODO impl Drop to return the page to free pool if it doesn't get written
 pub struct InMemoryPageReservation<'storage> {
-    #[allow(unused)] // TODO use it?
+    #[allow(unused)] // TODO remove?
     storage: &'storage InMemoryStorage,
-    index: PageIndex,
+    page_guard: UninitializedPageGuard<'storage>,
 }
 
 impl<'storage> PageReservation<'storage> for InMemoryPageReservation<'storage> {
     fn index(&self) -> PageIndex {
-        self.index
+        self.page_guard.index()
     }
 }
 
@@ -27,16 +30,15 @@ pub struct InMemoryTransaction<'storage> {
 impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     for InMemoryTransaction<'storage>
 {
+    type TPage = PageGuard<'storage>;
+    type TPageMut = PageGuardMut<'storage>;
+
     fn read<T, const N: usize>(
         &self,
         indices: impl Into<[PageIndex; N]>,
-        read: impl FnOnce([&Page; N]) -> T,
+        read: impl FnOnce([Self::TPage; N]) -> T,
     ) -> Result<T, StorageError> {
-        let storage = self.storage.pages.read().unwrap();
-
-        let pages = indices
-            .into()
-            .map(|i| storage.get(usize::try_from(i.0).unwrap()).unwrap());
+        let pages = indices.into().map(|i| self.storage.pages2.get(i).get());
 
         Ok(read(pages))
     }
@@ -44,26 +46,19 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     fn write<T, const N: usize>(
         &self,
         indices: impl Into<[PageIndex; N]>,
-        write: impl FnOnce([&mut Page; N]) -> T,
+        write: impl FnOnce([Self::TPageMut; N]) -> T,
     ) -> Result<T, StorageError> {
-        let mut storage = self.storage.pages.write().unwrap();
-        let pages = storage
-            .get_disjoint_mut(indices.into().map(|x| usize::try_from(x.0).unwrap()))
-            .unwrap();
+        let pages = indices.into().map(|i| self.storage.pages2.get(i).get_mut());
 
         Ok(write(pages))
     }
 
     fn reserve<'a>(&'a self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
-        let mut storage = self.storage.pages.write().unwrap();
-        storage.push(Page::zeroed());
-
-        let index = PageIndex((storage.len() - 1) as u64);
-        drop(storage);
+        let page_guard = self.storage.pages2.allocate();
 
         Ok(InMemoryPageReservation {
             storage: self.storage,
-            index,
+            page_guard,
         })
     }
 
@@ -72,34 +67,23 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         reservation: InMemoryPageReservation<'storage>,
         page: Page,
     ) -> Result<(), StorageError> {
-        *self
-            .storage
-            .pages
-            .write()
-            .unwrap()
-            .get_mut(usize::try_from(reservation.index.0).unwrap())
-            .ok_or_else(|| StorageError::PageNotFound(reservation.index()))? = page;
+        let InMemoryPageReservation {
+            storage: _,
+            page_guard,
+        } = reservation;
+        page_guard.initialize(page);
 
         Ok(())
     }
 
     fn insert(&self, page: Page) -> Result<PageIndex, StorageError> {
-        let mut storage = self.storage.pages.write().unwrap();
-        storage.push(page);
-
-        Ok(PageIndex((storage.len() - 1) as u64))
+        Ok(self.storage.pages2.allocate().initialize(page).index())
     }
 
     fn delete(&self, page: PageIndex) -> Result<(), StorageError> {
         // TODO actually delete the page, instead of just zeroing!
 
-        *self
-            .storage
-            .pages
-            .write()
-            .unwrap()
-            .get_mut(usize::try_from(page.0).unwrap())
-            .unwrap() = Page::zeroed();
+        *self.storage.pages2.get(page).get_mut() = Page::zeroed();
 
         Ok(())
     }
@@ -111,8 +95,8 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
-    // TODO: per page locks
-    pages: RwLock<Vec<Page>>,
+    // TODO rename -> pages
+    pages2: mmaped_block::Block,
 }
 
 impl Default for InMemoryStorage {
@@ -123,9 +107,9 @@ impl Default for InMemoryStorage {
 
 impl InMemoryStorage {
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            pages: RwLock::new(vec![]),
+            pages2: Block::new(),
         }
     }
 }

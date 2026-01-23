@@ -930,6 +930,7 @@ dependencies = [
  "crc32c",
  "criterion",
  "env_logger",
+ "libc",
  "log",
  "pretty_assertions",
  "tempfile",

@@ -1,7 +1,10 @@
 pub mod in_memory;
 pub mod instrumented;
 
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    ops::{Deref, DerefMut},
+};
 
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
@@ -47,16 +50,19 @@ impl From<PageIndex> for [PageIndex; 1] {
 }
 
 pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
+    type TPage: AsRef<Page> + Deref<Target = Page>;
+    type TPageMut: AsMut<Page> + DerefMut<Target = Page>;
+
     fn read<T, const N: usize>(
         &self,
         indices: impl Into<[PageIndex; N]>,
-        read: impl FnOnce([&Page; N]) -> T,
+        read: impl FnOnce([Self::TPage; N]) -> T,
     ) -> Result<T, StorageError>;
 
     fn write<T, const N: usize>(
         &self,
         indices: impl Into<[PageIndex; N]>,
-        write: impl FnOnce([&mut Page; N]) -> T,
+        write: impl FnOnce([Self::TPageMut; N]) -> T,
     ) -> Result<T, StorageError>;
 
     fn reserve(&self) -> Result<TPageReservation, StorageError>;

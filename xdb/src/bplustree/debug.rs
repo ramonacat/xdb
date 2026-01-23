@@ -197,7 +197,6 @@ fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
         .unwrap();
 
     for child in children.windows(3) {
-        dbg!(child);
         assert_correct_topology(
             transaction,
             Some(InteriorNodeId::from_any(node_id)),

@@ -1,4 +1,3 @@
-
 use std::{
     marker::PhantomData,
     sync::{
@@ -19,10 +18,13 @@ pub struct InstrumentedTransaction<
 impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
     Transaction<'a, TStorage::PageReservation<'a>> for InstrumentedTransaction<'a, TTx, TStorage>
 {
+    type TPage = TTx::TPage;
+    type TPageMut = TTx::TPageMut;
+
     fn read<TReturn, const N: usize>(
         &self,
         indices: impl Into<[PageIndex; N]>,
-        read: impl FnOnce([&Page; N]) -> TReturn,
+        read: impl FnOnce([Self::TPage; N]) -> TReturn,
     ) -> Result<TReturn, StorageError> {
         self.0.read(indices, read)
     }
@@ -30,7 +32,7 @@ impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
     fn write<TReturn, const N: usize>(
         &self,
         indices: impl Into<[PageIndex; N]>,
-        write: impl FnOnce([&mut Page; N]) -> TReturn,
+        write: impl FnOnce([Self::TPageMut; N]) -> TReturn,
     ) -> Result<TReturn, StorageError> {
         self.0.write(indices, write)
     }

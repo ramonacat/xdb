@@ -188,6 +188,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         self.data.keys_mut()[merge_key_offset.0] = merge_key;
 
         let new_keys_offset = merge_key_offset.key_after();
+
         self.data.keys_mut()[new_keys_offset.0..new_keys_offset.0 + entries.key_count()]
             .copy_from_slice(&entries.data.keys()[..entries.key_count()]);
 
@@ -258,7 +259,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     pub fn can_fit_merge(&self, right: &Self) -> bool {
-        self.key_count() + right.key_count() <= InteriorNodeData::<TKey>::KEY_CAPACITY
+        self.key_count() + right.key_count() + 1 <= InteriorNodeData::<TKey>::KEY_CAPACITY
     }
 
     pub fn key_at(&self, index: KeyIndex) -> Option<TKey> {

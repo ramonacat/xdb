@@ -87,7 +87,6 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
         // TODO actually remove the Dispaly impls for NodeIds, as we don't print them outside of
         // debug contexts
         debug!("merged interior node {left_id:?} from {right_id:?} (parent: {parent_id}, key: {parent_key:?}, index: {parent_key_index:?})");
-        dbg!(parent.keys().collect::<Vec<_>>(), parent.values().collect::<Vec<_>>());
 
         Ok(())
     })??;
