@@ -1,11 +1,16 @@
+// TODO separate the miri and non-miri code into modules
+
 use std::{
-    ffi::CStr,
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
     ptr::NonNull,
     sync::atomic::{AtomicU64, Ordering},
 };
 
+#[cfg(not(miri))]
+use std::ffi::CStr;
+
+#[cfg(not(miri))]
 use libc::{
     __errno_location, _SC_PAGE_SIZE, MAP_ANONYMOUS, MAP_FAILED, MAP_NORESERVE, MAP_PRIVATE,
     PROT_NONE, PROT_READ, PROT_WRITE, mmap, mprotect, munmap, strerror,
@@ -246,42 +251,61 @@ impl<'block> UninitializedPageGuard<'block> {
 
 #[derive(Debug)]
 pub struct Block {
-    // TODO create a memory backing that can be tested with miri here, by just using a big-ass
-    // array
     housekeeping: NonNull<MaybeUninit<PageState>>,
     data: NonNull<MaybeUninit<Page>>,
     latest_page: AtomicU64,
 }
 
+#[cfg(miri)]
+#[repr(C, align(4096))]
+struct Memory([u8; Block::SIZE]);
+
+#[cfg(miri)]
+const _: () = assert!(align_of::<Memory>() == PAGE_SIZE);
+
 impl Block {
+    #[cfg(not(miri))]
     const SIZE: usize = 4 * 1024 * 1024 * 1024;
+    #[cfg(miri)]
+    const SIZE: usize = 64 * 1024 * 1024;
     const PAGE_COUNT: usize = Self::SIZE / PAGE_SIZE;
     const HOUSEKEEPING_BLOCK_SIZE: usize = Self::PAGE_COUNT * size_of::<PageState>();
 
     pub fn new() -> Self {
-        assert!(unsafe { usize::try_from(libc::sysconf(_SC_PAGE_SIZE)).unwrap() == PAGE_SIZE });
+        #[cfg(not(miri))]
+        let memory = {
+            assert!(unsafe { usize::try_from(libc::sysconf(_SC_PAGE_SIZE)).unwrap() == PAGE_SIZE });
 
-        let memory = unsafe {
-            mmap(
-                std::ptr::null_mut(),
-                Self::SIZE, // 4GiB TODO create a type that can store a Size and has
-                // constructors for different prefixes
-                PROT_NONE,
-                // TODO support file backed mappings
-                MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
-                -1,
-                0,
-            )
+            let memory = unsafe {
+                mmap(
+                    std::ptr::null_mut(),
+                    Self::SIZE, // 4GiB TODO create a type that can store a Size and has
+                    // constructors for different prefixes
+                    PROT_NONE,
+                    // TODO support file backed mappings
+                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                    -1,
+                    0,
+                )
+            };
+
+            if memory == MAP_FAILED {
+                panic_on_errno();
+            }
+
+            NonNull::new(memory).unwrap()
         };
 
-        if memory == MAP_FAILED {
-            panic_on_errno();
-        }
-        let memory = NonNull::new(memory).unwrap();
+        #[cfg(miri)]
+        let memory = {
+            let memory = Box::leak(Box::new(Memory([0; _])));
+
+            NonNull::from_mut(memory)
+        };
 
         Self {
             housekeeping: memory.cast(),
-            data: unsafe { memory.add(Self::HOUSEKEEPING_BLOCK_SIZE).cast() },
+            data: unsafe { memory.byte_add(Self::HOUSEKEEPING_BLOCK_SIZE).cast() },
             latest_page: AtomicU64::new(0),
         }
     }
@@ -316,6 +340,7 @@ impl Block {
     fn allocate_housekeeping(&self, index: PageIndex) -> *const PageState {
         assert!(index.0 < Self::PAGE_COUNT as u64);
 
+        #[cfg(not(miri))]
         unsafe {
             let houskeeping_page = (self.housekeeping.cast::<[u8; PAGE_SIZE]>())
                 .add(usize::try_from(index.0).unwrap() / (PAGE_SIZE / size_of::<PageState>()));
@@ -349,6 +374,7 @@ impl Block {
     }
 }
 
+#[cfg(not(miri))]
 fn panic_on_errno() -> ! {
     let errno = unsafe { *__errno_location() };
 
@@ -359,7 +385,14 @@ fn panic_on_errno() -> ! {
 
 impl Drop for Block {
     fn drop(&mut self) {
-        unsafe { munmap(self.housekeeping.cast().as_ptr(), Self::SIZE) };
+        #[cfg(not(miri))]
+        unsafe {
+            munmap(self.housekeeping.cast().as_ptr(), Self::SIZE)
+        };
+        #[cfg(miri)]
+        unsafe {
+            drop(Box::<Memory>::from_raw(self.housekeeping.cast().as_ptr()))
+        };
     }
 }
 
