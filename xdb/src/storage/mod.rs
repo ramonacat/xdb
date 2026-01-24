@@ -46,8 +46,7 @@ impl From<PageIndex> for [PageIndex; 1] {
     }
 }
 
-// TODO transactions should be Send (but not necessairly Sync)
-pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
+pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>>: Send {
     fn read<T, const N: usize>(
         &self,
         indices: impl Into<[PageIndex; N]>,
@@ -77,7 +76,7 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
     fn commit(self) -> Result<(), StorageError>;
 }
 
-pub trait Storage {
+pub trait Storage: Send + Sync {
     type PageReservation<'storage>: PageReservation<'storage>
     where
         Self: 'storage;

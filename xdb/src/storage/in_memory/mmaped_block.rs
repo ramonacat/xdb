@@ -146,6 +146,8 @@ pub struct PageGuard<'block> {
     index: PageIndex,
 }
 
+unsafe impl Send for PageGuard<'_> {}
+
 impl<'block> PageGuard<'block> {
     unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
         let housekeeping = unsafe { block.housekeeping_for(index).as_ref() };
@@ -194,6 +196,8 @@ pub struct PageGuardMut<'block> {
     block: &'block Block,
     index: PageIndex,
 }
+
+unsafe impl Send for PageGuardMut<'_> {}
 
 impl<'block> PageGuardMut<'block> {
     unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
@@ -281,6 +285,9 @@ pub struct Block {
     data: NonNull<MaybeUninit<Page>>,
     latest_page: AtomicU64,
 }
+
+unsafe impl Sync for Block {}
+unsafe impl Send for Block {}
 
 #[cfg(miri)]
 #[repr(C, align(4096))]
