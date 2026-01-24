@@ -206,15 +206,15 @@ mod test {
     fn merge_with() {
         let mut node_a = InteriorNode::new(
             None,
-            AnyNodeId::new(PageIndex::value(1)),
+            AnyNodeId::new(PageIndex::from_value(1)),
             1usize,
-            AnyNodeId::new(PageIndex::value(2)),
+            AnyNodeId::new(PageIndex::from_value(2)),
         );
         let node_b = InteriorNode::new(
             None,
-            AnyNodeId::new(PageIndex::value(3)),
+            AnyNodeId::new(PageIndex::from_value(3)),
             3usize,
-            AnyNodeId::new(PageIndex::value(4)),
+            AnyNodeId::new(PageIndex::from_value(4)),
         );
 
         node_a.merge_from(&node_b, 2usize);
@@ -226,10 +226,10 @@ mod test {
         assert_eq!(
             values.iter().map(|x| x.1).collect::<Vec<_>>(),
             vec![
-                AnyNodeId::new(PageIndex::value(1)),
-                AnyNodeId::new(PageIndex::value(2)),
-                AnyNodeId::new(PageIndex::value(3)),
-                AnyNodeId::new(PageIndex::value(4)),
+                AnyNodeId::new(PageIndex::from_value(1)),
+                AnyNodeId::new(PageIndex::from_value(2)),
+                AnyNodeId::new(PageIndex::from_value(3)),
+                AnyNodeId::new(PageIndex::from_value(4)),
             ]
         );
     }

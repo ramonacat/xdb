@@ -1,7 +1,7 @@
 pub(super) mod interior;
 pub(super) mod leaf;
 
-use std::{fmt::Display, marker::PhantomData};
+use std::marker::PhantomData;
 
 use crate::bplustree::node::leaf::LeafNode;
 use crate::bplustree::{TreeKey, node::interior::InteriorNode};
@@ -32,12 +32,6 @@ impl From<InteriorNodeId> for AnyNodeId {
     }
 }
 
-impl Display for AnyNodeId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 impl AnyNodeId {
     pub fn new(index: PageIndex) -> Self {
         assert!(index != PageIndex::zero());
@@ -59,12 +53,6 @@ impl NodeId for AnyNodeId {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct LeafNodeId(PageIndex);
-
-impl Display for LeafNodeId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
 
 impl LeafNodeId {
     // TODO is there a way to enforce validity in this API?
@@ -90,12 +78,6 @@ impl NodeId for LeafNodeId {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct InteriorNodeId(PageIndex);
-
-impl Display for InteriorNodeId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
 
 impl InteriorNodeId {
     pub(crate) fn new(index: PageIndex) -> Self {

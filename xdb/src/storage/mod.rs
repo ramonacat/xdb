@@ -1,8 +1,6 @@
 pub mod in_memory;
 pub mod instrumented;
 
-use std::fmt::Display;
-
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
 
@@ -20,19 +18,18 @@ pub struct PageIndex(u64);
 
 impl PageIndex {
     #[must_use]
-    pub const fn zero() -> Self {
+    pub(crate) const fn zero() -> Self {
         Self(0)
     }
 
     #[cfg(test)]
-    pub const fn value(value: u64) -> Self {
+    pub const fn from_value(value: u64) -> Self {
         Self(value)
     }
-}
 
-impl Display for PageIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+    #[must_use]
+    pub(crate) const fn value(self) -> u64 {
+        self.0
     }
 }
 

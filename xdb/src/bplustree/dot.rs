@@ -1,5 +1,5 @@
 use crate::bplustree::node::AnyNodeKind;
-use crate::bplustree::{AnyNodeId, Node, TreeKey, TreeTransaction};
+use crate::bplustree::{AnyNodeId, Node, NodeId, TreeKey, TreeTransaction};
 use crate::{
     bplustree::{Tree, TreeError},
     storage::Storage,
@@ -31,11 +31,11 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
             match node.as_any() {
                 AnyNodeKind::Interior(node) => {
                     let mut label: Vec<String> = vec![
-                        format!("index: {node_index}"),
+                        format!("index: {node_index:?}"),
                         format!(
                             "parent: {}",
                             node.parent()
-                                .map_or_else(|| "none".to_string(), |x| x.to_string())
+                                .map_or_else(|| "none".to_string(), |x| format!("{x:?}"))
                         ),
                     ];
 
@@ -45,31 +45,36 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 
                     let label = label.join("\\n");
 
-                    writeln!(output, "N{node_index}[label=\"{label}\"];").unwrap();
+                    writeln!(output, "N{}[label=\"{label}\"];", node_index.page().value()).unwrap();
 
                     for (index, value) in node.values() {
-                        writeln!(output, "N{node_index} -> N{value}[label=\"{index:?}\"];")
-                            .unwrap();
+                        writeln!(
+                            output,
+                            "N{} -> N{}[label=\"{index:?}\"];",
+                            node_index.page().value(),
+                            value.page().value()
+                        )
+                        .unwrap();
 
                         output += &Self::node_to_dot(transaction, value, stringify_value)?;
                     }
                 }
                 AnyNodeKind::Leaf(node) => {
                     let mut label: Vec<String> = vec![
-                        format!("index: {node_index}"),
+                        format!("index: {node_index:?}"),
                         format!(
                             "parent: {}",
                             node.parent()
-                                .map_or_else(|| "none".to_string(), |x| x.to_string())
+                                .map_or_else(|| "none".to_string(), |x| format!("{x:?}"))
                         ),
                     ];
 
                     if let Some(previous) = node.previous() {
-                        label.push(format!("previous: {previous}"));
+                        label.push(format!("previous: {previous:?}"));
                     }
 
                     if let Some(next) = node.next() {
-                        label.push(format!("next: {next}"));
+                        label.push(format!("next: {next:?}"));
                     }
 
                     for entry in node.entries() {
@@ -82,7 +87,7 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 
                     let label = label.join("\\n");
 
-                    writeln!(output, "N{node_index}[label=\"{label}\"];").unwrap();
+                    writeln!(output, "N{}[label=\"{label}\"];", node_index.page().value()).unwrap();
                 }
             }
 
