@@ -47,6 +47,7 @@ fuzz_target!(|keys_to_delete: Vec<KeyToDelete>| {
         delete(&mut transaction, key).unwrap();
     }
 
-    assert_tree_equal(&tree, &rust_btree, |k| k.value());
     assert_properties(&mut transaction);
+    drop(transaction);
+    assert_tree_equal(&tree, &rust_btree, |k| k.value());
 });

@@ -186,7 +186,6 @@ impl Deref for PageGuard<'_> {
 
 impl Drop for PageGuard<'_> {
     fn drop(&mut self) {
-        dbg!(self.index);
         unsafe { self.block.housekeeping_for(self.index).as_ref() }.unlock_read();
     }
 }

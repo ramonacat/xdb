@@ -87,5 +87,8 @@ pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_S
     }
 
     assert_properties(&mut transaction);
+
+    drop(transaction);
+
     assert_tree_equal(&tree, &rust_btree, |k| k.value());
 }
