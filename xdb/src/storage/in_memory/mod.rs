@@ -27,6 +27,8 @@ pub struct InMemoryTransaction<'storage> {
     storage: &'storage InMemoryStorage,
 }
 
+// TODO once a page is accessed in a transaction, we should keep the lock until the transaction
+// ends
 impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     for InMemoryTransaction<'storage>
 {
@@ -38,7 +40,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         indices: impl Into<[PageIndex; N]>,
         read: impl FnOnce([Self::TPage; N]) -> T,
     ) -> Result<T, StorageError> {
-        let pages = indices.into().map(|i| self.storage.pages2.get(i).get());
+        let pages = indices.into().map(|i| self.storage.pages.get(i).get());
 
         Ok(read(pages))
     }
@@ -48,13 +50,13 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         indices: impl Into<[PageIndex; N]>,
         write: impl FnOnce([Self::TPageMut; N]) -> T,
     ) -> Result<T, StorageError> {
-        let pages = indices.into().map(|i| self.storage.pages2.get(i).get_mut());
+        let pages = indices.into().map(|i| self.storage.pages.get(i).get_mut());
 
         Ok(write(pages))
     }
 
     fn reserve<'a>(&'a self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
-        let page_guard = self.storage.pages2.allocate();
+        let page_guard = self.storage.pages.allocate();
 
         Ok(InMemoryPageReservation {
             storage: self.storage,
@@ -77,13 +79,13 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     }
 
     fn insert(&self, page: Page) -> Result<PageIndex, StorageError> {
-        Ok(self.storage.pages2.allocate().initialize(page).index())
+        Ok(self.storage.pages.allocate().initialize(page).index())
     }
 
     fn delete(&self, page: PageIndex) -> Result<(), StorageError> {
         // TODO actually delete the page, instead of just zeroing!
 
-        *self.storage.pages2.get(page).get_mut() = Page::zeroed();
+        *self.storage.pages.get(page).get_mut() = Page::zeroed();
 
         Ok(())
     }
@@ -95,8 +97,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
-    // TODO rename -> pages
-    pages2: mmaped_block::Block,
+    pages: mmaped_block::Block,
 }
 
 impl Default for InMemoryStorage {
@@ -109,7 +110,7 @@ impl InMemoryStorage {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            pages2: Block::new(),
+            pages: Block::new(),
         }
     }
 }

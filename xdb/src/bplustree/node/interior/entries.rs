@@ -181,7 +181,6 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         )
     }
 
-    // TODO methods like `write_key_at` and `write_value_at` to contain the index arithmetic?
     pub(crate) fn merge_from(&mut self, entries: &Self, merge_key: TKey) {
         let merge_key_offset = self.key_after_last();
 

@@ -9,7 +9,7 @@ use crate::{
     bplustree::{
         LeafNodeId, TreeKey,
         node::{
-            InteriorNodeId, NODE_DATA_SIZE, Node, NodeFlags, NodeHeader,
+            InteriorNodeId, NODE_DATA_SIZE, Node, NodeHeader,
             leaf::{
                 builder::{LeafNodeBuilder, MaterializedData, MaterializedTopology, Topology},
                 entries::{LeafNodeEntries, LeafNodeEntry},
@@ -43,14 +43,9 @@ where
 unsafe impl<TKey: TreeKey> Pod for LeafNode<TKey> {}
 
 impl<TKey: TreeKey> LeafNode<TKey> {
-    pub const fn new() -> Self {
+    pub fn new(parent: Option<InteriorNodeId>) -> Self {
         Self {
-            header: NodeHeader {
-                flags: NodeFlags::empty(),
-                _unused1: 0,
-                _unused2: 0,
-                parent: PageIndex::zero(),
-            },
+            header: NodeHeader::new_leaf(parent.into()),
             leaf_header: LeafNodeHeader {
                 previous: PageIndex::zero(),
                 next: PageIndex::zero(),
@@ -229,7 +224,7 @@ mod test {
 
     #[test]
     fn insert_reverse() {
-        let mut node = LeafNode::new();
+        let mut node = LeafNode::new(None);
         let _ = node.insert(1, &[0]);
         let _ = node.insert(0, &[0]);
 
@@ -238,7 +233,7 @@ mod test {
 
     #[test]
     fn same_key_overrides() {
-        let mut node = LeafNode::new();
+        let mut node = LeafNode::new(None);
         let _ = node.insert(0, &[0]);
         let _ = node.insert(0, &[1]);
 
@@ -247,7 +242,7 @@ mod test {
 
     #[test]
     fn same_key_same_overrides_with_intermediate() {
-        let mut node = LeafNode::new();
+        let mut node = LeafNode::new(None);
         let _ = node.insert(1, &[0]);
         let _ = node.insert(2, &[0]);
         let _ = node.insert(1, &[0]);

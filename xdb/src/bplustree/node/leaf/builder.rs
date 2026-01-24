@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crate::bplustree::{
     InteriorNodeId, LeafNode, LeafNodeId, TreeKey,
     node::{
-        NodeFlags, NodeHeader,
+        NodeHeader,
         leaf::{LeafNodeHeader, entries::LeafNodeEntries},
     },
 };
@@ -133,12 +133,7 @@ impl<'data, TKey: TreeKey, TTopology: Topology, TData: Data<'data, TKey>>
 {
     pub fn build(self) -> LeafNode<TKey> {
         LeafNode {
-            header: NodeHeader {
-                flags: NodeFlags::empty(),
-                _unused1: 0,
-                _unused2: 0,
-                parent: self.topology.parent().into(),
-            },
+            header: NodeHeader::new_leaf(self.topology.parent().into()),
             leaf_header: LeafNodeHeader {
                 previous: self.topology.previous().into(),
                 next: self.topology.next().into(),

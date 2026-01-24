@@ -2,10 +2,7 @@ mod entries;
 
 use crate::bplustree::{
     TreeKey,
-    node::{
-        NodeFlags,
-        interior::entries::{InteriorNodeEntries, KeyIndex, ValueIndex},
-    },
+    node::interior::entries::{InteriorNodeEntries, KeyIndex, ValueIndex},
 };
 
 use bytemuck::{AnyBitPattern, NoUninit};
@@ -37,16 +34,16 @@ where
 unsafe impl<TKey: TreeKey + 'static> NoUninit for InteriorNode<TKey> {}
 
 impl<TKey: TreeKey> InteriorNode<TKey> {
-    pub fn new(left: AnyNodeId, key: TKey, right: AnyNodeId) -> Self {
+    pub fn new(
+        parent: Option<InteriorNodeId>,
+        left: AnyNodeId,
+        key: TKey,
+        right: AnyNodeId,
+    ) -> Self {
         Self {
             // TODO create a constructor for NodeHeader so that we don't have to directly touch the
             // internals here
-            header: NodeHeader {
-                flags: NodeFlags::INTERIOR,
-                _unused1: 0,
-                _unused2: 0,
-                parent: PageIndex::zero(),
-            },
+            header: NodeHeader::new_interior(parent.into()),
             entries: InteriorNodeEntries::new(left.page(), key, right.page()),
         }
     }
@@ -55,12 +52,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
     #[allow(clippy::large_types_passed_by_value)]
     fn from_entries(parent: Option<InteriorNodeId>, entries: InteriorNodeEntries<TKey>) -> Self {
         Self {
-            header: NodeHeader {
-                flags: NodeFlags::INTERIOR,
-                _unused1: 0,
-                _unused2: 0,
-                parent: parent.into(),
-            },
+            header: NodeHeader::new_interior(parent.into()),
             entries,
         }
     }
@@ -213,11 +205,13 @@ mod test {
     #[test]
     fn merge_with() {
         let mut node_a = InteriorNode::new(
+            None,
             AnyNodeId::new(PageIndex::value(1)),
             1usize,
             AnyNodeId::new(PageIndex::value(2)),
         );
         let node_b = InteriorNode::new(
+            None,
             AnyNodeId::new(PageIndex::value(3)),
             3usize,
             AnyNodeId::new(PageIndex::value(4)),

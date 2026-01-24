@@ -122,6 +122,7 @@ pub struct PageRef<'block> {
     index: PageIndex,
 }
 
+// TODO we need a way to upgrade a read-only guard to one that can be written to
 pub struct PageGuard<'block> {
     page: NonNull<Page>,
     block: &'block Block,

@@ -136,7 +136,7 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
         // depend on that invariant (i.e. PageIndex=0 must always refer to the TreeData and not to
         // a node)!
 
-        TreeHeader::new_in(&storage, size_of::<TKey>())?;
+        TreeHeader::new_in::<_, TKey>(&storage)?;
 
         Ok(Self {
             storage,
@@ -179,17 +179,17 @@ pub enum TreeError {
 }
 
 impl TreeHeader {
-    pub fn new_in<T: Storage>(storage: &T, key_size: usize) -> Result<(), TreeError> {
+    pub fn new_in<T: Storage, TKey: TreeKey>(storage: &T) -> Result<(), TreeError> {
         let transaction = storage.transaction()?;
 
         let header_page = transaction.reserve()?;
         assert!(header_page.index() == PageIndex::zero());
 
         // TODO replace usize with actual TKey!
-        let root_index = transaction.insert(Page::from_data(LeafNode::<usize>::new()))?;
+        let root_index = transaction.insert(Page::from_data(LeafNode::<TKey>::new(None)))?;
 
         let page = Page::from_data(Self {
-            key_size: key_size as u64,
+            key_size: size_of::<TKey>() as u64,
             root: root_index,
             _unused: [0; _],
         });

@@ -139,6 +139,24 @@ pub(super) struct NodeHeader {
 const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>() * 2);
 
 impl NodeHeader {
+    const fn new_interior(parent: PageIndex) -> Self {
+        Self {
+            flags: NodeFlags::INTERIOR,
+            _unused1: 0,
+            _unused2: 0,
+            parent,
+        }
+    }
+
+    const fn new_leaf(parent: PageIndex) -> Self {
+        Self {
+            flags: NodeFlags::empty(),
+            _unused1: 0,
+            _unused2: 0,
+            parent,
+        }
+    }
+
     fn parent(&self) -> Option<InteriorNodeId> {
         if self.parent == PageIndex::zero() {
             None
