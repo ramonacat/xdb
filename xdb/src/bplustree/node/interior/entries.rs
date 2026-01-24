@@ -259,7 +259,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     pub fn can_fit_merge(&self, right: &Self) -> bool {
-        self.key_count() + right.key_count() + 1 <= InteriorNodeData::<TKey>::KEY_CAPACITY
+        self.key_count() + right.key_count() < InteriorNodeData::<TKey>::KEY_CAPACITY
     }
 
     pub fn key_at(&self, index: KeyIndex) -> Option<TKey> {

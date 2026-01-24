@@ -1,5 +1,5 @@
 use std::{
-    ffi::{CStr, c_void},
+    ffi::CStr,
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
     ptr::NonNull,
@@ -47,7 +47,7 @@ impl PageState {
     fn mark_initialized(&self) {
         let previous_state = self
             .0
-            .fetch_or(Self::MASK_IS_INITIALIZED, Ordering::Acquire);
+            .fetch_or(Self::MASK_IS_INITIALIZED, Ordering::Release);
         assert!(previous_state & Self::MASK_IS_INITIALIZED == 0);
     }
 
@@ -59,7 +59,7 @@ impl PageState {
         assert!(self.is_initialized());
 
         self.0
-            .fetch_update(Ordering::Release, Ordering::Acquire, |f| {
+            .fetch_update(Ordering::Acquire, Ordering::Relaxed, |f| {
                 if f & Self::MASK_READER_COUNT >> Self::SHIFT_READER_COUNT > 0 {
                     return None;
                 }
@@ -73,7 +73,7 @@ impl PageState {
         assert!(self.is_initialized());
 
         self.0
-            .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
+            .fetch_update(Ordering::Release, Ordering::Relaxed, |x| {
                 Some(x & !Self::MASK_HAS_WRITER)
             });
     }
@@ -82,7 +82,7 @@ impl PageState {
         assert!(self.is_initialized());
 
         self.0
-            .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
+            .fetch_update(Ordering::Acquire, Ordering::Relaxed, |x| {
                 if x & Self::MASK_HAS_WRITER > 0 {
                     return None;
                 }
@@ -102,7 +102,7 @@ impl PageState {
         assert!(self.is_initialized());
 
         self.0
-            .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
+            .fetch_update(Ordering::Release, Ordering::Relaxed, |x| {
                 assert!(x & Self::MASK_HAS_WRITER == 0);
 
                 let reader_count = (x & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT;
@@ -126,6 +126,15 @@ pub struct PageGuard<'block> {
     page: NonNull<Page>,
     block: &'block Block,
     index: PageIndex,
+}
+
+impl<'block> PageGuard<'block> {
+    unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
+        let housekeeping = unsafe { block.housekeeping_for(index).as_ref() };
+        housekeeping.lock_read();
+
+        Self { page, block, index }
+    }
 }
 
 impl AsRef<Page> for PageGuard<'_> {
@@ -154,6 +163,15 @@ pub struct PageGuardMut<'block> {
     index: PageIndex,
 }
 
+impl<'block> PageGuardMut<'block> {
+    unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
+        let housekeeping = unsafe { block.housekeeping_for(index).as_ref() };
+        housekeeping.lock_write();
+
+        Self { page, block, index }
+    }
+}
+
 impl AsMut<Page> for PageGuardMut<'_> {
     fn as_mut(&mut self) -> &mut Page {
         unsafe { self.page.as_mut() }
@@ -180,33 +198,17 @@ impl Drop for PageGuardMut<'_> {
     }
 }
 
-// TODO instead of dealing with locks here, move them to an unsafe constructor for the
-// PageGuard/PageGuardMut structs
 impl<'block> PageRef<'block> {
     pub const fn index(&self) -> PageIndex {
         self.index
     }
 
     pub fn get(&self) -> PageGuard<'block> {
-        let housekeeping = unsafe { self.block.housekeeping_for(self.index).as_ref() };
-        housekeeping.lock_read();
-
-        PageGuard {
-            page: self.page,
-            block: self.block,
-            index: self.index,
-        }
+        unsafe { PageGuard::new(self.page, self.block, self.index) }
     }
 
     pub fn get_mut(&self) -> PageGuardMut<'block> {
-        let housekeeping = unsafe { self.block.housekeeping_for(self.index).as_ref() };
-        housekeeping.lock_write();
-
-        PageGuardMut {
-            page: self.page,
-            block: self.block,
-            index: self.index,
-        }
+        unsafe { PageGuardMut::new(self.page, self.block, self.index) }
     }
 }
 
@@ -245,8 +247,8 @@ impl<'block> UninitializedPageGuard<'block> {
 pub struct Block {
     // TODO create a memory backing that can be tested with miri here, by just using a big-ass
     // array
-    // TODO split into two pointers - one for housekeeping, one for actual pages
-    memory: NonNull<c_void>,
+    housekeeping: NonNull<MaybeUninit<PageState>>,
+    data: NonNull<MaybeUninit<Page>>,
     latest_page: AtomicU64,
 }
 
@@ -274,9 +276,11 @@ impl Block {
         if memory == MAP_FAILED {
             panic_on_errno();
         }
+        let memory = NonNull::new(memory).unwrap();
 
         Self {
-            memory: NonNull::new(memory).unwrap(),
+            housekeeping: memory.cast(),
+            data: unsafe { memory.add(Self::HOUSEKEEPING_BLOCK_SIZE).cast() },
             latest_page: AtomicU64::new(0),
         }
     }
@@ -288,13 +292,7 @@ impl Block {
 
         assert!(unsafe { housekeeping.as_ref() }.is_initialized());
 
-        let page = unsafe {
-            (self
-                .memory
-                .byte_add(Self::HOUSEKEEPING_BLOCK_SIZE)
-                .cast::<Page>())
-            .add(usize::try_from(index.0).unwrap())
-        };
+        let page = unsafe { self.data.add(usize::try_from(index.0).unwrap()).cast() };
 
         PageRef {
             page,
@@ -309,23 +307,16 @@ impl Block {
         let index = PageIndex(index);
         self.allocate_housekeeping(index);
 
-        let page = unsafe {
-            (self
-                .memory
-                .byte_offset(Self::HOUSEKEEPING_BLOCK_SIZE.try_into().unwrap())
-                .cast::<MaybeUninit<Page>>())
-            .add(usize::try_from(index.0).unwrap())
-        };
+        let page = unsafe { (self.data).add(usize::try_from(index.0).unwrap()) };
 
         UninitializedPageGuard::new(self, page, index)
     }
 
-    // TODO make the argument PageIndex
     fn allocate_housekeeping(&self, index: PageIndex) -> *const PageState {
         assert!(index.0 < Self::PAGE_COUNT as u64);
 
         unsafe {
-            let houskeeping_page = (self.memory.cast::<[u8; PAGE_SIZE]>())
+            let houskeeping_page = (self.housekeeping.cast::<[u8; PAGE_SIZE]>())
                 .add(usize::try_from(index.0).unwrap() / (PAGE_SIZE / size_of::<PageState>()));
             // TODO this way we do the mprotect multiple times, it doesn't really matter, but might
             // make sense to only do that when index%PAGE_SIZE == 0??? (though then we have to
@@ -340,26 +331,20 @@ impl Block {
                 panic_on_errno();
             }
 
-            let page = (self
-                .memory
-                .byte_add(Self::HOUSEKEEPING_BLOCK_SIZE)
-                .cast::<MaybeUninit<Page>>())
-            .add(index.0.try_into().unwrap());
+            let page = (self.data).add(index.0.try_into().unwrap());
             if mprotect(page.cast().as_ptr(), PAGE_SIZE, PROT_READ | PROT_WRITE) != 0 {
                 panic_on_errno();
             }
         }
 
-        let mut page_state = unsafe {
-            (self.memory.cast::<MaybeUninit<PageState>>()).add(index.0.try_into().unwrap())
-        };
+        let mut page_state = unsafe { self.housekeeping.add(index.0.try_into().unwrap()) };
         unsafe { &raw const *(page_state.as_mut().write(PageState::new())) }
     }
 
     unsafe fn housekeeping_for(&self, index: PageIndex) -> NonNull<PageState> {
         assert!(index.0 < Self::PAGE_COUNT as u64);
 
-        unsafe { (self.memory.cast::<PageState>()).add(usize::try_from(index.0).unwrap()) }
+        unsafe { (self.housekeeping.cast()).add(usize::try_from(index.0).unwrap()) }
     }
 }
 
@@ -373,7 +358,7 @@ fn panic_on_errno() -> ! {
 
 impl Drop for Block {
     fn drop(&mut self) {
-        unsafe { munmap(self.memory.as_ptr(), Self::SIZE) };
+        unsafe { munmap(self.housekeeping.cast().as_ptr(), Self::SIZE) };
     }
 }
 
