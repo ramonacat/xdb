@@ -1,4 +1,4 @@
-mod mmaped_block;
+mod block;
 
 use std::{collections::HashMap, ops::Deref};
 
@@ -8,7 +8,7 @@ use crate::{
     page::Page,
     storage::{
         PageIndex, PageReservation, Storage, StorageError, Transaction,
-        in_memory::mmaped_block::{Block, PageGuard, PageGuardMut, UninitializedPageGuard},
+        in_memory::block::{Block, PageGuard, PageGuardMut, UninitializedPageGuard},
     },
 };
 
@@ -143,7 +143,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
-    pages: mmaped_block::Block,
+    pages: Block,
 }
 
 impl Default for InMemoryStorage {

@@ -1,25 +1,30 @@
 // TODO separate the miri and non-miri code into modules
 
+mod static_allocation;
+mod uncommitted_allocation;
+
 use std::{
+    fmt::Debug,
     mem::{ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut},
     ptr::NonNull,
     sync::atomic::{AtomicU64, Ordering},
 };
 
-#[cfg(not(miri))]
-use std::ffi::CStr;
-
-#[cfg(not(miri))]
-use libc::{
-    __errno_location, _SC_PAGE_SIZE, MAP_ANONYMOUS, MAP_FAILED, MAP_NORESERVE, MAP_PRIVATE,
-    PROT_NONE, PROT_READ, PROT_WRITE, mmap, mprotect, munmap, strerror,
-};
-
 use crate::{
     page::{PAGE_SIZE, Page},
-    storage::PageIndex,
+    storage::{
+        PageIndex,
+        in_memory::block::{
+            static_allocation::StaticAllocation, uncommitted_allocation::UncommittedAllocation,
+        },
+    },
 };
+
+trait Allocation: Debug + Send {
+    fn commit_page(&self, address: NonNull<u8>);
+    fn base_address(&self) -> NonNull<u8>;
+}
 
 #[derive(Debug)]
 #[repr(transparent)]
@@ -36,10 +41,11 @@ const fn mask(start_bit: u64, end_bit: u64) -> u64 {
     1 << start_bit | mask(start_bit - 1, end_bit)
 }
 
-#[allow(unused)]
 impl PageState {
     const MASK_IS_INITIALIZED: u64 = 1 << 63;
+    #[allow(unused)]
     const MASK_READERS_WAITING: u64 = 1 << 62;
+    #[allow(unused)]
     const MASK_WRITERS_WAITING: u64 = 1 << 61;
     const SHIFT_READER_COUNT: u64 = 44;
     const MASK_READER_COUNT: u64 = mask(60, Self::SHIFT_READER_COUNT);
@@ -80,7 +86,8 @@ impl PageState {
         self.0
             .fetch_update(Ordering::Release, Ordering::Relaxed, |x| {
                 Some(x & !Self::MASK_HAS_WRITER)
-            });
+            })
+            .unwrap();
     }
 
     fn lock_read(&self) {
@@ -115,7 +122,8 @@ impl PageState {
                 let shifted_new_reader_count = (reader_count - 1) << Self::SHIFT_READER_COUNT;
 
                 Some((x & !Self::MASK_READER_COUNT) | shifted_new_reader_count)
-            });
+            })
+            .unwrap();
     }
 
     fn lock_upgrade(&self) {
@@ -126,7 +134,8 @@ impl PageState {
                 assert!(x & Self::MASK_HAS_WRITER == 0);
 
                 Some((x & !Self::MASK_READER_COUNT) | Self::MASK_HAS_WRITER)
-            });
+            })
+            .unwrap();
     }
 }
 
@@ -280,64 +289,34 @@ impl<'block> UninitializedPageGuard<'block> {
 
 #[derive(Debug)]
 pub struct Block {
-    housekeeping: NonNull<MaybeUninit<PageState>>,
-    data: NonNull<MaybeUninit<Page>>,
+    housekeeping: Box<dyn Allocation>,
+    data: Box<dyn Allocation>,
     latest_page: AtomicU64,
 }
 
 unsafe impl Sync for Block {}
 unsafe impl Send for Block {}
 
-#[cfg(miri)]
-#[repr(C, align(4096))]
-struct Memory([u8; Block::SIZE]);
-
-#[cfg(miri)]
-const _: () = assert!(align_of::<Memory>() == PAGE_SIZE);
-
 impl Block {
-    #[cfg(not(miri))]
     const SIZE: usize = 4 * 1024 * 1024 * 1024;
-    #[cfg(miri)]
-    const SIZE: usize = 64 * 1024 * 1024;
     const PAGE_COUNT: usize = Self::SIZE / PAGE_SIZE;
     const HOUSEKEEPING_BLOCK_SIZE: usize = Self::PAGE_COUNT * size_of::<PageState>();
 
     pub fn new() -> Self {
-        #[cfg(not(miri))]
-        let memory = {
-            assert!(unsafe { usize::try_from(libc::sysconf(_SC_PAGE_SIZE)).unwrap() == PAGE_SIZE });
-
-            let memory = unsafe {
-                mmap(
-                    std::ptr::null_mut(),
-                    Self::SIZE, // 4GiB TODO create a type that can store a Size and has
-                    // constructors for different prefixes
-                    PROT_NONE,
-                    // TODO support file backed mappings
-                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
-                    -1,
-                    0,
-                )
-            };
-
-            if memory == MAP_FAILED {
-                panic_on_errno();
-            }
-
-            NonNull::new(memory).unwrap()
+        let housekeeping: Box<dyn Allocation> = if cfg!(miri) {
+            Box::new(StaticAllocation::new())
+        } else {
+            Box::new(UncommittedAllocation::new(Self::HOUSEKEEPING_BLOCK_SIZE))
         };
-
-        #[cfg(miri)]
-        let memory = {
-            let memory = Box::leak(Box::new(Memory([0; _])));
-
-            NonNull::from_mut(memory)
+        let data: Box<dyn Allocation> = if cfg!(miri) {
+            Box::new(StaticAllocation::new())
+        } else {
+            Box::new(UncommittedAllocation::new(Self::SIZE))
         };
 
         Self {
-            housekeeping: memory.cast(),
-            data: unsafe { memory.byte_add(Self::HOUSEKEEPING_BLOCK_SIZE).cast() },
+            housekeeping,
+            data,
             latest_page: AtomicU64::new(0),
         }
     }
@@ -349,7 +328,12 @@ impl Block {
 
         assert!(unsafe { housekeeping.as_ref() }.is_initialized());
 
-        let page = unsafe { self.data.add(usize::try_from(index.0).unwrap()).cast() };
+        let page = unsafe {
+            self.data
+                .base_address()
+                .cast()
+                .add(usize::try_from(index.0).unwrap())
+        };
 
         PageRef {
             page,
@@ -364,73 +348,67 @@ impl Block {
         let index = PageIndex(index);
         self.allocate_housekeeping(index);
 
-        let page = unsafe { (self.data).add(usize::try_from(index.0).unwrap()) };
+        let page = unsafe {
+            self.data
+                .base_address()
+                .cast()
+                .add(usize::try_from(index.0).unwrap())
+        };
 
         UninitializedPageGuard::new(self, page, index)
     }
 
-    fn allocate_housekeeping(&self, index: PageIndex) -> *const PageState {
+    fn allocate_housekeeping(&self, index: PageIndex) -> NonNull<PageState> {
         assert!(index.0 < Self::PAGE_COUNT as u64);
 
-        #[cfg(not(miri))]
+        // TODO this way we do the mprotect multiple times, it doesn't really matter, but might
+        // make sense to only do that when index%PAGE_SIZE == 0??? (though then we have to
+        // always assume that we will be getting contiguous indices, which might make other
+        // things harder...)
+        let houskeeping_page = unsafe {
+            self.housekeeping
+                .base_address()
+                .cast::<[u8; PAGE_SIZE]>()
+                .add(usize::try_from(index.0).unwrap() / (PAGE_SIZE / size_of::<PageState>()))
+        };
+        self.housekeeping.commit_page(houskeeping_page.cast());
+
+        let page = unsafe {
+            self.data
+                .base_address()
+                .cast::<Page>()
+                .add(index.0.try_into().unwrap())
+        };
+        self.data.commit_page(page.cast());
+
+        let page_state = unsafe {
+            self.housekeeping
+                .base_address()
+                .cast::<PageState>()
+                .add(index.0.try_into().unwrap())
+        };
         unsafe {
-            let houskeeping_page = (self.housekeeping.cast::<[u8; PAGE_SIZE]>())
-                .add(usize::try_from(index.0).unwrap() / (PAGE_SIZE / size_of::<PageState>()));
-            // TODO this way we do the mprotect multiple times, it doesn't really matter, but might
-            // make sense to only do that when index%PAGE_SIZE == 0??? (though then we have to
-            // always assume that we will be getting contiguous indices, which might make other
-            // things harder...)
-            if mprotect(
-                houskeeping_page.cast().as_ptr(),
-                PAGE_SIZE,
-                PROT_READ | PROT_WRITE,
-            ) != 0
-            {
-                panic_on_errno();
-            }
+            page_state.write(PageState::new());
+        };
 
-            let page = (self.data).add(index.0.try_into().unwrap());
-            if mprotect(page.cast().as_ptr(), PAGE_SIZE, PROT_READ | PROT_WRITE) != 0 {
-                panic_on_errno();
-            }
-        }
-
-        let mut page_state = unsafe { self.housekeeping.add(index.0.try_into().unwrap()) };
-        unsafe { &raw const *(page_state.as_mut().write(PageState::new())) }
+        page_state
     }
 
     unsafe fn housekeeping_for(&self, index: PageIndex) -> NonNull<PageState> {
         assert!(index.0 < Self::PAGE_COUNT as u64);
 
-        unsafe { (self.housekeeping.cast()).add(usize::try_from(index.0).unwrap()) }
-    }
-}
-
-#[cfg(not(miri))]
-fn panic_on_errno() -> ! {
-    let errno = unsafe { *__errno_location() };
-
-    panic!("failed to mmap memory: {}", unsafe {
-        CStr::from_ptr(strerror(errno)).to_string_lossy()
-    });
-}
-
-impl Drop for Block {
-    fn drop(&mut self) {
-        #[cfg(not(miri))]
         unsafe {
-            munmap(self.housekeeping.cast().as_ptr(), Self::SIZE)
-        };
-        #[cfg(miri)]
-        unsafe {
-            drop(Box::<Memory>::from_raw(self.housekeeping.cast().as_ptr()))
-        };
+            self.housekeeping
+                .base_address()
+                .cast()
+                .add(usize::try_from(index.0).unwrap())
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::storage::in_memory::mmaped_block::mask;
+    use super::*;
 
     #[test]
     fn mask_tests() {
