@@ -1,10 +1,7 @@
 pub mod in_memory;
 pub mod instrumented;
 
-use std::{
-    fmt::Display,
-    ops::{Deref, DerefMut},
-};
+use std::fmt::Display;
 
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
@@ -17,7 +14,7 @@ pub enum StorageError {
     PageNotFound(PageIndex),
 }
 
-#[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct PageIndex(u64);
 
@@ -49,20 +46,18 @@ impl From<PageIndex> for [PageIndex; 1] {
     }
 }
 
+// TODO transactions should be Send (but not necessairly Sync)
 pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>> {
-    type TPage: AsRef<Page> + Deref<Target = Page>;
-    type TPageMut: AsMut<Page> + DerefMut<Target = Page>;
-
     fn read<T, const N: usize>(
         &self,
         indices: impl Into<[PageIndex; N]>,
-        read: impl FnOnce([Self::TPage; N]) -> T,
+        read: impl FnOnce([&Page; N]) -> T,
     ) -> Result<T, StorageError>;
 
     fn write<T, const N: usize>(
         &self,
         indices: impl Into<[PageIndex; N]>,
-        write: impl FnOnce([Self::TPageMut; N]) -> T,
+        write: impl FnOnce([&mut Page; N]) -> T,
     ) -> Result<T, StorageError>;
 
     fn reserve(&self) -> Result<TPageReservation, StorageError>;

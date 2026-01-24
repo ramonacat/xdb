@@ -7,7 +7,7 @@ use crate::{
 use std::fmt::Write;
 
 impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
-    pub fn into_dot(self, stringify_value: impl Fn(&[u8]) -> String) -> Result<String, TreeError> {
+    pub fn to_dot(&self, stringify_value: impl Fn(&[u8]) -> String) -> Result<String, TreeError> {
         let mut output = String::new();
 
         let transaction = self.transaction()?;

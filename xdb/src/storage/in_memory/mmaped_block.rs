@@ -1,7 +1,7 @@
 // TODO separate the miri and non-miri code into modules
 
 use std::{
-    mem::MaybeUninit,
+    mem::{ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut},
     ptr::NonNull,
     sync::atomic::{AtomicU64, Ordering},
@@ -117,17 +117,29 @@ impl PageState {
                 Some((x & !Self::MASK_READER_COUNT) | shifted_new_reader_count)
             });
     }
+
+    fn lock_upgrade(&self) {
+        self.0
+            .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
+                // TODO we should wait on a futex here instead once we have multiple threads
+                assert!((x & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT == 1);
+                assert!(x & Self::MASK_HAS_WRITER == 0);
+
+                Some((x & !Self::MASK_READER_COUNT) | Self::MASK_HAS_WRITER)
+            });
+    }
 }
 
 const _: () = assert!(size_of::<PageState>() == size_of::<u64>());
 
+#[derive(Debug)]
 pub struct PageRef<'block> {
     page: NonNull<Page>,
     block: &'block Block,
     index: PageIndex,
 }
 
-// TODO we need a way to upgrade a read-only guard to one that can be written to
+#[derive(Debug)]
 pub struct PageGuard<'block> {
     page: NonNull<Page>,
     block: &'block Block,
@@ -140,6 +152,19 @@ impl<'block> PageGuard<'block> {
         housekeeping.lock_read();
 
         Self { page, block, index }
+    }
+
+    pub fn upgrade(self) -> PageGuardMut<'block> {
+        let Self { page, block, index } = self;
+
+        let housekeeping = unsafe { block.housekeeping_for(index).as_ref() };
+        housekeeping.lock_upgrade();
+
+        // Do not drop self, as this would make us unlock the read lock, which is incorrect, as it
+        // is now a write lock
+        let _ = ManuallyDrop::new(self);
+
+        PageGuardMut { page, block, index }
     }
 }
 
@@ -159,6 +184,7 @@ impl Deref for PageGuard<'_> {
 
 impl Drop for PageGuard<'_> {
     fn drop(&mut self) {
+        dbg!(self.index);
         unsafe { self.block.housekeeping_for(self.index).as_ref() }.unlock_read();
     }
 }

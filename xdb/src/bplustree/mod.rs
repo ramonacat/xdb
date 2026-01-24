@@ -79,29 +79,29 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
-            .write(PageIndex::zero(), |[mut page]| write(page.data_mut()))?)
+            .write(PageIndex::zero(), |[page]| write(page.data_mut()))?)
     }
 
+    // TODO take &mut self to avoid recursing!
     fn read_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
         &self,
         indices: TIndices,
         read: impl for<'node> FnOnce(TIndices::Nodes<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self.transaction.read(indices.to_page_indices(), |pages| {
-            read(TIndices::pages_to_nodes(&pages))
+            read(TIndices::pages_to_nodes(pages.map(|x| x)))
         })?)
     }
 
+    // TODO take &mut self to avoid recursing!
     fn write_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
         &self,
         indices: TIndices,
         write: impl for<'node> FnOnce(TIndices::NodesMut<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        Ok(self
-            .transaction
-            .write(indices.to_page_indices(), |mut pages| {
-                write(TIndices::pages_to_nodes_mut(&mut pages))
-            })?)
+        Ok(self.transaction.write(indices.to_page_indices(), |pages| {
+            write(TIndices::pages_to_nodes_mut(pages.map(|x| x)))
+        })?)
     }
 
     fn reserve_node(&self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
@@ -208,7 +208,7 @@ mod test {
         io::Write,
         panic::{RefUnwindSafe, UnwindSafe, catch_unwind},
         sync::{
-            Arc,
+            Arc, Mutex,
             atomic::{AtomicUsize, Ordering},
         },
     };
@@ -339,6 +339,8 @@ mod test {
         insert(&transaction, 1, &[0]).unwrap();
         insert(&transaction, 0, &[0]).unwrap();
 
+        drop(transaction);
+
         let result = tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>();
 
         assert!(result == &[(0, vec![0]), (1, vec![0])]);
@@ -353,6 +355,9 @@ mod test {
         insert(&transaction, 1, &0u8.to_ne_bytes()).unwrap();
         insert(&transaction, 1, &1u8.to_ne_bytes()).unwrap();
 
+        drop(transaction);
+
+        // TODO iter() should be on transaction, so it's created explicitly
         let result = tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>();
 
         assert_eq!(result, vec![(1, 1u8.to_ne_bytes().to_vec())]);
@@ -367,13 +372,14 @@ mod test {
         data: Vec<TestAction<BigKey<TKey, SIZE>>>,
     ) {
         let _ = env_logger::builder().is_test(true).try_init();
-
         let storage = InMemoryStorage::new();
-        let tree = Tree::new(storage).unwrap();
-        let transaction = tree.transaction().unwrap();
+        let tree = Mutex::new(Tree::new(storage).unwrap());
 
         let result = catch_unwind(|| {
             let mut rust_tree = BTreeMap::new();
+
+            let guard = tree.lock().unwrap();
+            let transaction = guard.transaction().unwrap();
 
             for action in data {
                 match action {
@@ -387,14 +393,18 @@ mod test {
                     }
                 }
             }
+            drop(transaction);
+            drop(guard);
 
-            assert_tree_equal(&tree, &rust_tree, |k| k.value());
-            assert_properties(&tree.transaction().unwrap());
+            assert_tree_equal(&tree.lock().unwrap(), &rust_tree, |k| k.value());
+            assert_properties(&tree.lock().unwrap().transaction().unwrap());
         });
 
         if let Err(_) = result {
             let dot_data = tree
-                .into_dot(|value| {
+                .lock()
+                .unwrap()
+                .to_dot(|value| {
                     let mut last_value_state: Option<(u8, usize)> = None;
 
                     // TODO extract this formatter into bplustree::debug probably
@@ -842,6 +852,9 @@ mod test {
         insert(&transaction, BigKey::new(2), &[4, 5, 6]).unwrap();
 
         let deleted_value = delete(&transaction, BigKey::new(2)).unwrap();
+
+        drop(transaction);
+
         assert_eq!(deleted_value, Some(vec![4, 5, 6]));
 
         assert_eq!(
@@ -873,6 +886,8 @@ mod test {
 
         delete(&transaction, BigKey::new(i - 1)).unwrap();
         data.pop();
+
+        drop(transaction);
 
         assert_eq!(
             tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),

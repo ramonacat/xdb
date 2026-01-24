@@ -1,20 +1,13 @@
-use std::ops::{Deref, DerefMut};
-
-use crate::{bplustree::TreeKey, page::Page};
-
 use crate::{bplustree::NodeId, storage::PageIndex};
+use crate::{bplustree::TreeKey, page::Page};
 
 pub(super) trait NodeIds<const N: usize> {
     type Nodes<'a, TKey: TreeKey>;
     type NodesMut<'a, TKey: TreeKey>;
 
     fn to_page_indices(self) -> [PageIndex; N];
-    fn pages_to_nodes<TKey: TreeKey, TPage: Deref<Target = Page>>(
-        pages: &'_ [TPage; N],
-    ) -> Self::Nodes<'_, TKey>;
-    fn pages_to_nodes_mut<TKey: TreeKey, TPage: DerefMut + Deref<Target = Page>>(
-        pages: &'_ mut [TPage; N],
-    ) -> Self::NodesMut<'_, TKey>;
+    fn pages_to_nodes<TKey: TreeKey>(pages: [&'_ Page; N]) -> Self::Nodes<'_, TKey>;
+    fn pages_to_nodes_mut<TKey: TreeKey>(pages: [&'_ mut Page; N]) -> Self::NodesMut<'_, TKey>;
 }
 
 impl<T> NodeIds<1> for T
@@ -28,15 +21,11 @@ where
         [self.page()]
     }
 
-    fn pages_to_nodes<TKey: TreeKey, TPage: Deref<Target = Page>>(
-        pages: &'_ [TPage; 1],
-    ) -> Self::Nodes<'_, TKey> {
+    fn pages_to_nodes<TKey: TreeKey>(pages: [&'_ Page; 1]) -> Self::Nodes<'_, TKey> {
         pages[0].data()
     }
 
-    fn pages_to_nodes_mut<TKey: TreeKey, TPage: DerefMut + Deref<Target = Page>>(
-        pages: &'_ mut [TPage; 1],
-    ) -> Self::NodesMut<'_, TKey> {
+    fn pages_to_nodes_mut<TKey: TreeKey>(pages: [&'_ mut Page; 1]) -> Self::NodesMut<'_, TKey> {
         pages[0].data_mut()
     }
 }
@@ -55,17 +44,13 @@ where
         [i0.page(), i1.page()]
     }
 
-    fn pages_to_nodes<TKey: TreeKey, TPage: Deref<Target = Page>>(
-        pages: &'_ [TPage; 2],
-    ) -> Self::Nodes<'_, TKey> {
+    fn pages_to_nodes<TKey: TreeKey>(pages: [&'_ Page; 2]) -> Self::Nodes<'_, TKey> {
         let [p0, p1] = pages;
 
         (p0.data(), p1.data())
     }
 
-    fn pages_to_nodes_mut<TKey: TreeKey, TPage: DerefMut + Deref<Target = Page>>(
-        pages: &'_ mut [TPage; 2],
-    ) -> Self::NodesMut<'_, TKey> {
+    fn pages_to_nodes_mut<TKey: TreeKey>(pages: [&'_ mut Page; 2]) -> Self::NodesMut<'_, TKey> {
         let [p0, p1] = pages;
         (p0.data_mut(), p1.data_mut())
     }
@@ -90,17 +75,13 @@ where
         [i0.page(), i1.page(), i2.page()]
     }
 
-    fn pages_to_nodes<TKey: TreeKey, TPage: Deref<Target = Page>>(
-        pages: &'_ [TPage; 3],
-    ) -> Self::Nodes<'_, TKey> {
+    fn pages_to_nodes<TKey: TreeKey>(pages: [&'_ Page; 3]) -> Self::Nodes<'_, TKey> {
         let [p0, p1, p2] = pages;
 
         (p0.data(), p1.data(), p2.data())
     }
 
-    fn pages_to_nodes_mut<TKey: TreeKey, TPage: DerefMut + Deref<Target = Page>>(
-        pages: &'_ mut [TPage; 3],
-    ) -> Self::NodesMut<'_, TKey> {
+    fn pages_to_nodes_mut<TKey: TreeKey>(pages: [&'_ mut Page; 3]) -> Self::NodesMut<'_, TKey> {
         let [p0, p1, p2] = pages;
         (p0.data_mut(), p1.data_mut(), p2.data_mut())
     }

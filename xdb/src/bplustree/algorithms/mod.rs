@@ -54,22 +54,32 @@ pub(super) fn first_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> Result<LeafNodeId, TreeError> {
-    transaction.read_nodes(root, |node| match node.as_any() {
+    let result = transaction.read_nodes(root, |node| match node.as_any() {
         AnyNodeKind::Interior(interior_node_reader) => {
-            first_leaf(transaction, interior_node_reader.first_value().unwrap())
+            LeafSearchResult::Recurse(interior_node_reader.first_value().unwrap())
         }
-        AnyNodeKind::Leaf(_) => Ok(LeafNodeId::from_any(root)),
-    })?
+        AnyNodeKind::Leaf(_) => LeafSearchResult::Done(LeafNodeId::from_any(root)),
+    })?;
+
+    match result {
+        LeafSearchResult::Recurse(node_id) => first_leaf(transaction, node_id),
+        LeafSearchResult::Done(leaf_id) => Ok(leaf_id),
+    }
 }
 
 pub(super) fn last_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> Result<LeafNodeId, TreeError> {
-    transaction.read_nodes(root, |node| match node.as_any() {
+    let result = transaction.read_nodes(root, |node| match node.as_any() {
         AnyNodeKind::Interior(interior_node_reader) => {
-            last_leaf(transaction, interior_node_reader.last_value().unwrap())
+            LeafSearchResult::Recurse(interior_node_reader.last_value().unwrap())
         }
-        AnyNodeKind::Leaf(_) => Ok(LeafNodeId::from_any(root)),
-    })?
+        AnyNodeKind::Leaf(_) => LeafSearchResult::Done(LeafNodeId::from_any(root)),
+    })?;
+
+    match result {
+        LeafSearchResult::Recurse(node_id) => last_leaf(transaction, node_id),
+        LeafSearchResult::Done(leaf_node_id) => Ok(leaf_node_id),
+    }
 }

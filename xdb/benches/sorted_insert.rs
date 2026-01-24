@@ -20,6 +20,7 @@ fn sorted_insert(c: &mut Criterion) {
         })
     });
 
+    drop(transaction);
     black_box(tree);
 
     let storage = InMemoryStorage::new();
@@ -34,6 +35,7 @@ fn sorted_insert(c: &mut Criterion) {
         })
     });
 
+    drop(transaction);
     black_box(tree);
 }
 

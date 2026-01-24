@@ -40,5 +40,7 @@ fn main() {
         delete(&transaction, BigKey::new(u64::try_from(j).unwrap())).unwrap();
     }
 
-    println!("{}", tree.into_dot(|x| format!("({})", x.len())).unwrap());
+    drop(transaction);
+
+    println!("{}", tree.to_dot(|x| format!("({})", x.len())).unwrap());
 }
