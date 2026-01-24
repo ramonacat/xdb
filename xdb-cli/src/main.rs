@@ -20,12 +20,12 @@ fn main() {
 
     let storage = InstrumentedStorage::new(InMemoryStorage::new(), page_count.clone());
     let tree = Tree::new(storage).unwrap();
-    let transaction = tree.transaction().unwrap();
+    let mut transaction = tree.transaction().unwrap();
 
     let mut i: usize = 0;
     while page_count.load(Ordering::Relaxed) < 5000 {
         insert(
-            &transaction,
+            &mut transaction,
             BigKey::<u64, 512>::new(u64::try_from(i).unwrap()),
             &(u16::MAX - u16::try_from(i).unwrap())
                 .to_be_bytes()
@@ -37,7 +37,7 @@ fn main() {
     }
 
     for j in i / 2..0 {
-        delete(&transaction, BigKey::new(u64::try_from(j).unwrap())).unwrap();
+        delete(&mut transaction, BigKey::new(u64::try_from(j).unwrap())).unwrap();
     }
 
     drop(transaction);

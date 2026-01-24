@@ -60,12 +60,12 @@ where
 impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     TreeTransaction<'storage, TStorage, TKey>
 {
-    fn get_root(&self) -> Result<AnyNodeId, TreeError> {
+    fn get_root(&mut self) -> Result<AnyNodeId, TreeError> {
         Ok(AnyNodeId::new(self.read_header(|x| x.root)?))
     }
 
     fn read_header<TReturn>(
-        &self,
+        &mut self,
         read: impl FnOnce(&TreeHeader) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self
@@ -74,7 +74,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     }
 
     fn write_header<TReturn>(
-        &self,
+        &mut self,
         write: impl FnOnce(&mut TreeHeader) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         Ok(self
@@ -84,7 +84,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
 
     // TODO take &mut self to avoid recursing!
     fn read_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
-        &self,
+        &mut self,
         indices: TIndices,
         read: impl for<'node> FnOnce(TIndices::Nodes<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
@@ -95,7 +95,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
 
     // TODO take &mut self to avoid recursing!
     fn write_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
-        &self,
+        &mut self,
         indices: TIndices,
         write: impl for<'node> FnOnce(TIndices::NodesMut<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
@@ -111,7 +111,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     #[allow(clippy::large_types_passed_by_value)] // TODO perhaps we should do something to avoid
     // passing whole nodes here?
     fn insert_reserved(
-        &self,
+        &mut self,
         reservation: TStorage::PageReservation<'storage>,
         page: impl Node<TKey>,
     ) -> Result<(), TreeError> {
@@ -121,7 +121,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         Ok(())
     }
 
-    fn delete_node(&self, node_id: AnyNodeId) -> Result<(), TreeError> {
+    fn delete_node(&mut self, node_id: AnyNodeId) -> Result<(), TreeError> {
         self.transaction.delete(node_id.page())?;
 
         Ok(())
@@ -180,7 +180,7 @@ pub enum TreeError {
 
 impl TreeHeader {
     pub fn new_in<T: Storage, TKey: TreeKey>(storage: &T) -> Result<(), TreeError> {
-        let transaction = storage.transaction()?;
+        let mut transaction = storage.transaction()?;
 
         let header_page = transaction.reserve()?;
         assert!(header_page.index() == PageIndex::zero());
@@ -334,10 +334,10 @@ mod test {
     fn insert_reverse() {
         let storage = InMemoryStorage::new();
         let tree = Tree::new(storage).unwrap();
-        let transaction = tree.transaction().unwrap();
+        let mut transaction = tree.transaction().unwrap();
 
-        insert(&transaction, 1, &[0]).unwrap();
-        insert(&transaction, 0, &[0]).unwrap();
+        insert(&mut transaction, 1, &[0]).unwrap();
+        insert(&mut transaction, 0, &[0]).unwrap();
 
         drop(transaction);
 
@@ -350,10 +350,10 @@ mod test {
     fn same_key_overrides() {
         let storage = InMemoryStorage::new();
         let tree = Tree::new(storage).unwrap();
-        let transaction = tree.transaction().unwrap();
+        let mut transaction = tree.transaction().unwrap();
 
-        insert(&transaction, 1, &0u8.to_ne_bytes()).unwrap();
-        insert(&transaction, 1, &1u8.to_ne_bytes()).unwrap();
+        insert(&mut transaction, 1, &0u8.to_ne_bytes()).unwrap();
+        insert(&mut transaction, 1, &1u8.to_ne_bytes()).unwrap();
 
         drop(transaction);
 
@@ -379,16 +379,16 @@ mod test {
             let mut rust_tree = BTreeMap::new();
 
             let guard = tree.lock().unwrap();
-            let transaction = guard.transaction().unwrap();
+            let mut transaction = guard.transaction().unwrap();
 
             for action in data {
                 match action {
                     TestAction::Insert(key, value) => {
-                        insert(&transaction, key, &value).unwrap();
+                        insert(&mut transaction, key, &value).unwrap();
                         rust_tree.insert(key.value(), value);
                     }
                     TestAction::Delete(key) => {
-                        delete(&transaction, key).unwrap();
+                        delete(&mut transaction, key).unwrap();
                         rust_tree.remove(&key.value());
                     }
                 }
@@ -397,7 +397,7 @@ mod test {
             drop(guard);
 
             assert_tree_equal(&tree.lock().unwrap(), &rust_tree, |k| k.value());
-            assert_properties(&tree.lock().unwrap().transaction().unwrap());
+            assert_properties(&mut tree.lock().unwrap().transaction().unwrap());
         });
 
         if let Err(_) = result {
@@ -846,12 +846,12 @@ mod test {
     fn simple_delete() {
         let storage = InMemoryStorage::new();
         let tree = Tree::new(storage).unwrap();
-        let transaction = tree.transaction().unwrap();
+        let mut transaction = tree.transaction().unwrap();
 
-        insert(&transaction, BigKey::<_, 256>::new(1), &[1, 2, 3]).unwrap();
-        insert(&transaction, BigKey::new(2), &[4, 5, 6]).unwrap();
+        insert(&mut transaction, BigKey::<_, 256>::new(1), &[1, 2, 3]).unwrap();
+        insert(&mut transaction, BigKey::new(2), &[4, 5, 6]).unwrap();
 
-        let deleted_value = delete(&transaction, BigKey::new(2)).unwrap();
+        let deleted_value = delete(&mut transaction, BigKey::new(2)).unwrap();
 
         drop(transaction);
 
@@ -861,7 +861,7 @@ mod test {
             tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),
             &[(BigKey::new(1), vec![1, 2, 3])]
         );
-        assert_properties(&tree.transaction().unwrap());
+        assert_properties(&mut tree.transaction().unwrap());
     }
 
     #[test]
@@ -870,7 +870,7 @@ mod test {
         let storage = InMemoryStorage::new();
         let storage = InstrumentedStorage::new(storage, page_count.clone());
         let tree = Tree::new(storage).unwrap();
-        let transaction = tree.transaction().unwrap();
+        let mut transaction = tree.transaction().unwrap();
 
         let mut i: u64 = 0;
         let mut data = vec![];
@@ -878,13 +878,13 @@ mod test {
         while page_count.load(Ordering::Relaxed) < 3 {
             let key = BigKey::<_, 256>::new(i);
             let value = vec![1, 2, 3];
-            insert(&transaction, key, &value).unwrap();
+            insert(&mut transaction, key, &value).unwrap();
             data.push((key, value));
 
             i += 1;
         }
 
-        delete(&transaction, BigKey::new(i - 1)).unwrap();
+        delete(&mut transaction, BigKey::new(i - 1)).unwrap();
         data.pop();
 
         drop(transaction);
@@ -893,7 +893,7 @@ mod test {
             tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),
             data
         );
-        assert_properties(&tree.transaction().unwrap());
+        assert_properties(&mut tree.transaction().unwrap());
     }
 
     #[test]

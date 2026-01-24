@@ -17,7 +17,7 @@ enum LeafSearchResult {
 }
 
 pub(super) fn leaf_search<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     start_id: AnyNodeId,
     key: TKey,
 ) -> Result<LeafNodeId, TreeError> {
@@ -51,7 +51,7 @@ pub(super) fn leaf_search<TStorage: Storage, TKey: TreeKey>(
 }
 
 pub(super) fn first_leaf<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> Result<LeafNodeId, TreeError> {
     let result = transaction.read_nodes(root, |node| match node.as_any() {
@@ -68,7 +68,7 @@ pub(super) fn first_leaf<TStorage: Storage, TKey: TreeKey>(
 }
 
 pub(super) fn last_leaf<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     root: AnyNodeId,
 ) -> Result<LeafNodeId, TreeError> {
     let result = transaction.read_nodes(root, |node| match node.as_any() {

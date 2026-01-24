@@ -10,25 +10,25 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
     pub fn to_dot(&self, stringify_value: impl Fn(&[u8]) -> String) -> Result<String, TreeError> {
         let mut output = String::new();
 
-        let transaction = self.transaction()?;
+        let mut transaction = self.transaction()?;
         let root_node_index = transaction.get_root()?;
 
         output += "digraph {\n";
-        output += &Self::node_to_dot(&transaction, root_node_index, &stringify_value)?;
+        output += &Self::node_to_dot(&mut transaction, root_node_index, &stringify_value)?;
         output += "}\n";
 
         Ok(output)
     }
 
     fn node_to_dot(
-        transaction: &TreeTransaction<'_, T, TKey>,
+        transaction: &mut TreeTransaction<'_, T, TKey>,
         node_index: AnyNodeId,
         stringify_value: &impl Fn(&[u8]) -> String,
     ) -> Result<String, TreeError> {
-        let output = transaction.read_nodes(node_index, |node| {
+        let (mut output, children) = transaction.read_nodes(node_index, |node| {
             let mut output = String::new();
 
-            match node.as_any() {
+            let children = match node.as_any() {
                 AnyNodeKind::Interior(node) => {
                     let mut label: Vec<String> = vec![
                         format!("index: {node_index:?}"),
@@ -47,17 +47,7 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 
                     writeln!(output, "N{}[label=\"{label}\"];", node_index.page().value()).unwrap();
 
-                    for (index, value) in node.values() {
-                        writeln!(
-                            output,
-                            "N{} -> N{}[label=\"{index:?}\"];",
-                            node_index.page().value(),
-                            value.page().value()
-                        )
-                        .unwrap();
-
-                        output += &Self::node_to_dot(transaction, value, stringify_value)?;
-                    }
+                    Some(node.values().collect::<Vec<_>>())
                 }
                 AnyNodeKind::Leaf(node) => {
                     let mut label: Vec<String> = vec![
@@ -88,12 +78,28 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
                     let label = label.join("\\n");
 
                     writeln!(output, "N{}[label=\"{label}\"];", node_index.page().value()).unwrap();
+
+                    None
                 }
+            };
+
+            (output, children)
+        })?;
+
+        if let Some(children) = children {
+            for (index, value) in children {
+                writeln!(
+                    output,
+                    "N{} -> N{}[label=\"{index:?}\"];",
+                    node_index.page().value(),
+                    value.page().value()
+                )
+                .unwrap();
+
+                output += &Self::node_to_dot(transaction, value, stringify_value)?;
             }
+        }
 
-            Ok(output)
-        });
-
-        output?
+        Ok(output)
     }
 }

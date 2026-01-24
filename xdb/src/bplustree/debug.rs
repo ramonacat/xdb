@@ -44,7 +44,7 @@ pub fn assert_tree_equal<TStorage: Storage, TKey: TreeKey, TRightKey: TreeKey>(
 }
 
 pub fn assert_properties<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
 ) {
     if !cfg!(debug_assertions) {
         return;
@@ -56,7 +56,7 @@ pub fn assert_properties<TStorage: Storage, TKey: TreeKey>(
 }
 
 fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     start_id: Option<AnyNodeId>,
     start_min_key: Option<TKey>,
     start_max_key: Option<TKey>,
@@ -121,7 +121,7 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
 }
 
 fn assert_tree_balanced<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     root_id: Option<AnyNodeId>,
 ) {
     let root_id = root_id.unwrap_or_else(|| transaction.get_root().unwrap());
@@ -147,7 +147,7 @@ fn assert_tree_balanced<TStorage: Storage, TKey: TreeKey>(
 }
 
 fn calculate_height<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     node_id: AnyNodeId,
 ) -> usize {
     let children = transaction
@@ -168,7 +168,7 @@ fn calculate_height<TStorage: Storage, TKey: TreeKey>(
 }
 
 fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     parent_id: Option<InteriorNodeId>,
     node_id: Option<AnyNodeId>,
     previous: Option<AnyNodeId>,
@@ -207,21 +207,25 @@ fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
     }
 
     if let Some(first) = children.first() {
+        let previous = previous.map(|x| last_leaf(transaction, x).unwrap().into());
+        let next = children
+            .get(1)
+            .map(|x| x.1)
+            .or_else(|| next.map(|x| first_leaf(transaction, x).unwrap().into()));
         assert_correct_topology(
             transaction,
             Some(InteriorNodeId::from_any(node_id)),
             Some(first.1),
-            previous.map(|x| last_leaf(transaction, x).unwrap().into()),
-            children
-                .get(1)
-                .map(|x| x.1)
-                .or_else(|| next.map(|x| first_leaf(transaction, x).unwrap().into())),
+            previous,
+            next,
         );
     }
 
     if children.len() > 1
         && let Some(last) = children.last()
     {
+        let next = next.map(|x| first_leaf(transaction, x).unwrap().into());
+
         assert_correct_topology(
             transaction,
             Some(InteriorNodeId::from_any(node_id)),
@@ -231,7 +235,7 @@ fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
                 .checked_sub(2)
                 .map(|x| children.get(x).unwrap())
                 .map(|x| x.1),
-            next.map(|x| first_leaf(transaction, x).unwrap().into()),
+            next,
         );
     }
 }

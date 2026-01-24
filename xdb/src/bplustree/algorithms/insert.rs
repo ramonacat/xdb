@@ -10,7 +10,7 @@ use crate::{
 };
 
 fn create_new_root<'storage, TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<'storage, TStorage, TKey>,
+    transaction: &mut TreeTransaction<'storage, TStorage, TKey>,
     reservation: <TStorage as Storage>::PageReservation<'storage>,
     left: AnyNodeId,
     key: TKey,
@@ -26,7 +26,7 @@ fn create_new_root<'storage, TStorage: Storage, TKey: TreeKey>(
 }
 
 fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
 ) -> Result<(), TreeError> {
     let root_id = transaction.get_root()?;
 
@@ -63,7 +63,7 @@ fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
 }
 
 fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     target: InteriorNodeId,
 ) -> Result<bool, TreeError> {
     let parent = transaction.read_nodes(target, super::super::node::Node::parent)?;
@@ -117,7 +117,7 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
 }
 
 fn insert_child<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     target: InteriorNodeId,
     key: TKey,
     child_id: AnyNodeId,
@@ -129,7 +129,7 @@ fn insert_child<TStorage: Storage, TKey: TreeKey>(
 }
 
 fn split_leaf<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     target_node_id: LeafNodeId,
 ) -> Result<(), TreeError> {
     let parent = transaction
@@ -176,7 +176,7 @@ fn split_leaf<TStorage: Storage, TKey: TreeKey>(
 }
 
 pub fn insert<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     key: TKey,
     value: &[u8],
 ) -> Result<(), TreeError> {

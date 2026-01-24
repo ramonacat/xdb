@@ -24,7 +24,7 @@ enum MergeError {
 }
 
 fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<'_, TStorage, TKey>,
+    transaction: &mut TreeTransaction<'_, TStorage, TKey>,
     left_id: LeafNodeId,
     right_id: LeafNodeId,
 ) -> Result<(), MergeError> {
@@ -61,7 +61,7 @@ fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
 }
 
 fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     left_id: InteriorNodeId,
     right_id: InteriorNodeId,
     parent_id: InteriorNodeId,
@@ -105,7 +105,7 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
 }
 
 fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     node_id: InteriorNodeId,
 ) -> Result<(), TreeError> {
     if !transaction.read_nodes(node_id, InteriorNode::needs_merge)? {
@@ -157,7 +157,7 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
 }
 
 fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     leaf_id: LeafNodeId,
 ) -> Result<(), TreeError> {
     let (next, previous, parent) =
@@ -199,10 +199,11 @@ fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
 }
 
 pub fn delete<TStorage: Storage, TKey: TreeKey>(
-    transaction: &TreeTransaction<TStorage, TKey>,
+    transaction: &mut TreeTransaction<TStorage, TKey>,
     key: TKey,
 ) -> Result<Option<Vec<u8>>, TreeError> {
-    let starting_leaf = leaf_search(transaction, transaction.get_root()?, key)?;
+    let root = transaction.get_root()?;
+    let starting_leaf = leaf_search(transaction, root, key)?;
 
     let result = transaction.write_nodes(starting_leaf, |node| node.delete(key))?;
 

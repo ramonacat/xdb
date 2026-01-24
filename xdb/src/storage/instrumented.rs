@@ -19,7 +19,7 @@ impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
     Transaction<'a, TStorage::PageReservation<'a>> for InstrumentedTransaction<'a, TTx, TStorage>
 {
     fn read<TReturn, const N: usize>(
-        &self,
+        &mut self,
         indices: impl Into<[PageIndex; N]>,
         read: impl FnOnce([&Page; N]) -> TReturn,
     ) -> Result<TReturn, StorageError> {
@@ -27,7 +27,7 @@ impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
     }
 
     fn write<TReturn, const N: usize>(
-        &self,
+        &mut self,
         indices: impl Into<[PageIndex; N]>,
         write: impl FnOnce([&mut Page; N]) -> TReturn,
     ) -> Result<TReturn, StorageError> {
@@ -39,7 +39,7 @@ impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
     }
 
     fn insert_reserved(
-        &self,
+        &mut self,
         reservation: TStorage::PageReservation<'a>,
         page: Page,
     ) -> Result<(), StorageError> {
@@ -48,13 +48,13 @@ impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
         self.0.insert_reserved(reservation, page)
     }
 
-    fn insert(&self, page: Page) -> Result<PageIndex, StorageError> {
+    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
         self.1.fetch_add(1, Ordering::Relaxed);
 
         self.0.insert(page)
     }
 
-    fn delete(&self, page: PageIndex) -> Result<(), StorageError> {
+    fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
         self.0.delete(page)
     }
 

@@ -17,10 +17,10 @@ pub(super) struct TreeIterator<'tree, T: Storage, TKey> {
 }
 
 impl<'tree, T: Storage, TKey: TreeKey> TreeIterator<'tree, T, TKey> {
-    pub fn new(transaction: TreeTransaction<'tree, T, TKey>) -> Result<Self, TreeError> {
+    pub fn new(mut transaction: TreeTransaction<'tree, T, TKey>) -> Result<Self, TreeError> {
         let root = transaction.get_root()?;
-        let starting_leaf_forwards = first_leaf(&transaction, root)?;
-        let starting_leaf_backwards = last_leaf(&transaction, root)?;
+        let starting_leaf_forwards = first_leaf(&mut transaction, root)?;
+        let starting_leaf_backwards = last_leaf(&mut transaction, root)?;
 
         let backward_index =
             transaction.read_nodes(starting_leaf_backwards, super::node::leaf::LeafNode::len)?;

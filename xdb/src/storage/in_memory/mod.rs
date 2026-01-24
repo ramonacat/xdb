@@ -1,6 +1,6 @@
 mod mmaped_block;
 
-use std::{cell::RefCell, collections::HashMap, ops::Deref};
+use std::{collections::HashMap, ops::Deref};
 
 use bytemuck::Zeroable;
 
@@ -27,8 +27,8 @@ impl<'storage> PageReservation<'storage> for InMemoryPageReservation<'storage> {
 
 pub struct InMemoryTransaction<'storage> {
     storage: &'storage InMemoryStorage,
-    read_guards: RefCell<HashMap<PageIndex, PageGuard<'storage>>>,
-    write_guards: RefCell<HashMap<PageIndex, PageGuardMut<'storage>>>,
+    read_guards: HashMap<PageIndex, PageGuard<'storage>>,
+    write_guards: HashMap<PageIndex, PageGuardMut<'storage>>,
 }
 
 // TODO once a page is accessed in a transaction, we should keep the lock until the transaction
@@ -37,50 +37,45 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     for InMemoryTransaction<'storage>
 {
     fn read<T, const N: usize>(
-        &self,
+        &mut self,
         indices: impl Into<[PageIndex; N]>,
         read: impl FnOnce([&Page; N]) -> T,
     ) -> Result<T, StorageError> {
         let indices: [PageIndex; N] = indices.into();
         for index in indices {
-            if self.write_guards.borrow().contains_key(&index) {
+            if self.write_guards.contains_key(&index) {
                 continue;
             }
 
             self.read_guards
-                .borrow_mut()
                 .entry(index)
                 .or_insert_with(|| self.storage.pages.get(index).get());
         }
 
-        let read_guards = self.read_guards.borrow();
-        let write_guards = self.write_guards.borrow();
-
         let guards = indices.map(|x| {
-            write_guards
+            self.write_guards
                 .get(&x)
-                .map_or_else(|| read_guards.get(&x).unwrap().deref(), |x| &**x)
+                .map_or_else(|| self.read_guards.get(&x).unwrap().deref(), |x| &**x)
         });
 
         Ok(read(guards))
     }
 
     fn write<T, const N: usize>(
-        &self,
+        &mut self,
         indices: impl Into<[PageIndex; N]>,
         write: impl FnOnce([&mut Page; N]) -> T,
     ) -> Result<T, StorageError> {
         let indices: [PageIndex; N] = indices.into();
 
         for index in indices {
-            if let Some(read_guard) = self.read_guards.borrow_mut().remove(&index) {
+            if let Some(read_guard) = self.read_guards.remove(&index) {
                 let write_guard = read_guard.upgrade();
 
-                self.write_guards.borrow_mut().insert(index, write_guard);
+                self.write_guards.insert(index, write_guard);
             }
 
             self.write_guards
-                .borrow_mut()
                 .entry(index)
                 .or_insert_with(|| self.storage.pages.get(index).get_mut());
         }
@@ -89,8 +84,8 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         for (i, idx) in indices.iter().enumerate() {
             index_refs[i] = Some(idx);
         }
-        let mut write_guards = self.write_guards.borrow_mut();
-        let guards = write_guards
+        let guards = self
+            .write_guards
             .get_disjoint_mut(index_refs.map(|x| x.unwrap()))
             .map(|x| &mut **x.unwrap());
 
@@ -107,7 +102,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     }
 
     fn insert_reserved(
-        &self,
+        &mut self,
         reservation: InMemoryPageReservation<'storage>,
         page: Page,
     ) -> Result<(), StorageError> {
@@ -117,30 +112,26 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         } = reservation;
         let index = page_guard.index();
         let guard = page_guard.initialize(page);
-        self.write_guards
-            .borrow_mut()
-            .insert(index, guard.get_mut());
+        self.write_guards.insert(index, guard.get_mut());
 
         Ok(())
     }
 
-    fn insert(&self, page: Page) -> Result<PageIndex, StorageError> {
+    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
         let guard = self.storage.pages.allocate().initialize(page);
         let index = guard.index();
 
-        self.write_guards
-            .borrow_mut()
-            .insert(index, guard.get_mut());
+        self.write_guards.insert(index, guard.get_mut());
 
         Ok(index)
     }
 
-    fn delete(&self, page: PageIndex) -> Result<(), StorageError> {
+    fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
         // TODO actually delete the page, instead of just zeroing!
 
         let mut guard = self.storage.pages.get(page).get_mut();
         *guard = Page::zeroed();
-        self.write_guards.borrow_mut().insert(page, guard);
+        self.write_guards.insert(page, guard);
 
         Ok(())
     }
@@ -177,8 +168,8 @@ impl Storage for InMemoryStorage {
     fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError> {
         Ok(InMemoryTransaction {
             storage: self,
-            read_guards: RefCell::new(HashMap::new()),
-            write_guards: RefCell::new(HashMap::new()),
+            read_guards: HashMap::new(),
+            write_guards: HashMap::new(),
         })
     }
 }

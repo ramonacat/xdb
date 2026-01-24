@@ -45,13 +45,13 @@ impl From<PageIndex> for [PageIndex; 1] {
 
 pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>>: Send {
     fn read<T, const N: usize>(
-        &self,
+        &mut self,
         indices: impl Into<[PageIndex; N]>,
         read: impl FnOnce([&Page; N]) -> T,
     ) -> Result<T, StorageError>;
 
     fn write<T, const N: usize>(
-        &self,
+        &mut self,
         indices: impl Into<[PageIndex; N]>,
         write: impl FnOnce([&mut Page; N]) -> T,
     ) -> Result<T, StorageError>;
@@ -59,14 +59,14 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>>: Se
     fn reserve(&self) -> Result<TPageReservation, StorageError>;
 
     fn insert_reserved(
-        &self,
+        &mut self,
         reservation: TPageReservation,
         page: Page,
     ) -> Result<(), StorageError>;
 
-    fn insert(&self, page: Page) -> Result<PageIndex, StorageError>;
+    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError>;
 
-    fn delete(&self, page: PageIndex) -> Result<(), StorageError>;
+    fn delete(&mut self, page: PageIndex) -> Result<(), StorageError>;
 
     // TODO actually make this useful and ensure transactional consistency
     #[allow(unused)]

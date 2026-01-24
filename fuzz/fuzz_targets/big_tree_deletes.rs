@@ -28,7 +28,7 @@ impl<'a> Arbitrary<'a> for KeyToDelete {
 fuzz_target!(|keys_to_delete: Vec<KeyToDelete>| {
     let storage = InMemoryStorage::new();
     let tree = Tree::new(storage).unwrap();
-    let transaction = tree.transaction().unwrap();
+    let mut transaction = tree.transaction().unwrap();
 
     let mut rust_btree = BTreeMap::new();
 
@@ -36,7 +36,7 @@ fuzz_target!(|keys_to_delete: Vec<KeyToDelete>| {
         let key = BigKey::<u32, 1024>::new(i);
         let value = vec![0xff; 1];
 
-        insert(&transaction, key, &value).unwrap();
+        insert(&mut transaction, key, &value).unwrap();
         rust_btree.insert(i, value);
     }
 
@@ -44,9 +44,9 @@ fuzz_target!(|keys_to_delete: Vec<KeyToDelete>| {
         rust_btree.remove(&key.0);
 
         let key = BigKey::new(key.0);
-        delete(&transaction, key).unwrap();
+        delete(&mut transaction, key).unwrap();
     }
 
     assert_tree_equal(&tree, &rust_btree, |k| k.value());
-    assert_properties(&transaction);
+    assert_properties(&mut transaction);
 });

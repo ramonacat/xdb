@@ -67,18 +67,18 @@ pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_S
 
     let storage = InMemoryStorage::new();
     let tree = Tree::new(storage).unwrap();
-    let transaction = tree.transaction().unwrap();
+    let mut transaction = tree.transaction().unwrap();
 
     let mut rust_btree = BTreeMap::new();
 
     for action in actions {
         match action {
             TreeAction::Insert { key, value } => {
-                insert(&transaction, *key, &value.0).unwrap();
+                insert(&mut transaction, *key, &value.0).unwrap();
                 rust_btree.insert(key.value(), value.0.clone());
             }
             TreeAction::Delete { key } => {
-                let deleted = delete(&transaction, *key).unwrap();
+                let deleted = delete(&mut transaction, *key).unwrap();
                 let deleted2 = rust_btree.remove(&key.value());
 
                 assert!(deleted == deleted2)
@@ -86,6 +86,6 @@ pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_S
         };
     }
 
-    assert_properties(&transaction);
+    assert_properties(&mut transaction);
     assert_tree_equal(&tree, &rust_btree, |k| k.value());
 }
