@@ -1,4 +1,3 @@
-// TODO store the fuzz corpuses somewhere (git or not git? idk)
 // TODO write a script which will run all the tests (+miri) and all the fuzz targets
 // TODO create a server + a test app which will run many threads with many simulatenous
 // transactions to strees test

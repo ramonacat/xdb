@@ -3,3 +3,6 @@ data.db
 perf.*
 *.dot
 flamegraph.svg
+fuzz/target
+fuzz/artifacts
+fuzz/coverage
