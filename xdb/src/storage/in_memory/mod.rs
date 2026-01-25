@@ -211,11 +211,26 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
         // TODO actually delete the page, instead of just zeroing!
 
-        let mut guard = self.storage.pages.get(page).get_mut();
-        let copy_index = self.copy_for_write(*guard);
-        *guard = Page::zeroed();
-        self.write_guards
-            .insert(page, WritePage::Modified { guard, copy_index });
+        let guard = self.write_guards.get_mut(&page);
+
+        let guard = if let Some(g) = guard {
+            g
+        } else {
+            let new_guard = self.storage.pages.get(page).get_mut();
+            let copy_index = self.copy_for_write(*new_guard);
+
+            self.write_guards.insert(
+                page,
+                WritePage::Modified {
+                    guard: new_guard,
+                    copy_index,
+                },
+            );
+
+            self.write_guards.get_mut(&page).unwrap()
+        };
+
+        **guard.guard_mut() = Page::zeroed();
 
         Ok(())
     }

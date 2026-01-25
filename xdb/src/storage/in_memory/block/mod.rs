@@ -75,9 +75,13 @@ impl PageState {
                     return None;
                 }
 
+                if f & Self::MASK_HAS_WRITER > 0 {
+                    return None;
+                }
+
                 Some(f | Self::MASK_HAS_WRITER)
             })
-            .expect("cannot lock for write, as readers exist");
+            .expect("cannot lock for write, already locked");
     }
 
     fn unlock_write(&self) {

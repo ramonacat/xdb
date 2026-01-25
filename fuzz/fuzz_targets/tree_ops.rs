@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::insert::insert;
+use xdb::bplustree::debug::TransactionAction;
 use xdb::bplustree::debug::{assert_properties, assert_tree_equal};
 use xdb::bplustree::{Tree, TreeKey};
 use xdb::debug::BigKey;
@@ -31,8 +32,6 @@ impl<'a> Arbitrary<'a> for Value {
 }
 
 #[derive(Debug, Arbitrary)]
-// TODO add TreeAction::Commit and TreeAction::Rollback to test that transactions don't mess
-// anything up (also TreeAction::StartTransaction, to test nested ones?
 pub enum TreeAction<T: TreeKey, const KEY_SIZE: usize> {
     Insert {
         key: BigKey<T, KEY_SIZE>,
@@ -41,6 +40,8 @@ pub enum TreeAction<T: TreeKey, const KEY_SIZE: usize> {
     Delete {
         key: BigKey<T, KEY_SIZE>,
     },
+    Commit,
+    Rollback,
 }
 
 pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_SIZE>]) {
@@ -60,6 +61,12 @@ pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_S
                 TreeAction::Delete { key } => {
                     result += &format!("TestAction::Delete(BigKey::new({:?})),\n", key.value());
                 }
+                TreeAction::Commit => {
+                    result += "TestAction::Commit,\n";
+                }
+                TreeAction::Rollback => {
+                    result += "TestAction::Rollback,\n";
+                }
             }
         }
 
@@ -72,21 +79,41 @@ pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_S
     let mut transaction = tree.transaction().unwrap();
 
     let mut rust_btree = BTreeMap::new();
+    let mut current_transaction_actions = vec![];
 
     for action in actions {
         match action {
             TreeAction::Insert { key, value } => {
                 insert(&mut transaction, *key, &value.0).unwrap();
-                rust_btree.insert(key.value(), value.0.clone());
+                current_transaction_actions
+                    .push(TransactionAction::Insert(key.value(), value.0.to_vec()));
             }
             TreeAction::Delete { key } => {
-                let deleted = delete(&mut transaction, *key).unwrap();
-                let deleted2 = rust_btree.remove(&key.value());
+                let _ = delete(&mut transaction, *key).unwrap();
+                current_transaction_actions.push(TransactionAction::Delete(key.value()));
+            }
+            TreeAction::Commit => {
+                for action in current_transaction_actions.drain(..) {
+                    action.execute_on(&mut rust_btree);
+                }
 
-                assert!(deleted == deleted2)
+                transaction.commit().unwrap();
+                transaction = tree.transaction().unwrap();
+            }
+            TreeAction::Rollback => {
+                current_transaction_actions.clear();
+                transaction.rollback().unwrap();
+                transaction = tree.transaction().unwrap();
             }
         };
     }
+
+    for action in current_transaction_actions.drain(..) {
+        action.execute_on(&mut rust_btree);
+    }
+
+    transaction.commit().unwrap();
+    transaction = tree.transaction().unwrap();
 
     assert_properties(&mut transaction);
 

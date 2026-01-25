@@ -218,7 +218,7 @@ impl TreeHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::storage::instrumented::InstrumentedStorage;
+    use crate::{bplustree::debug::TransactionAction, storage::instrumented::InstrumentedStorage};
     use std::{
         collections::BTreeMap,
         io::Write,
@@ -382,6 +382,8 @@ mod test {
     enum TestAction<TKey> {
         Insert(TKey, Vec<u8>),
         Delete(TKey),
+        Commit,
+        Rollback,
     }
 
     fn test_from_data<TKey: TreeKey + UnwindSafe + RefUnwindSafe, const SIZE: usize>(
@@ -399,18 +401,34 @@ mod test {
 
             let guard = tree.lock().unwrap();
             let mut transaction = guard.transaction().unwrap();
+            let mut actions = vec![];
 
             for action in data {
                 match action {
                     TestAction::Insert(key, value) => {
                         insert(&mut transaction, key, &value).unwrap();
-                        rust_tree.insert(key.value(), value);
+                        actions.push(TransactionAction::Insert(key.value(), value));
                     }
                     TestAction::Delete(key) => {
                         delete(&mut transaction, key).unwrap();
-                        rust_tree.remove(&key.value());
+                        actions.push(TransactionAction::Delete(key.value()));
+                    }
+                    TestAction::Commit => {
+                        for action in actions.drain(..) {
+                            action.execute_on(&mut rust_tree);
+                        }
+                        transaction.commit().unwrap();
+                        transaction = guard.transaction().unwrap();
+                    }
+                    TestAction::Rollback => {
+                        actions.clear();
+                        transaction.rollback().unwrap();
+                        transaction = guard.transaction().unwrap();
                     }
                 }
+            }
+            for action in actions.drain(..) {
+                action.execute_on(&mut rust_tree);
             }
             transaction.commit().unwrap();
             drop(guard);
@@ -1125,6 +1143,39 @@ mod test {
             TestAction::Insert(BigKey::new(17105153), vec![0u8; 2]),
             TestAction::Insert(BigKey::new(4278255873), vec![0u8; 2]),
             TestAction::Insert(BigKey::new(0), vec![0u8; 1]),
+        ];
+        test_from_data(data);
+    }
+
+    #[test]
+    fn fuzzer_j() {
+        let data = vec![
+            TestAction::Insert(BigKey::<u32, 1024>::new(44056501), vec![0u8; 1]),
+            TestAction::Insert(BigKey::new(16844037), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(33551105), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16842752), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16843009), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16843263), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16843009), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(1090641921), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16888321), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16843009), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16843009), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16843009), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(0), vec![0u8; 2]),
+            TestAction::Commit,
+            TestAction::Commit,
+            TestAction::Commit,
+            TestAction::Commit,
+            TestAction::Insert(BigKey::new(16843009), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16843073), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(16843009), vec![0u8; 2]),
+            TestAction::Insert(BigKey::new(285278465), vec![0u8; 2]),
+            TestAction::Delete(BigKey::new(16843009)),
+            TestAction::Insert(BigKey::new(4294902017), vec![0u8; 64]),
+            TestAction::Rollback,
+            TestAction::Rollback,
+            TestAction::Insert(BigKey::new(1), vec![0u8; 1]),
         ];
         test_from_data(data);
     }

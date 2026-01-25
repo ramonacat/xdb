@@ -239,3 +239,17 @@ fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
         );
     }
 }
+
+pub enum TransactionAction<K, V> {
+    Insert(K, V),
+    Delete(K),
+}
+
+impl<K: Ord, V> TransactionAction<K, V> {
+    pub fn execute_on(self, btree: &mut BTreeMap<K, V>) {
+        match self {
+            Self::Insert(k, v) => btree.insert(k, v),
+            Self::Delete(k) => btree.remove(&k),
+        };
+    }
+}
