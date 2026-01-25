@@ -61,6 +61,10 @@ impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
     fn commit(self) -> Result<(), StorageError> {
         self.0.commit()
     }
+
+    fn rollback(self) -> Result<(), StorageError> {
+        self.0.rollback()
+    }
 }
 
 // TODO generalize this so more metrics can be extracted (transactions per second, total

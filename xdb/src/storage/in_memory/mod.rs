@@ -1,5 +1,6 @@
 mod block;
 
+use log::error;
 use std::{collections::HashMap, ops::Deref};
 
 use bytemuck::Zeroable;
@@ -25,14 +26,80 @@ impl<'storage> PageReservation<'storage> for InMemoryPageReservation<'storage> {
     }
 }
 
+#[derive(Debug)]
+enum WritePage<'storage> {
+    Modified {
+        guard: PageGuardMut<'storage>,
+        copy_index: PageIndex,
+    },
+    Inserted(PageGuardMut<'storage>),
+}
+
+impl<'storage> WritePage<'storage> {
+    const fn guard(&self) -> &PageGuardMut<'storage> {
+        match self {
+            WritePage::Modified {
+                guard,
+                copy_index: _,
+            }
+            | WritePage::Inserted(guard) => guard,
+        }
+    }
+
+    const fn guard_mut(&mut self) -> &mut PageGuardMut<'storage> {
+        match self {
+            WritePage::Modified {
+                guard,
+                copy_index: _,
+            }
+            | WritePage::Inserted(guard) => guard,
+        }
+    }
+}
+
 pub struct InMemoryTransaction<'storage> {
     storage: &'storage InMemoryStorage,
     read_guards: HashMap<PageIndex, PageGuard<'storage>>,
-    write_guards: HashMap<PageIndex, PageGuardMut<'storage>>,
+    write_guards: HashMap<PageIndex, WritePage<'storage>>,
+    finalized: bool,
 }
 
-// TODO once a page is accessed in a transaction, we should keep the lock until the transaction
-// ends
+impl InMemoryTransaction<'_> {
+    // TODO avoid passing by value?
+    #[allow(clippy::large_types_passed_by_value)]
+    fn copy_for_write(&self, page: Page) -> PageIndex {
+        self.storage
+            .rollback_copies
+            .allocate()
+            .initialize(page)
+            .index()
+    }
+
+    fn do_rollback(&mut self) {
+        for guard in self.write_guards.values_mut() {
+            match guard {
+                WritePage::Modified { guard, copy_index } => {
+                    **guard = *self.storage.rollback_copies.get(*copy_index).get();
+                }
+                WritePage::Inserted(_) => {
+                    // TODO delete from storage
+                }
+            }
+        }
+    }
+}
+
+impl Drop for InMemoryTransaction<'_> {
+    fn drop(&mut self) {
+        if self.finalized {
+            return;
+        }
+        error!("transaction dropped without being rolled back or comitted");
+        self.do_rollback();
+    }
+}
+
+// TODO when writing, make a copy of the page, and undo the original on rollback
 impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     for InMemoryTransaction<'storage>
 {
@@ -55,7 +122,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         let guards = indices.map(|x| {
             self.write_guards
                 .get(&x)
-                .map_or_else(|| self.read_guards.get(&x).unwrap().deref(), |x| &**x)
+                .map_or_else(|| self.read_guards.get(&x).unwrap().deref(), |x| x.guard())
         });
 
         Ok(read(guards))
@@ -72,12 +139,24 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
             if let Some(read_guard) = self.read_guards.remove(&index) {
                 let write_guard = read_guard.upgrade();
 
-                self.write_guards.insert(index, write_guard);
+                let copy_index = self.copy_for_write(*write_guard);
+
+                self.write_guards.insert(
+                    index,
+                    WritePage::Modified {
+                        guard: write_guard,
+                        copy_index,
+                    },
+                );
             }
 
-            self.write_guards
-                .entry(index)
-                .or_insert_with(|| self.storage.pages.get(index).get_mut());
+            if !self.write_guards.contains_key(&index) {
+                let guard = self.storage.pages.get(index).get_mut();
+                let copy_index = self.copy_for_write(*guard);
+
+                self.write_guards
+                    .insert(index, WritePage::Modified { guard, copy_index });
+            }
         }
 
         let mut index_refs: [Option<&PageIndex>; N] = [None; N];
@@ -87,7 +166,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         let guards = self
             .write_guards
             .get_disjoint_mut(index_refs.map(|x| x.unwrap()))
-            .map(|x| &mut **x.unwrap());
+            .map(|x| &mut **x.unwrap().guard_mut());
 
         Ok(write(guards))
     }
@@ -112,7 +191,9 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         } = reservation;
         let index = page_guard.index();
         let guard = page_guard.initialize(page);
-        self.write_guards.insert(index, guard.get_mut());
+
+        self.write_guards
+            .insert(index, WritePage::Inserted(guard.get_mut()));
 
         Ok(())
     }
@@ -121,7 +202,8 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         let guard = self.storage.pages.allocate().initialize(page);
         let index = guard.index();
 
-        self.write_guards.insert(index, guard.get_mut());
+        self.write_guards
+            .insert(index, WritePage::Inserted(guard.get_mut()));
 
         Ok(index)
     }
@@ -130,20 +212,34 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         // TODO actually delete the page, instead of just zeroing!
 
         let mut guard = self.storage.pages.get(page).get_mut();
+        let copy_index = self.copy_for_write(*guard);
         *guard = Page::zeroed();
-        self.write_guards.insert(page, guard);
+        self.write_guards
+            .insert(page, WritePage::Modified { guard, copy_index });
 
         Ok(())
     }
 
-    fn commit(self) -> Result<(), StorageError> {
-        todo!()
+    fn commit(mut self) -> Result<(), StorageError> {
+        self.finalized = true;
+
+        // TODO delete all the pages from self.storage.rollback_copies
+        Ok(())
+    }
+
+    fn rollback(mut self) -> Result<(), StorageError> {
+        self.do_rollback();
+
+        self.finalized = true;
+
+        Ok(())
     }
 }
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
     pages: Block,
+    rollback_copies: Block,
 }
 
 impl Default for InMemoryStorage {
@@ -157,6 +253,7 @@ impl InMemoryStorage {
     pub fn new() -> Self {
         Self {
             pages: Block::new(),
+            rollback_copies: Block::new(),
         }
     }
 }
@@ -170,6 +267,7 @@ impl Storage for InMemoryStorage {
             storage: self,
             read_guards: HashMap::new(),
             write_guards: HashMap::new(),
+            finalized: false,
         })
     }
 }

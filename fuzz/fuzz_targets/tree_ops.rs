@@ -31,6 +31,8 @@ impl<'a> Arbitrary<'a> for Value {
 }
 
 #[derive(Debug, Arbitrary)]
+// TODO add TreeAction::Commit and TreeAction::Rollback to test that transactions don't mess
+// anything up (also TreeAction::StartTransaction, to test nested ones?
 pub enum TreeAction<T: TreeKey, const KEY_SIZE: usize> {
     Insert {
         key: BigKey<T, KEY_SIZE>,
@@ -88,7 +90,7 @@ pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_S
 
     assert_properties(&mut transaction);
 
-    drop(transaction);
+    transaction.commit().unwrap();
 
     assert_tree_equal(&tree, &rust_btree, |k| k.value());
 }

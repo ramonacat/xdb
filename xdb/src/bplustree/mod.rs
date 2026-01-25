@@ -126,6 +126,22 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
 
         Ok(())
     }
+
+    pub fn commit(self) -> Result<(), TreeError> {
+        let Self { transaction, _key } = self;
+
+        transaction.commit()?;
+
+        Ok(())
+    }
+
+    pub fn rollback(self) -> Result<(), TreeError> {
+        let Self { transaction, _key } = self;
+
+        transaction.rollback()?;
+
+        Ok(())
+    }
 }
 
 impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
@@ -339,7 +355,7 @@ mod test {
         insert(&mut transaction, 1, &[0]).unwrap();
         insert(&mut transaction, 0, &[0]).unwrap();
 
-        drop(transaction);
+        transaction.commit().unwrap();
 
         let result = tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>();
 
@@ -355,7 +371,7 @@ mod test {
         insert(&mut transaction, 1, &0u8.to_ne_bytes()).unwrap();
         insert(&mut transaction, 1, &1u8.to_ne_bytes()).unwrap();
 
-        drop(transaction);
+        transaction.commit().unwrap();
 
         // TODO iter() should be on transaction, so it's created explicitly
         let result = tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>();
@@ -371,7 +387,10 @@ mod test {
     fn test_from_data<TKey: TreeKey + UnwindSafe + RefUnwindSafe, const SIZE: usize>(
         data: Vec<TestAction<BigKey<TKey, SIZE>>>,
     ) {
-        let _ = env_logger::builder().is_test(true).try_init();
+        if !cfg!(miri) {
+            let _ = env_logger::builder().is_test(true).try_init();
+        }
+
         let storage = InMemoryStorage::new();
         let tree = Mutex::new(Tree::new(storage).unwrap());
 
@@ -393,7 +412,7 @@ mod test {
                     }
                 }
             }
-            drop(transaction);
+            transaction.commit().unwrap();
             drop(guard);
 
             assert_tree_equal(&tree.lock().unwrap(), &rust_tree, |k| k.value());
@@ -853,7 +872,7 @@ mod test {
 
         let deleted_value = delete(&mut transaction, BigKey::new(2)).unwrap();
 
-        drop(transaction);
+        transaction.commit().unwrap();
 
         assert_eq!(deleted_value, Some(vec![4, 5, 6]));
 
@@ -887,13 +906,44 @@ mod test {
         delete(&mut transaction, BigKey::new(i - 1)).unwrap();
         data.pop();
 
-        drop(transaction);
+        transaction.commit().unwrap();
 
         assert_eq!(
             tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),
             data
         );
         assert_properties(&mut tree.transaction().unwrap());
+    }
+
+    #[test]
+    fn transaction_rollback() {
+        let storage = InMemoryStorage::new();
+        let tree = Tree::<_, u64>::new(storage).unwrap();
+
+        let mut transaction = tree.transaction().unwrap();
+
+        insert(&mut transaction, 1, &1u8.to_ne_bytes()).unwrap();
+        insert(&mut transaction, 2, &2u8.to_ne_bytes()).unwrap();
+        insert(&mut transaction, 3, &3u8.to_ne_bytes()).unwrap();
+
+        transaction.rollback().unwrap();
+
+        let mut transaction = tree.transaction().unwrap();
+
+        insert(&mut transaction, 4, &1u8.to_ne_bytes()).unwrap();
+        insert(&mut transaction, 5, &2u8.to_ne_bytes()).unwrap();
+
+        transaction.commit().unwrap();
+
+        let result = tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>();
+
+        assert_eq!(
+            &result,
+            &[
+                (4, 1u8.to_ne_bytes().to_vec()),
+                (5, 2u8.to_ne_bytes().to_vec())
+            ]
+        )
     }
 
     #[test]

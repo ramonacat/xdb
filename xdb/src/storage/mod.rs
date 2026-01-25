@@ -14,6 +14,7 @@ pub enum StorageError {
 
 #[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Eq, Hash)]
 #[repr(transparent)]
+// TODO should the index have some sort of storage id?
 pub struct PageIndex(u64);
 
 impl PageIndex {
@@ -68,9 +69,8 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>>: Se
 
     fn delete(&mut self, page: PageIndex) -> Result<(), StorageError>;
 
-    // TODO actually make this useful and ensure transactional consistency
-    #[allow(unused)]
     fn commit(self) -> Result<(), StorageError>;
+    fn rollback(self) -> Result<(), StorageError>;
 }
 
 pub trait Storage: Send + Sync {

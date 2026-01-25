@@ -199,6 +199,7 @@ impl Drop for PageGuard<'_> {
     }
 }
 
+#[derive(Debug)]
 pub struct PageGuardMut<'block> {
     page: NonNull<Page>,
     block: &'block Block,
@@ -298,6 +299,7 @@ unsafe impl Sync for Block {}
 unsafe impl Send for Block {}
 
 impl Block {
+    // TODO make this Size::GiB(4).to_bytes() or something
     const SIZE: usize = 4 * 1024 * 1024 * 1024;
     const PAGE_COUNT: usize = Self::SIZE / PAGE_SIZE;
     const HOUSEKEEPING_BLOCK_SIZE: usize = Self::PAGE_COUNT * size_of::<PageState>();

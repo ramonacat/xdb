@@ -16,6 +16,8 @@ use xdb::{
 };
 
 fn main() {
+    env_logger::init();
+
     let page_count = Arc::new(AtomicUsize::new(0));
 
     let storage = InstrumentedStorage::new(InMemoryStorage::new(), page_count.clone());
@@ -40,7 +42,7 @@ fn main() {
         delete(&mut transaction, BigKey::new(u64::try_from(j).unwrap())).unwrap();
     }
 
-    drop(transaction);
+    transaction.commit().unwrap();
 
     println!("{}", tree.to_dot(|x| format!("({})", x.len())).unwrap());
 }

@@ -48,6 +48,8 @@ fuzz_target!(|keys_to_delete: Vec<KeyToDelete>| {
     }
 
     assert_properties(&mut transaction);
-    drop(transaction);
+
+    transaction.commit().unwrap();
+
     assert_tree_equal(&tree, &rust_btree, |k| k.value());
 });
