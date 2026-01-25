@@ -279,6 +279,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "too slow in miri")]
     fn insert_multiple_nodes() {
         let mut data = vec![];
 
@@ -294,6 +295,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "too slow in miri")]
     fn delete_first_from_big_tree() {
         let mut data = vec![];
 
@@ -311,6 +313,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "too slow in miri")]
     fn delete_with_interior_node_merge() {
         let mut data = vec![];
 
@@ -328,6 +331,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "too slow in miri")]
     fn variable_sized_keys() {
         let mut data = vec![];
 
