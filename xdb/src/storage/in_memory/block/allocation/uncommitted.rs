@@ -5,14 +5,15 @@ use libc::{
     PROT_NONE, PROT_READ, PROT_WRITE, mmap, mprotect, munmap, strerror,
 };
 
-use crate::{page::PAGE_SIZE, storage::in_memory::block::Allocation};
+use crate::{page::PAGE_SIZE, storage::in_memory::block::allocation::Allocation};
 
 #[derive(Debug)]
-pub(super) struct UncommittedAllocation {
+pub struct UncommittedAllocation {
     address: NonNull<u8>,
     size: usize,
 }
 unsafe impl Send for UncommittedAllocation {}
+unsafe impl Sync for UncommittedAllocation {}
 
 impl Drop for UncommittedAllocation {
     fn drop(&mut self) {

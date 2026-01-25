@@ -1,16 +1,17 @@
 use std::ptr::NonNull;
 
-use crate::{page::PAGE_SIZE, storage::in_memory::block::Allocation};
+use crate::{page::PAGE_SIZE, storage::in_memory::block::allocation::Allocation};
 
 #[repr(C, align(4096))]
 struct Memory([u8; 128 * 1024 * 1024]);
 const _: () = assert!(align_of::<Memory>() == PAGE_SIZE);
 
 #[derive(Debug)]
-pub(super) struct StaticAllocation {
+pub struct StaticAllocation {
     data: NonNull<u8>,
 }
 unsafe impl Send for StaticAllocation {}
+unsafe impl Sync for StaticAllocation {}
 
 impl Drop for StaticAllocation {
     fn drop(&mut self) {
