@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["xdb", "xdb-cli", "fuzz"]
+members = ["xdb", "xdb-cli", "fuzz", "xdb-server", "xdb-client"]
 
 [profile.release]
 debug = "line-tables-only"
