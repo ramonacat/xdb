@@ -3,10 +3,10 @@ use bytemuck::{
 };
 use thiserror::Error;
 
-use crate::checksum::Checksum;
+use crate::{Size, checksum::Checksum};
 
-pub const PAGE_SIZE: usize = 4096;
-pub const PAGE_DATA_SIZE: usize = PAGE_SIZE - size_of::<PageHeader>();
+pub const PAGE_SIZE: Size = Size::B(4096);
+pub const PAGE_DATA_SIZE: Size = PAGE_SIZE.subtract(Size::of::<PageHeader>());
 
 #[derive(Debug, Error)]
 pub enum PageError {
@@ -27,10 +27,10 @@ const _: () = assert!(size_of::<PageHeader>() == size_of::<u64>());
 #[repr(C, align(8))]
 pub struct Page {
     header: PageHeader,
-    data: [u8; PAGE_DATA_SIZE],
+    data: [u8; PAGE_DATA_SIZE.as_bytes()],
 }
 
-const _: () = assert!(size_of::<Page>() == PAGE_SIZE);
+const _: () = assert!(Size::of::<Page>().is_equal(PAGE_SIZE));
 
 impl Page {
     pub fn from_data<T: AnyBitPattern + NoUninit>(data: T) -> Self {
@@ -41,10 +41,10 @@ impl Page {
     }
 
     #[allow(unused)] // TODO this will be needed for file storage
-    pub fn serialize(mut self) -> [u8; PAGE_SIZE] {
+    pub fn serialize(mut self) -> [u8; PAGE_SIZE.as_bytes()] {
         self.header.checksum.clear();
 
-        let mut bytes: [u8; PAGE_SIZE] = must_cast(self);
+        let mut bytes: [u8; PAGE_SIZE.as_bytes()] = must_cast(self);
         let checksum = Checksum::of(&bytes);
 
         for (i, byte) in bytes_of(&checksum).iter().enumerate() {
@@ -55,7 +55,7 @@ impl Page {
     }
 
     #[allow(unused)] // TODO this will be needed for file storage
-    pub fn deserialize(mut bytes: [u8; PAGE_SIZE]) -> Result<Self, PageError> {
+    pub fn deserialize(mut bytes: [u8; PAGE_SIZE.as_bytes()]) -> Result<Self, PageError> {
         let expected_checksum =
             Checksum::from_bytes(bytes[0..size_of::<Checksum>()].try_into().unwrap());
 
@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     pub fn deserialize_errors_on_wrong_checksum() {
-        let mut bytes = [0; PAGE_SIZE];
+        let mut bytes = [0; PAGE_SIZE.as_bytes()];
         bytes[0] = 1;
         bytes[1] = 2;
         bytes[2] = 3;
@@ -107,7 +107,7 @@ mod tests {
 
     #[test]
     pub fn deserializes_with_correct_checksum() {
-        let mut bytes = [0; PAGE_SIZE];
+        let mut bytes = [0; PAGE_SIZE.as_bytes()];
         bytes[0] = 137;
         bytes[1] = 65;
         bytes[2] = 249;
@@ -116,8 +116,8 @@ mod tests {
         let page = Page::deserialize(bytes);
 
         assert_eq!(
-            &[0; PAGE_DATA_SIZE],
-            page.unwrap().data::<[u8; PAGE_DATA_SIZE]>()
+            &[0; _],
+            page.unwrap().data::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
         );
     }
 }

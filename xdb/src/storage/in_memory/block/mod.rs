@@ -12,6 +12,7 @@ use std::{
 };
 
 use crate::{
+    Size,
     page::{PAGE_SIZE, Page},
     storage::{
         PageIndex,
@@ -179,10 +180,9 @@ pub struct Block {
 }
 
 impl Block {
-    // TODO make this Size::GiB(4).to_bytes() or something
-    const SIZE: usize = 4 * 1024 * 1024 * 1024;
-    const PAGE_COUNT: usize = Self::SIZE / PAGE_SIZE;
-    const HOUSEKEEPING_BLOCK_SIZE: usize = Self::PAGE_COUNT * size_of::<PageState>();
+    const SIZE: Size = Size::GiB(4);
+    const PAGE_COUNT: usize = Self::SIZE.divide(PAGE_SIZE);
+    const HOUSEKEEPING_BLOCK_SIZE: Size = Size::of::<PageState>().multiply(Self::PAGE_COUNT);
 
     pub fn new() -> Self {
         let housekeeping: Box<dyn Allocation> = if cfg!(miri) {
@@ -250,8 +250,8 @@ impl Block {
         let houskeeping_page = unsafe {
             self.housekeeping
                 .base_address()
-                .cast::<[u8; PAGE_SIZE]>()
-                .add(usize::try_from(index.0).unwrap() / (PAGE_SIZE / size_of::<PageState>()))
+                .cast::<[u8; PAGE_SIZE.as_bytes()]>()
+                .add(usize::try_from(index.0).unwrap() / (PAGE_SIZE / Size::of::<PageState>()))
         };
         self.housekeeping.commit_page(houskeeping_page.cast());
 

@@ -6,6 +6,7 @@ use std::fmt::Debug;
 use bytemuck::{Pod, Zeroable};
 
 use crate::{
+    Size,
     bplustree::{
         LeafNodeId, TreeKey,
         node::{
@@ -25,7 +26,7 @@ impl From<Option<LeafNodeId>> for PageIndex {
     }
 }
 
-const LEAF_NODE_DATA_SIZE: usize = NODE_DATA_SIZE - size_of::<LeafNodeHeader>();
+const LEAF_NODE_DATA_SIZE: Size = NODE_DATA_SIZE.subtract(Size::of::<LeafNodeHeader>());
 
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
@@ -210,7 +211,7 @@ struct LeafNodeHeader {
     next: PageIndex,
 }
 
-const _: () = assert!(size_of::<LeafNodeHeader>() == size_of::<u64>() * 2);
+const _: () = assert!(Size::of::<LeafNodeHeader>().is_equal(Size::of::<u64>().multiply(2)));
 
 #[cfg(test)]
 mod test {

@@ -2,9 +2,12 @@ use std::marker::PhantomData;
 
 use bytemuck::{Zeroable, bytes_of, pod_read_unaligned};
 
-use crate::bplustree::{
-    TreeKey,
-    node::leaf::{LEAF_NODE_DATA_SIZE, builder::MaterializedData},
+use crate::{
+    Size,
+    bplustree::{
+        TreeKey,
+        node::leaf::{LEAF_NODE_DATA_SIZE, builder::MaterializedData},
+    },
 };
 
 pub(in crate::bplustree) struct LeafNodeEntry<'node, TKey> {
@@ -67,13 +70,13 @@ impl<'node, TKey: TreeKey + 'node> Iterator for LeafNodeEntryIterator<'node, TKe
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
 pub struct LeafNodeEntries<TKey> {
-    data: [u8; LEAF_NODE_DATA_SIZE - size_of::<u16>()],
+    data: [u8; LEAF_NODE_DATA_SIZE.subtract(Size::of::<u16>()).as_bytes()],
     len: u16,
     _key: PhantomData<TKey>,
 }
 
 impl<TKey: TreeKey> LeafNodeEntries<TKey> {
-    const _ASSERT_SIZE: () = assert!(size_of::<Self>() == LEAF_NODE_DATA_SIZE);
+    const _ASSERT_SIZE: () = assert!(Size::of::<Self>().is_equal(LEAF_NODE_DATA_SIZE));
 
     pub const fn new() -> Self {
         Self {
@@ -161,6 +164,7 @@ impl<TKey: TreeKey> LeafNodeEntries<TKey> {
             .copy_from_slice(&data_to_move);
     }
 
+    // TODO extract functions/struct/whatever for managing a value of any size
     pub fn insert_at(&mut self, index: usize, key: TKey, value: &[u8]) {
         assert!(self.can_fit(value.len()));
 
@@ -182,8 +186,10 @@ impl<TKey: TreeKey> LeafNodeEntries<TKey> {
 
         value_size_hole.copy_from_slice(bytes_of(&(value.len() as u64)));
 
-        let value_hole = &mut self.data[entry_offset + size_of::<TKey>() + size_of::<u64>()
-            ..entry_offset + size_of::<TKey>() + size_of::<u64>() + value.len()];
+        let entry_data_offset = Size::of::<TKey>() + Size::of::<u64>();
+
+        let value_hole = &mut self.data[entry_offset + entry_data_offset.as_bytes()
+            ..entry_offset + (entry_data_offset + Size::B(value.len())).as_bytes()];
 
         value_hole.copy_from_slice(value);
 

@@ -4,7 +4,7 @@ use crate::{page::PAGE_SIZE, storage::in_memory::block::allocation::Allocation};
 
 #[repr(C, align(4096))]
 struct Memory([u8; 128 * 1024 * 1024]);
-const _: () = assert!(align_of::<Memory>() == PAGE_SIZE);
+const _: () = assert!(align_of::<Memory>() == PAGE_SIZE.as_bytes());
 
 #[derive(Debug)]
 pub struct StaticAllocation {

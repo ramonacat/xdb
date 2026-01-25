@@ -3,6 +3,7 @@ pub(super) mod leaf;
 
 use std::marker::PhantomData;
 
+use crate::Size;
 use crate::bplustree::node::leaf::LeafNode;
 use crate::bplustree::{TreeKey, node::interior::InteriorNode};
 use crate::page::PAGE_DATA_SIZE;
@@ -118,7 +119,7 @@ pub(super) struct NodeHeader {
     _unused2: u32,
     parent: PageIndex,
 }
-const _: () = assert!(size_of::<NodeHeader>() == size_of::<u64>() * 2);
+const _: () = assert!(Size::of::<NodeHeader>().is_equal(Size::of::<u64>().multiply(2)));
 
 impl NodeHeader {
     const fn new_interior(parent: PageIndex) -> Self {
@@ -152,13 +153,13 @@ impl NodeHeader {
     }
 }
 
-const NODE_DATA_SIZE: usize = PAGE_DATA_SIZE - size_of::<NodeHeader>();
+const NODE_DATA_SIZE: Size = PAGE_DATA_SIZE.subtract(Size::of::<NodeHeader>());
 
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
 pub(super) struct AnyNode<TKey> {
     header: NodeHeader,
-    data: [u8; NODE_DATA_SIZE],
+    data: [u8; NODE_DATA_SIZE.as_bytes()],
     _key: PhantomData<TKey>,
 }
 
@@ -168,7 +169,7 @@ pub(super) struct AnyNode<TKey> {
 unsafe impl<TKey: TreeKey> Pod for AnyNode<TKey> {}
 
 pub(super) trait Node<TKey>: AnyBitPattern + NoUninit {
-    const _ASSERT_SIZE: () = assert!(size_of::<Self>() == PAGE_DATA_SIZE);
+    const _ASSERT_SIZE: () = assert!(Size::of::<Self>().is_equal(PAGE_DATA_SIZE));
 
     fn parent(&self) -> Option<InteriorNodeId>;
     fn set_parent(&mut self, parent: Option<InteriorNodeId>);

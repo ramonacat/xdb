@@ -5,6 +5,7 @@ mod iterator;
 mod node;
 mod tuples;
 
+use crate::Size;
 use crate::bplustree::iterator::TreeIterator;
 use crate::bplustree::tuples::NodeIds;
 use std::fmt::Debug;
@@ -41,7 +42,9 @@ impl TreeKey for i32 {}
 impl TreeKey for i64 {}
 impl TreeKey for isize {}
 
-const ROOT_NODE_TAIL_SIZE: usize = PAGE_DATA_SIZE - size_of::<u64>() - size_of::<PageIndex>();
+const ROOT_NODE_TAIL_SIZE: Size = PAGE_DATA_SIZE
+    .subtract(Size::of::<u64>())
+    .subtract(Size::of::<PageIndex>());
 
 #[derive(Debug)]
 pub struct Tree<T: Storage, TKey: TreeKey> {
@@ -180,11 +183,11 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 struct TreeHeader {
     key_size: u64,
     root: PageIndex,
-    _unused: [u8; ROOT_NODE_TAIL_SIZE],
+    _unused: [u8; ROOT_NODE_TAIL_SIZE.as_bytes()],
 }
 
 const _: () = assert!(
-    size_of::<TreeHeader>() == PAGE_DATA_SIZE,
+    Size::of::<TreeHeader>().is_equal(PAGE_DATA_SIZE),
     "The Tree descriptor must have size of exactly one page"
 );
 

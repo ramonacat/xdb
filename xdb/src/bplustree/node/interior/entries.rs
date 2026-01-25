@@ -1,3 +1,4 @@
+use crate::Size;
 use std::marker::PhantomData;
 
 use bytemuck::{Pod, Zeroable, bytes_of, cast_slice, cast_slice_mut};
@@ -7,7 +8,7 @@ use crate::{
     storage::PageIndex,
 };
 
-const INTERIOR_NODE_DATA_SIZE: usize = NODE_DATA_SIZE - size_of::<u64>();
+const INTERIOR_NODE_DATA_SIZE: Size = NODE_DATA_SIZE.subtract(Size::of::<u64>());
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
 pub struct InteriorNodeEntries<TKey> {
@@ -25,7 +26,7 @@ unsafe impl<TKey: TreeKey> Pod for InteriorNodeEntries<TKey> {}
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
 struct InteriorNodeData<TKey> {
-    data: [u8; INTERIOR_NODE_DATA_SIZE],
+    data: [u8; INTERIOR_NODE_DATA_SIZE.as_bytes()],
     _key: PhantomData<TKey>,
 }
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
@@ -33,23 +34,25 @@ struct InteriorNodeData<TKey> {
 unsafe impl<TKey: TreeKey> Pod for InteriorNodeData<TKey> {}
 
 impl<TKey: TreeKey> InteriorNodeData<TKey> {
-    const VALUES_OFFSET: usize = Self::KEY_CAPACITY * size_of::<TKey>();
+    const VALUES_OFFSET: Size = Size::of::<TKey>().multiply(Self::KEY_CAPACITY);
+
     // n - max number of keys
     //
     // size = key_size*n + value_size*(n+1)
     // size = key_size*n + value_size*n + value_size
     // size - value_size = key_size*n + value_size*n
     // (size - value_size)/(key_size + value_size) = n
-    const KEY_CAPACITY: usize = (INTERIOR_NODE_DATA_SIZE - size_of::<PageIndex>())
-        / (size_of::<TKey>() + size_of::<PageIndex>());
+    const KEY_CAPACITY: usize = (INTERIOR_NODE_DATA_SIZE.subtract(Size::of::<PageIndex>()))
+        .divide(Size::of::<TKey>().add(Size::of::<PageIndex>()));
 
     fn from_raw_data(keys: &[TKey], values: &[PageIndex]) -> Self {
-        assert!(size_of_val(keys) < Self::VALUES_OFFSET);
+        assert!(Size::of_val(keys) < Self::VALUES_OFFSET);
 
         let mut data = [0; _];
 
         data[..size_of_val(keys)].copy_from_slice(cast_slice(keys));
-        data[Self::VALUES_OFFSET..Self::VALUES_OFFSET + size_of_val(values)]
+        data[Self::VALUES_OFFSET.as_bytes()
+            ..Self::VALUES_OFFSET.add(Size::of_val(values)).as_bytes()]
             .copy_from_slice(cast_slice(values));
 
         Self {
@@ -59,19 +62,19 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
     }
 
     fn keys(&self) -> &[TKey] {
-        cast_slice(&self.data[..Self::VALUES_OFFSET])
+        cast_slice(&self.data[..Self::VALUES_OFFSET.as_bytes()])
     }
 
     fn values(&self) -> &[PageIndex] {
-        cast_slice(&self.data[Self::VALUES_OFFSET..])
+        cast_slice(&self.data[Self::VALUES_OFFSET.as_bytes()..])
     }
 
     fn keys_mut(&mut self) -> &mut [TKey] {
-        cast_slice_mut(&mut self.data[..Self::VALUES_OFFSET])
+        cast_slice_mut(&mut self.data[..Self::VALUES_OFFSET.as_bytes()])
     }
 
     fn values_mut(&mut self) -> &mut [PageIndex] {
-        cast_slice_mut(&mut self.data[Self::VALUES_OFFSET..])
+        cast_slice_mut(&mut self.data[Self::VALUES_OFFSET.as_bytes()..])
     }
 }
 

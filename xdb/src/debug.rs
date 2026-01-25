@@ -1,3 +1,4 @@
+use crate::Size;
 use std::{
     fmt::{Debug, Display},
     marker::PhantomData,
@@ -57,7 +58,7 @@ impl<T: Display + TreeKey, const SIZE: usize> Display for BigKey<T, SIZE> {
 }
 
 impl<T: TreeKey, const SIZE: usize> BigKey<T, SIZE> {
-    const VALUE_COUNT: usize = size_of::<Self>() / size_of::<T>();
+    const VALUE_COUNT: usize = Size::of::<Self>().divide(Size::of::<T>());
 
     pub fn new(value: T) -> Self {
         let bytes = bytes_of(&value).repeat(Self::VALUE_COUNT);

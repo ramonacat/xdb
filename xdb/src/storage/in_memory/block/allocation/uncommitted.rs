@@ -5,30 +5,32 @@ use libc::{
     PROT_NONE, PROT_READ, PROT_WRITE, mmap, mprotect, munmap, strerror,
 };
 
-use crate::{page::PAGE_SIZE, storage::in_memory::block::allocation::Allocation};
+use crate::{Size, page::PAGE_SIZE, storage::in_memory::block::allocation::Allocation};
 
 #[derive(Debug)]
 pub struct UncommittedAllocation {
     address: NonNull<u8>,
-    size: usize,
+    size: Size,
 }
 unsafe impl Send for UncommittedAllocation {}
 unsafe impl Sync for UncommittedAllocation {}
 
 impl Drop for UncommittedAllocation {
     fn drop(&mut self) {
-        unsafe { munmap(self.address.as_ptr().cast(), self.size) };
+        unsafe { munmap(self.address.as_ptr().cast(), self.size.as_bytes()) };
     }
 }
 
 impl UncommittedAllocation {
-    pub fn new(size: usize) -> Self {
-        assert!(unsafe { usize::try_from(libc::sysconf(_SC_PAGE_SIZE)).unwrap() == PAGE_SIZE });
+    pub fn new(size: Size) -> Self {
+        assert!(unsafe {
+            usize::try_from(libc::sysconf(_SC_PAGE_SIZE)).unwrap() == PAGE_SIZE.as_bytes()
+        });
 
         let memory = unsafe {
             mmap(
                 std::ptr::null_mut(),
-                size,
+                size.as_bytes(),
                 PROT_NONE,
                 // TODO support file backed mappings
                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
@@ -50,12 +52,20 @@ impl UncommittedAllocation {
 
 impl Allocation for UncommittedAllocation {
     fn commit_page(&self, address: NonNull<u8>) {
-        assert!(address.align_offset(PAGE_SIZE) == 0);
-        assert!(address >= self.address && address < unsafe { self.address.byte_add(self.size) });
+        assert!(address.align_offset(PAGE_SIZE.as_bytes()) == 0);
+        assert!(
+            address >= self.address
+                && address < unsafe { self.address.byte_add(self.size.as_bytes()) }
+        );
 
         unsafe {
             let page = address;
-            if mprotect(page.cast().as_ptr(), PAGE_SIZE, PROT_READ | PROT_WRITE) != 0 {
+            if mprotect(
+                page.cast().as_ptr(),
+                PAGE_SIZE.as_bytes(),
+                PROT_READ | PROT_WRITE,
+            ) != 0
+            {
                 panic_on_errno();
             }
         }
