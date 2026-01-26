@@ -1,34 +1,33 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 
-const fn mask(start_bit: u64, end_bit: u64) -> u64 {
+const fn mask32(start_bit: u32, end_bit: u32) -> u32 {
     assert!(end_bit <= start_bit);
 
     if start_bit == end_bit {
         return 1 << start_bit;
     }
 
-    1 << start_bit | mask(start_bit - 1, end_bit)
+    1 << start_bit | mask32(start_bit - 1, end_bit)
 }
 
 #[derive(Debug)]
 #[repr(transparent)]
-// TODO can we fit everything in u32 or even u16?
-pub struct PageState(AtomicU64);
+pub struct PageState(AtomicU32);
 
-const _: () = assert!(size_of::<PageState>() == size_of::<u64>());
+const _: () = assert!(size_of::<PageState>() == size_of::<u32>());
 
 impl PageState {
-    const MASK_IS_INITIALIZED: u64 = 1 << 63;
+    const MASK_IS_INITIALIZED: u32 = 1 << 31;
     #[allow(unused)]
-    const MASK_READERS_WAITING: u64 = 1 << 62;
+    const MASK_READERS_WAITING: u32 = 1 << 30;
     #[allow(unused)]
-    const MASK_WRITERS_WAITING: u64 = 1 << 61;
-    const SHIFT_READER_COUNT: u64 = 44;
-    const MASK_READER_COUNT: u64 = mask(60, Self::SHIFT_READER_COUNT);
-    const MASK_HAS_WRITER: u64 = 1 << 43;
+    const MASK_WRITERS_WAITING: u32 = 1 << 29;
+    const SHIFT_READER_COUNT: u32 = 12;
+    const MASK_READER_COUNT: u32 = mask32(28, Self::SHIFT_READER_COUNT);
+    const MASK_HAS_WRITER: u32 = 1 << 11;
 
     pub const fn new() -> Self {
-        Self(AtomicU64::new(0))
+        Self(AtomicU32::new(0))
     }
 
     pub fn mark_initialized(&self) {
@@ -125,7 +124,7 @@ mod test {
 
     #[test]
     fn mask_tests() {
-        assert_eq!(mask(7, 0), 0b1111_1111);
-        assert_eq!(mask(15, 8), 0b1111_1111_0000_0000);
+        assert_eq!(mask32(7, 0), 0b1111_1111);
+        assert_eq!(mask32(15, 8), 0b1111_1111_0000_0000);
     }
 }
