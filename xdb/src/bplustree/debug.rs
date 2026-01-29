@@ -240,6 +240,7 @@ fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
     }
 }
 
+// TODO should the value here just bec Vec<u8>?
 pub enum TransactionAction<K, V> {
     Insert(K, V),
     Delete(K),

@@ -40,6 +40,12 @@ path = "fuzz_targets/tree_ops_u64.rs"
 test = false
 doc = false
 bench = false
+[[bin]]
+name = "tree_ops_u64_threaded"
+path = "fuzz_targets/tree_ops_u64_threaded.rs"
+test = false
+doc = false
+bench = false
 
 [[bin]]
 name = "big_tree_deletes"

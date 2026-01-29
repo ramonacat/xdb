@@ -224,12 +224,16 @@ mod test {
     use crate::{bplustree::debug::TransactionAction, storage::instrumented::InstrumentedStorage};
     use std::{
         collections::BTreeMap,
+        hint,
         io::Write,
+        mem,
         panic::{RefUnwindSafe, UnwindSafe, catch_unwind},
         sync::{
             Arc, Mutex,
-            atomic::{AtomicUsize, Ordering},
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            mpsc,
         },
+        thread,
     };
 
     use crate::{
@@ -393,6 +397,101 @@ mod test {
         Rollback,
     }
 
+    struct InThreadTestAction<TKey> {
+        thread: usize,
+        action: TestAction<TKey>,
+    }
+
+    fn execute_test_actions<TKey: TreeKey, const SIZE: usize>(
+        tree: &Tree<InMemoryStorage, BigKey<TKey, SIZE>>,
+        actions: impl Iterator<Item = TestAction<BigKey<TKey, SIZE>>>,
+        commit: impl Fn(Vec<TransactionAction<TKey, Vec<u8>>>),
+        after_action: impl Fn(),
+    ) {
+        let mut transaction = tree.transaction().unwrap();
+        let mut uncommitted_actions = vec![];
+
+        for action in actions {
+            match action {
+                TestAction::Insert(key, value) => {
+                    insert(&mut transaction, key, &value).unwrap();
+                    uncommitted_actions.push(TransactionAction::Insert(key.value(), value));
+                }
+                TestAction::Delete(key) => {
+                    delete(&mut transaction, key).unwrap();
+                    uncommitted_actions.push(TransactionAction::Delete(key.value()));
+                }
+                TestAction::Commit => {
+                    commit(mem::take(&mut uncommitted_actions));
+
+                    transaction.commit().unwrap();
+                    transaction = tree.transaction().unwrap();
+                }
+                TestAction::Rollback => {
+                    uncommitted_actions.clear();
+                    transaction.rollback().unwrap();
+                    transaction = tree.transaction().unwrap();
+                }
+            }
+
+            after_action();
+        }
+
+        commit(mem::take(&mut uncommitted_actions));
+        transaction.commit().unwrap();
+    }
+
+    fn threaded_test_from_data<TKey: TreeKey + Send + Sync, const SIZE: usize>(
+        data: Vec<InThreadTestAction<BigKey<TKey, SIZE>>>,
+    ) {
+        if !cfg!(miri) {
+            let _ = env_logger::builder().is_test(true).try_init();
+        }
+
+        let rust_tree = Arc::new(Mutex::new(BTreeMap::new()));
+        let storage = InMemoryStorage::new();
+        let tree = Arc::new(Tree::new(storage).unwrap());
+        let mut threads = vec![];
+
+        for _ in 0..4 {
+            let (tx, rx) = mpsc::channel();
+            let rust_tree = rust_tree.clone();
+            let tree = tree.clone();
+            let done = Arc::new(AtomicBool::new(true));
+            let done_ = done.clone();
+
+            let handle = thread::spawn(move || {
+                execute_test_actions(
+                    &tree,
+                    rx.into_iter(),
+                    |uncomitted| {
+                        for action in uncomitted {
+                            action.execute_on(&mut rust_tree.lock().unwrap());
+                        }
+                    },
+                    || done_.store(true, Ordering::Relaxed),
+                );
+            });
+
+            threads.push((tx, handle, done));
+        }
+
+        for datum in data {
+            threads[datum.thread].0.send(datum.action).unwrap();
+            while !threads[datum.thread].2.load(Ordering::Relaxed) {
+                hint::spin_loop();
+            }
+        }
+
+        for (tx, handle, _) in threads {
+            drop(tx);
+            handle.join().unwrap();
+        }
+
+        assert_tree_equal(&tree, &rust_tree.lock().unwrap(), |k| k.value());
+        assert_properties(&mut tree.transaction().unwrap());
+    }
+
     fn test_from_data<TKey: TreeKey + UnwindSafe + RefUnwindSafe, const SIZE: usize>(
         data: Vec<TestAction<BigKey<TKey, SIZE>>>,
     ) {
@@ -401,46 +500,25 @@ mod test {
         }
 
         let storage = InMemoryStorage::new();
-        let tree = Mutex::new(Tree::new(storage).unwrap());
+        let tree = Arc::new(Mutex::new(Tree::new(storage).unwrap()));
 
         let result = catch_unwind(|| {
-            let mut rust_tree = BTreeMap::new();
+            let rust_tree = Arc::new(Mutex::new(BTreeMap::new()));
 
-            let guard = tree.lock().unwrap();
-            let mut transaction = guard.transaction().unwrap();
-            let mut actions = vec![];
+            execute_test_actions(
+                &tree.lock().unwrap(),
+                data.into_iter(),
+                |uncomitted| {
+                    for action in uncomitted {
+                        action.execute_on(&mut rust_tree.lock().unwrap());
+                    }
+                },
+                || {},
+            );
 
-            for action in data {
-                match action {
-                    TestAction::Insert(key, value) => {
-                        insert(&mut transaction, key, &value).unwrap();
-                        actions.push(TransactionAction::Insert(key.value(), value));
-                    }
-                    TestAction::Delete(key) => {
-                        delete(&mut transaction, key).unwrap();
-                        actions.push(TransactionAction::Delete(key.value()));
-                    }
-                    TestAction::Commit => {
-                        for action in actions.drain(..) {
-                            action.execute_on(&mut rust_tree);
-                        }
-                        transaction.commit().unwrap();
-                        transaction = guard.transaction().unwrap();
-                    }
-                    TestAction::Rollback => {
-                        actions.clear();
-                        transaction.rollback().unwrap();
-                        transaction = guard.transaction().unwrap();
-                    }
-                }
-            }
-            for action in actions.drain(..) {
-                action.execute_on(&mut rust_tree);
-            }
-            transaction.commit().unwrap();
-            drop(guard);
-
-            assert_tree_equal(&tree.lock().unwrap(), &rust_tree, |k| k.value());
+            assert_tree_equal(&tree.lock().unwrap(), &rust_tree.lock().unwrap(), |k| {
+                k.value()
+            });
             assert_properties(&mut tree.lock().unwrap().transaction().unwrap());
         });
 
@@ -1185,5 +1263,22 @@ mod test {
             TestAction::Insert(BigKey::new(1), vec![0u8; 1]),
         ];
         test_from_data(data);
+    }
+
+    #[test]
+    #[ignore = "TODO waiting for locks!"]
+    fn fuzzer_k() {
+        let data = vec![
+            InThreadTestAction {
+                thread: 3,
+                action: TestAction::Delete(BigKey::<u64, 1024>::new(18446462598749748992)),
+            },
+            InThreadTestAction {
+                thread: 0,
+                action: TestAction::Insert(BigKey::new(0), vec![0u8; 1]),
+            },
+        ];
+
+        threaded_test_from_data(data);
     }
 }
