@@ -79,7 +79,7 @@ impl InMemoryTransaction<'_> {
         for guard in self.write_guards.values_mut() {
             match guard {
                 WritePage::Modified { guard, copy_index } => {
-                    **guard = *self.storage.rollback_copies.get(*copy_index).get();
+                    **guard = *self.storage.rollback_copies.get(*copy_index).get().unwrap();
                 }
                 WritePage::Inserted(_) => {
                     // TODO delete from storage
@@ -114,9 +114,12 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
                 continue;
             }
 
-            self.read_guards
-                .entry(index)
-                .or_insert_with(|| self.storage.pages.get(index).get());
+            match self.read_guards.entry(index) {
+                std::collections::hash_map::Entry::Occupied(_) => {}
+                std::collections::hash_map::Entry::Vacant(vacant_entry) => {
+                    vacant_entry.insert(self.storage.pages.get(index).get()?);
+                }
+            }
         }
 
         let guards = indices.map(|x| {

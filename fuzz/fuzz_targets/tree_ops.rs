@@ -7,13 +7,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle};
 use xdb::bplustree::algorithms::delete::delete;
+use xdb::bplustree::algorithms::find;
 use xdb::bplustree::algorithms::insert::insert;
 use xdb::bplustree::debug::TransactionAction;
 use xdb::bplustree::debug::{assert_properties, assert_tree_equal};
-use xdb::bplustree::{Tree, TreeKey};
+use xdb::bplustree::{Tree, TreeError, TreeKey};
 use xdb::debug::BigKey;
-use xdb::storage::Storage;
 use xdb::storage::in_memory::InMemoryStorage;
+use xdb::storage::{Storage, StorageError};
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct Value(pub Vec<u8>);
@@ -48,6 +49,9 @@ pub enum TreeAction<T: TreeKey, const KEY_SIZE: usize> {
     },
     Commit,
     Rollback,
+    Read {
+        key: BigKey<T, KEY_SIZE>,
+    },
 }
 
 pub const THREAD_COUNT: usize = 4;
@@ -67,8 +71,9 @@ pub struct InThreadAction<T: TreeKey, const KEY_SIZE: usize> {
     pub thread_id: FuzzThreadId,
 }
 
+#[derive(Debug)]
 pub struct FuzzThread<TKey: TreeKey + Send + Sync, const KEY_SIZE: usize> {
-    handle: JoinHandle<()>,
+    handle: JoinHandle<Result<(), TreeError>>,
     done: Arc<AtomicBool>,
     tx: mpsc::Sender<TreeAction<TKey, KEY_SIZE>>,
 }
@@ -106,16 +111,23 @@ impl<TKey: xdb::bplustree::TreeKey + std::marker::Send + std::marker::Sync, cons
         }
     }
 
-    pub fn send_action(&mut self, action: TreeAction<TKey, KEY_SIZE>) {
+    #[must_use]
+    pub fn send_action(&mut self, action: TreeAction<TKey, KEY_SIZE>) -> bool {
         self.done.store(false, Ordering::Relaxed);
         self.tx.send(action).unwrap();
 
         while !self.done.load(Ordering::Relaxed) {
+            if self.handle.is_finished() {
+                return false;
+            }
+
             std::hint::spin_loop();
         }
+
+        true
     }
 
-    pub fn finalize(self) {
+    pub fn finalize(self) -> Result<(), TreeError> {
         let Self {
             handle,
             done: _,
@@ -132,7 +144,7 @@ fn execute_actions<TStorage: Storage, TKey: TreeKey, const KEY_SIZE: usize>(
     actions: impl Iterator<Item = TreeAction<TKey, KEY_SIZE>>,
     after_action: impl Fn(),
     transaction_commit: impl Fn(Vec<TransactionAction<TKey, Vec<u8>>>),
-) {
+) -> Result<(), TreeError> {
     let mut transaction = tree.transaction().unwrap();
 
     let mut current_transaction_actions = vec![];
@@ -140,24 +152,27 @@ fn execute_actions<TStorage: Storage, TKey: TreeKey, const KEY_SIZE: usize>(
     for action in actions {
         match action {
             TreeAction::Insert { key, value } => {
-                insert(&mut transaction, key, &value.0).unwrap();
+                insert(&mut transaction, key, &value.0)?;
                 current_transaction_actions
                     .push(TransactionAction::Insert(key.value(), value.0.to_vec()));
             }
             TreeAction::Delete { key } => {
-                let _ = delete(&mut transaction, key).unwrap();
+                let _ = delete(&mut transaction, key)?;
                 current_transaction_actions.push(TransactionAction::Delete(key.value()));
             }
             TreeAction::Commit => {
                 transaction_commit(mem::take(&mut current_transaction_actions));
 
-                transaction.commit().unwrap();
+                transaction.commit()?;
                 transaction = tree.transaction().unwrap();
             }
             TreeAction::Rollback => {
                 current_transaction_actions.clear();
-                transaction.rollback().unwrap();
+                transaction.rollback()?;
                 transaction = tree.transaction().unwrap();
+            }
+            TreeAction::Read { key } => {
+                find(&mut transaction, key)?;
             }
         };
 
@@ -167,6 +182,8 @@ fn execute_actions<TStorage: Storage, TKey: TreeKey, const KEY_SIZE: usize>(
     transaction_commit(mem::take(&mut current_transaction_actions));
 
     transaction.commit().unwrap();
+
+    Ok(())
 }
 
 #[allow(unused)]
@@ -192,6 +209,9 @@ pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_S
                 }
                 TreeAction::Rollback => {
                     result += "TestAction::Rollback,\n";
+                }
+                TreeAction::Read { key } => {
+                    result += &format!("TestAction::Read(BigKey::new({:?})),\n", key.value());
                 }
             }
         }
@@ -248,6 +268,9 @@ pub fn run_ops_threaded<T: TreeKey + Send + Sync, const KEY_SIZE: usize>(
                 }
                 TreeAction::Commit => "TestAction::Commit,",
                 TreeAction::Rollback => "TestAction::Rollback,",
+                TreeAction::Read { key } => {
+                    &format!("TestAction::Read(BigKey::new({:?})),", key.value())
+                }
             };
 
             result += &format!(
@@ -271,14 +294,25 @@ pub fn run_ops_threaded<T: TreeKey + Send + Sync, const KEY_SIZE: usize>(
     }
 
     for action in actions {
-        threads
+        let result = threads
             .get_mut(&action.thread_id)
             .unwrap()
             .send_action(action.action.clone());
+        if !result {
+            break;
+        }
     }
 
     for thread in threads.into_values() {
-        thread.finalize();
+        match thread.finalize() {
+            Ok(_) => {}
+            Err(error) => {
+                if matches!(error, TreeError::StorageError(StorageError::Deadlock(_))) {
+                    return; // Dealocks are fine, those are generally expected and outside of a
+                    // test the action should simply be retried
+                }
+            }
+        }
     }
 
     let mut transaction = tree.transaction().unwrap();

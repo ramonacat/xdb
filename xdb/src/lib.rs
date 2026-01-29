@@ -13,6 +13,7 @@ pub mod bplustree;
 mod checksum;
 pub mod debug;
 mod page;
+mod platform;
 pub mod storage;
 
 #[derive(Debug, Clone, Copy)]

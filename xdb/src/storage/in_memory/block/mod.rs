@@ -15,7 +15,7 @@ use crate::{
     Size,
     page::{PAGE_SIZE, Page},
     storage::{
-        PageIndex,
+        PageIndex, StorageError,
         in_memory::block::{
             allocation::{
                 Allocation, r#static::StaticAllocation, uncommitted::UncommittedAllocation,
@@ -42,19 +42,27 @@ pub struct PageGuard<'block> {
 unsafe impl Send for PageGuard<'_> {}
 
 impl<'block> PageGuard<'block> {
-    unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
+    unsafe fn new(
+        page: NonNull<Page>,
+        block: &'block Block,
+        index: PageIndex,
+    ) -> Result<Self, StorageError> {
         let housekeeping = unsafe { block.housekeeping_for(index).as_ref() };
-        housekeeping.lock_read();
 
-        Self { page, block, index }
+        match housekeeping.lock_read() {
+            Ok(()) => Ok(Self { page, block, index }),
+            Err(error) => match error {
+                page_state::LockError::Deadlock => Err(StorageError::Deadlock(index)),
+            },
+        }
     }
 
     pub fn upgrade(self) -> PageGuardMut<'block> {
         let Self { page, block, index } = self;
 
         let housekeeping = unsafe { block.housekeeping_for(index).as_ref() };
+        // TODO the error mapping is the same as in new(), create some helper for it
         housekeeping.lock_upgrade();
-
         // Do not drop self, as this would make us unlock the read lock, which is incorrect, as it
         // is now a write lock
         let _ = ManuallyDrop::new(self);
@@ -132,7 +140,7 @@ impl<'block> PageRef<'block> {
         self.index
     }
 
-    pub fn get(&self) -> PageGuard<'block> {
+    pub fn get(&self) -> Result<PageGuard<'block>, StorageError> {
         unsafe { PageGuard::new(self.page, self.block, self.index) }
     }
 

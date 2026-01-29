@@ -1,11 +1,14 @@
-use std::{ffi::CStr, ptr::NonNull};
+use std::ptr::NonNull;
 
 use libc::{
-    __errno_location, _SC_PAGE_SIZE, MAP_ANONYMOUS, MAP_FAILED, MAP_NORESERVE, MAP_PRIVATE,
-    PROT_NONE, PROT_READ, PROT_WRITE, mmap, mprotect, munmap, strerror,
+    _SC_PAGE_SIZE, MAP_ANONYMOUS, MAP_FAILED, MAP_NORESERVE, MAP_PRIVATE, PROT_NONE, PROT_READ,
+    PROT_WRITE, mmap, mprotect, munmap,
 };
 
-use crate::{Size, page::PAGE_SIZE, storage::in_memory::block::allocation::Allocation};
+use crate::{
+    Size, page::PAGE_SIZE, platform::panic_on_errno,
+    storage::in_memory::block::allocation::Allocation,
+};
 
 #[derive(Debug)]
 pub struct UncommittedAllocation {
@@ -74,12 +77,4 @@ impl Allocation for UncommittedAllocation {
     fn base_address(&self) -> NonNull<u8> {
         self.address.cast()
     }
-}
-
-fn panic_on_errno() -> ! {
-    let errno = unsafe { *__errno_location() };
-
-    panic!("failed to mmap memory: {}", unsafe {
-        CStr::from_ptr(strerror(errno)).to_string_lossy()
-    });
 }

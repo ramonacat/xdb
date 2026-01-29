@@ -11,6 +11,20 @@ use crate::{
     storage::Storage,
 };
 
+pub fn find<TStorage: Storage, TKey: TreeKey>(
+    transaction: &mut TreeTransaction<TStorage, TKey>,
+    key: TKey,
+) -> Result<Option<Vec<u8>>, TreeError> {
+    let root_id = transaction.get_root()?;
+    let leaf = leaf_search(transaction, root_id, key)?;
+
+    transaction.read_nodes(leaf, |leaf| {
+        leaf.find(key)
+            .and_then(|i| leaf.entry(i))
+            .map(|x| x.value().to_vec())
+    })
+}
+
 enum LeafSearchResult {
     Recurse(AnyNodeId),
     Done(LeafNodeId),

@@ -6,10 +6,13 @@ use thiserror::Error;
 
 use crate::page::Page;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum StorageError {
     #[error("The page at index {0:?} does not exist")]
     PageNotFound(PageIndex),
+    #[error("Would deadlock when locking {0:?}")]
+    // TODO this should also have a transaction ID
+    Deadlock(PageIndex),
 }
 
 #[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Eq, Hash)]
