@@ -120,7 +120,11 @@ impl PageState {
 
         match result {
             Ok(_) => Ok(()),
-            Err(old) => self.wait(old),
+            Err(old) => {
+                self.wait(old)?;
+
+                self.lock_read()
+            }
         }
     }
 
