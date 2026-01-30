@@ -18,9 +18,7 @@ use crate::{
     storage::{
         PageIndex, StorageError,
         in_memory::block::{
-            allocation::{
-                Allocation, r#static::StaticAllocation, uncommitted::UncommittedAllocation,
-            },
+            allocation::{Allocation, uncommitted::UncommittedAllocation},
             page_state::PageState,
         },
     },
@@ -195,16 +193,9 @@ impl Block {
 
     pub fn new() -> Self {
         // TODO verify if this check can be removed
-        let housekeeping: Box<dyn Allocation> = if cfg!(miri) {
-            Box::new(StaticAllocation::new())
-        } else {
-            Box::new(UncommittedAllocation::new(Self::HOUSEKEEPING_BLOCK_SIZE))
-        };
-        let data: Box<dyn Allocation> = if cfg!(miri) {
-            Box::new(StaticAllocation::new())
-        } else {
-            Box::new(UncommittedAllocation::new(Self::SIZE))
-        };
+        let housekeeping: Box<dyn Allocation> =
+            Box::new(UncommittedAllocation::new(Self::HOUSEKEEPING_BLOCK_SIZE));
+        let data: Box<dyn Allocation> = Box::new(UncommittedAllocation::new(Self::SIZE));
 
         Self {
             housekeeping,

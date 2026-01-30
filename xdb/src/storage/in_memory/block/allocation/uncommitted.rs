@@ -26,6 +26,7 @@ impl Drop for UncommittedAllocation {
 
 impl UncommittedAllocation {
     pub fn new(size: Size) -> Self {
+        let size = if cfg!(miri) { Size::MiB(8) } else { size };
         assert!(unsafe {
             usize::try_from(libc::sysconf(_SC_PAGE_SIZE)).unwrap() == PAGE_SIZE.as_bytes()
         });
@@ -34,9 +35,13 @@ impl UncommittedAllocation {
             mmap(
                 std::ptr::null_mut(),
                 size.as_bytes(),
-                PROT_NONE,
+                if cfg!(miri) {
+                    PROT_READ | PROT_WRITE
+                } else {
+                    PROT_NONE
+                },
                 // TODO support file backed mappings
-                MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                MAP_PRIVATE | MAP_ANONYMOUS | if cfg!(miri) { 0 } else { MAP_NORESERVE },
                 -1,
                 0,
             )
@@ -61,15 +66,17 @@ impl Allocation for UncommittedAllocation {
                 && address < unsafe { self.address.byte_add(self.size.as_bytes()) }
         );
 
-        unsafe {
-            let page = address;
-            if mprotect(
-                page.cast().as_ptr(),
-                PAGE_SIZE.as_bytes(),
-                PROT_READ | PROT_WRITE,
-            ) != 0
-            {
-                panic_on_errno();
+        if !cfg!(miri) {
+            unsafe {
+                let page = address;
+                if mprotect(
+                    page.cast().as_ptr(),
+                    PAGE_SIZE.as_bytes(),
+                    PROT_READ | PROT_WRITE,
+                ) != 0
+                {
+                    panic_on_errno();
+                }
             }
         }
     }

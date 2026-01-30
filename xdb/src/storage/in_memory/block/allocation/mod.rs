@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::ptr::NonNull;
 
-pub mod r#static;
 pub mod uncommitted;
 
 pub trait Allocation: Debug + Send + Sync {
