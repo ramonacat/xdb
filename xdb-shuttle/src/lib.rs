@@ -1,52 +1,247 @@
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use shuttle::{sync::Arc, thread};
     use xdb::{
         bplustree::{
-            Tree,
+            Tree, TreeError, TreeKey,
             algorithms::{find, insert::insert},
             debug::assert_properties,
         },
-        storage::in_memory::InMemoryStorage,
+        debug::BigKey,
+        storage::{StorageError, in_memory::InMemoryStorage},
     };
 
-    #[test]
-    fn parallel_read_and_write() {
+    const ITERATIONS: usize = 100;
+
+    fn test<
+        TKey: TreeKey,
+        TThread1: Fn() -> Result<(), TreeError> + Send + 'static,
+        TThread2: Fn() -> Result<(), TreeError> + Send + 'static,
+    >(
+        thread1: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) -> TThread1 + Sync + Send + 'static,
+        thread2: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) -> TThread2 + Sync + Send + 'static,
+        verify: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) + Send + Sync + 'static,
+    ) {
         shuttle::check_random(
-            || {
+            move || {
                 let storage = InMemoryStorage::new();
-                let tree = Arc::new(Tree::<_, u64>::new(storage).unwrap());
+                let tree = Arc::new(Tree::<_, TKey>::new(storage).unwrap());
 
                 let t1 = {
                     let tree = tree.clone();
-                    thread::spawn(move || {
-                        let mut transaction = tree.transaction().unwrap();
 
-                        find(&mut transaction, 1).unwrap();
-                        transaction.commit().unwrap();
-                    })
+                    thread::spawn((thread1)(tree))
                 };
 
                 let t2 = {
                     let tree = tree.clone();
-                    thread::spawn(move || {
-                        let mut transaction = tree.transaction().unwrap();
-
-                        insert(&mut transaction, 1, &vec![123]).unwrap();
-                        transaction.commit().unwrap();
-                    })
+                    thread::spawn((thread2)(tree))
                 };
 
-                t1.join().unwrap();
-                t2.join().unwrap();
+                if matches!(
+                    t1.join().unwrap(),
+                    Err(TreeError::StorageError(StorageError::Deadlock(_)))
+                ) {
+                    return;
+                }
+                if matches!(
+                    t2.join().unwrap(),
+                    Err(TreeError::StorageError(StorageError::Deadlock(_)))
+                ) {
+                    return;
+                }
 
+                verify(tree);
+            },
+            ITERATIONS,
+        );
+    }
+
+    #[test]
+    fn parallel_read_and_write() {
+        test(
+            |tree| {
+                move || {
+                    let mut transaction = tree.transaction()?;
+
+                    find(&mut transaction, 1)?;
+                    transaction.commit()?;
+
+                    Ok(())
+                }
+            },
+            |tree| {
+                move || {
+                    let mut transaction = tree.transaction()?;
+
+                    insert(&mut transaction, 1, &vec![123])?;
+                    transaction.commit()?;
+
+                    Ok(())
+                }
+            },
+            |tree| {
                 assert_properties(&mut tree.transaction().unwrap());
                 assert_eq!(
                     &tree.iter().unwrap().map(|x| x.unwrap()).collect::<Vec<_>>(),
                     &vec![(1, vec![123])]
                 );
             },
-            100,
+        );
+    }
+
+    #[test]
+    fn big_writes_no_overlap() {
+        test(
+            |tree| {
+                move || {
+                    let mut transaction = tree.transaction()?;
+
+                    for i in 50..100u64 {
+                        insert(
+                            &mut transaction,
+                            BigKey::<u64, 1024>::new(i),
+                            &i.to_ne_bytes(),
+                        )?;
+                    }
+
+                    transaction.commit()?;
+
+                    Ok(())
+                }
+            },
+            |tree| {
+                move || {
+                    let mut transaction = tree.transaction()?;
+
+                    for i in 0..50 {
+                        insert(&mut transaction, BigKey::new(i), &i.to_ne_bytes())?;
+                    }
+
+                    transaction.commit()?;
+
+                    Ok(())
+                }
+            },
+            |tree| {
+                assert_properties(&mut tree.transaction().unwrap());
+                assert_eq!(
+                    &tree
+                        .iter()
+                        .unwrap()
+                        .map(|x| x.unwrap())
+                        .map(|(k, v)| (k.value(), v))
+                        .collect::<Vec<_>>(),
+                    &(0..100u64)
+                        .map(|x| (x, x.to_ne_bytes().into_iter().collect::<Vec<_>>()))
+                        .collect::<Vec<_>>()
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn big_writes() {
+        test(
+            |tree| {
+                move || {
+                    let mut transaction = tree.transaction()?;
+
+                    for i in (0..100).filter(|x| x % 2 == 0) {
+                        insert(
+                            &mut transaction,
+                            BigKey::<u64, 1024>::new(i),
+                            &i.to_ne_bytes(),
+                        )?;
+                    }
+
+                    transaction.commit()?;
+
+                    Ok(())
+                }
+            },
+            |tree| {
+                move || {
+                    let mut transaction = tree.transaction()?;
+
+                    for i in (0..100).filter(|x| x % 2 != 0) {
+                        insert(&mut transaction, BigKey::new(i), &i.to_ne_bytes())?;
+                    }
+
+                    transaction.commit()?;
+
+                    Ok(())
+                }
+            },
+            |tree| {
+                assert_properties(&mut tree.transaction().unwrap());
+                assert_eq!(
+                    &tree
+                        .iter()
+                        .unwrap()
+                        .map(|x| x.unwrap())
+                        .map(|(k, v)| (k.value(), v))
+                        .collect::<Vec<_>>(),
+                    &(0..100u64)
+                        .map(|x| (x, x.to_ne_bytes().into_iter().collect::<Vec<_>>()))
+                        .collect::<Vec<_>>()
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn big_writes_and_read() {
+        test(
+            |tree| {
+                move || {
+                    let mut transaction = tree.transaction()?;
+                    for i in (0..1000).filter(|x| x % 2 == 0) {
+                        insert(
+                            &mut transaction,
+                            BigKey::<u64, 1024>::new(i),
+                            &i.to_ne_bytes(),
+                        )?;
+                    }
+
+                    for i in (0..1000).filter(|x| x % 2 == 1) {
+                        insert(
+                            &mut transaction,
+                            BigKey::<u64, 1024>::new(i),
+                            &i.to_ne_bytes(),
+                        )?;
+                    }
+                    transaction.commit()?;
+
+                    Ok(())
+                }
+            },
+            |tree| {
+                move || {
+                    let mut transaction = tree.transaction()?;
+                    for i in 1000..0 {
+                        find(&mut transaction, BigKey::new(i))?;
+                    }
+                    transaction.commit()?;
+
+                    Ok(())
+                }
+            },
+            |tree| {
+                assert_properties(&mut tree.transaction().unwrap());
+                assert_eq!(
+                    &tree
+                        .iter()
+                        .unwrap()
+                        .map(|x| x.unwrap())
+                        .map(|(k, v)| (k.value(), v))
+                        .collect::<Vec<_>>(),
+                    &(0..1000u64)
+                        .map(|x| (x, x.to_ne_bytes().into_iter().collect::<Vec<_>>()))
+                        .collect::<Vec<_>>()
+                );
+            },
         );
     }
 }

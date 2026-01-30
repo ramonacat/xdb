@@ -6,3 +6,6 @@ edition = "2024"
 [dev-dependencies]
 shuttle = "0.8.1"
 xdb = {path = "../xdb/", features = ["shuttle"]}
+
+[dependencies]
+pretty_assertions = "1.4.1"

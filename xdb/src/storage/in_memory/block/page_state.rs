@@ -67,19 +67,17 @@ impl PageState {
         match self
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
-                if f & Self::MASK_READER_COUNT >> Self::SHIFT_READER_COUNT > 0 {
+                if ((f & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT) > 0 {
                     return None;
                 }
 
-                if f & Self::MASK_HAS_WRITER > 0 {
+                if (f & Self::MASK_HAS_WRITER) > 0 {
                     return None;
                 }
 
                 Some(f | Self::MASK_HAS_WRITER)
             }) {
-            Ok(_) => {
-                self.futex().wake(1).unwrap();
-            }
+            Ok(_) => {}
             Err(_) => todo!(),
         }
     }
@@ -174,7 +172,11 @@ impl PageState {
                 Some((x & !Self::MASK_READER_COUNT) | Self::MASK_HAS_WRITER)
             }) {
             Ok(_) => Ok(()),
-            Err(old) => self.wait(old),
+            Err(old) => {
+                self.wait(old)?;
+
+                self.lock_upgrade()
+            }
         }
     }
 }

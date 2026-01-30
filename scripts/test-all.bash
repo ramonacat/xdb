@@ -8,6 +8,8 @@ cargo fmt --check
 cargo +nightly miri nextest run
 pushd xdb-shuttle
 cargo test --release
+cargo clippy
+cargo fmt --check
 popd
 
 while read -r line

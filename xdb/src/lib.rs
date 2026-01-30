@@ -18,10 +18,10 @@ mod platform;
 pub mod storage;
 
 #[cfg(feature = "shuttle")]
-pub use shuttle::{hint, sync};
+pub use shuttle::{hint, sync, thread};
 
 #[cfg(not(feature = "shuttle"))]
-pub use std::{hint, sync};
+pub use std::{hint, sync, thread};
 
 #[derive(Debug, Clone, Copy)]
 enum Size {
