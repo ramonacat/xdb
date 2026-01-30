@@ -1,3 +1,5 @@
+pub mod futex;
+
 use std::ffi::CStr;
 
 use libc::{__errno_location, strerror};

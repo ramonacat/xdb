@@ -1,9 +1,13 @@
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::{
+    marker::PhantomPinned,
+    pin::Pin,
+    sync::atomic::{AtomicU32, Ordering},
+    time::Duration,
+};
 
-use libc::{ETIMEDOUT, FUTEX_WAIT, FUTEX_WAKE, SYS_futex, syscall, timespec};
 use thiserror::Error;
 
-use crate::platform::{errno, panic_on_errno};
+use crate::platform::futex::{Futex, FutexError};
 
 const fn mask32(start_bit: u32, end_bit: u32) -> u32 {
     assert!(end_bit <= start_bit);
@@ -17,7 +21,7 @@ const fn mask32(start_bit: u32, end_bit: u32) -> u32 {
 
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct PageState(AtomicU32);
+pub struct PageState(Futex, PhantomPinned);
 
 const _: () = assert!(size_of::<PageState>() == size_of::<u32>());
 
@@ -39,25 +43,33 @@ impl PageState {
     const MASK_HAS_WRITER: u32 = 1 << 11;
 
     pub const fn new() -> Self {
-        Self(AtomicU32::new(0))
+        Self(Futex::new(0), PhantomPinned)
     }
 
-    pub fn mark_initialized(&self) {
+    const fn futex(self: Pin<&Self>) -> Pin<&Futex> {
+        unsafe { Pin::new_unchecked(&self.get_ref().0) }
+    }
+
+    const fn atomic(self: Pin<&Self>) -> &AtomicU32 {
+        self.futex().atomic()
+    }
+
+    pub fn mark_initialized(self: Pin<&Self>) {
         let previous_state = self
-            .0
+            .atomic()
             .fetch_or(Self::MASK_IS_INITIALIZED, Ordering::Release);
         assert!(previous_state & Self::MASK_IS_INITIALIZED == 0);
     }
 
-    pub fn is_initialized(&self) -> bool {
-        self.0.load(Ordering::Acquire) & Self::MASK_IS_INITIALIZED > 0
+    pub fn is_initialized(self: Pin<&Self>) -> bool {
+        self.atomic().load(Ordering::Acquire) & Self::MASK_IS_INITIALIZED > 0
     }
 
-    pub fn lock_write(&self) {
-        assert!(self.is_initialized());
+    pub fn lock_write(self: Pin<&Self>) {
+        debug_assert!(self.is_initialized());
 
         match self
-            .0
+            .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
                 if f & Self::MASK_READER_COUNT >> Self::SHIFT_READER_COUNT > 0 {
                     return None;
@@ -70,36 +82,32 @@ impl PageState {
                 Some(f | Self::MASK_HAS_WRITER)
             }) {
             Ok(_) => {
-                if unsafe { syscall(SYS_futex, &raw const self.0, FUTEX_WAKE, 1u32) } == -1 {
-                    panic_on_errno();
-                }
+                self.futex().wake(1).unwrap();
             }
             Err(_) => todo!(),
         }
     }
 
-    pub fn unlock_write(&self) {
-        assert!(self.is_initialized());
+    pub fn unlock_write(self: Pin<&Self>) {
+        debug_assert!(self.is_initialized());
 
         match self
-            .0
+            .atomic()
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 Some(x & !Self::MASK_HAS_WRITER)
             }) {
             Ok(_) => {
-                if unsafe { syscall(SYS_futex, &raw const self.0, FUTEX_WAKE, 1u32) } == -1 {
-                    panic_on_errno();
-                }
+                self.futex().wake(1).unwrap();
             }
             Err(_) => todo!(),
         }
     }
 
-    pub fn lock_read(&self) -> Result<(), LockError> {
-        assert!(self.is_initialized());
+    pub fn lock_read(self: Pin<&Self>) -> Result<(), LockError> {
+        debug_assert!(self.is_initialized());
 
         let result = self
-            .0
+            .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
                 if x & Self::MASK_HAS_WRITER > 0 {
                     return None;
@@ -115,44 +123,23 @@ impl PageState {
             });
 
         match result {
-            Ok(_) => {}
+            Ok(_) => Ok(()),
             Err(old) => {
                 // TODO 1s is a lot of time
-                // TODO this might return EAGAIN if the value has changed before the call, handle that
-                let timeout = timespec {
-                    tv_sec: 1,
-                    tv_nsec: 0,
-                };
-
-                if unsafe {
-                    syscall(
-                        SYS_futex,
-                        &raw const self.0,
-                        FUTEX_WAIT,
-                        old,
-                        &raw const timeout,
-                    )
-                } != 0
-                {
-                    if errno() == ETIMEDOUT {
-                        // TODO real deadlock detection, instead of waiting ages for a timeout
-                        return Err(LockError::Deadlock);
-                    }
-                    panic_on_errno();
+                match self.futex().wait(old, Some(Duration::from_secs(1))) {
+                    Ok(()) => Ok(()),
+                    Err(FutexError::Timeout) => Err(LockError::Deadlock),
+                    Err(FutexError::Race) => self.lock_read(),
                 }
-
-                self.lock_read()?;
             }
         }
-
-        Ok(())
     }
 
-    pub fn unlock_read(&self) {
-        assert!(self.is_initialized());
+    pub fn unlock_read(self: Pin<&Self>) {
+        debug_assert!(self.is_initialized());
 
         match self
-            .0
+            .atomic()
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 assert!(x & Self::MASK_HAS_WRITER == 0);
 
@@ -163,16 +150,14 @@ impl PageState {
                 Some((x & !Self::MASK_READER_COUNT) | shifted_new_reader_count)
             }) {
             Ok(_) => {
-                if unsafe { syscall(SYS_futex, &raw const self.0, FUTEX_WAKE, 1u32) } == -1 {
-                    panic_on_errno();
-                }
+                self.futex().wake(1).unwrap();
             }
             Err(_) => todo!(),
         }
     }
 
-    pub fn lock_upgrade(&self) {
-        self.0
+    pub fn lock_upgrade(self: Pin<&Self>) {
+        self.atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
                 // TODO we should wait on a futex here instead once we have multiple threads
                 assert!((x & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT == 1);

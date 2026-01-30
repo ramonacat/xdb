@@ -7,6 +7,7 @@ use std::{
     fmt::Debug,
     mem::{ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut},
+    pin::Pin,
     ptr::NonNull,
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -47,7 +48,7 @@ impl<'block> PageGuard<'block> {
         block: &'block Block,
         index: PageIndex,
     ) -> Result<Self, StorageError> {
-        let housekeeping = unsafe { block.housekeeping_for(index).as_ref() };
+        let housekeeping = unsafe { block.housekeeping_for(index) };
 
         match housekeeping.lock_read() {
             Ok(()) => Ok(Self { page, block, index }),
@@ -60,7 +61,7 @@ impl<'block> PageGuard<'block> {
     pub fn upgrade(self) -> PageGuardMut<'block> {
         let Self { page, block, index } = self;
 
-        let housekeeping = unsafe { block.housekeeping_for(index).as_ref() };
+        let housekeeping = unsafe { block.housekeeping_for(index) };
         // TODO the error mapping is the same as in new(), create some helper for it
         housekeeping.lock_upgrade();
         // Do not drop self, as this would make us unlock the read lock, which is incorrect, as it
@@ -87,7 +88,7 @@ impl Deref for PageGuard<'_> {
 
 impl Drop for PageGuard<'_> {
     fn drop(&mut self) {
-        unsafe { self.block.housekeeping_for(self.index).as_ref() }.unlock_read();
+        unsafe { self.block.housekeeping_for(self.index) }.unlock_read();
     }
 }
 
@@ -102,7 +103,7 @@ unsafe impl Send for PageGuardMut<'_> {}
 
 impl<'block> PageGuardMut<'block> {
     unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
-        let housekeeping = unsafe { block.housekeeping_for(index).as_ref() };
+        let housekeeping = unsafe { block.housekeeping_for(index) };
         housekeeping.lock_write();
 
         Self { page, block, index }
@@ -131,7 +132,7 @@ impl DerefMut for PageGuardMut<'_> {
 
 impl Drop for PageGuardMut<'_> {
     fn drop(&mut self) {
-        unsafe { self.block.housekeeping_for(self.index).as_ref() }.unlock_write();
+        unsafe { self.block.housekeeping_for(self.index) }.unlock_write();
     }
 }
 
@@ -170,7 +171,7 @@ impl<'block> UninitializedPageGuard<'block> {
         let initialied = unsafe { &raw mut *self.page.as_mut().write(page) };
 
         let housekeeping = unsafe { self.block.housekeeping_for(self.index) };
-        unsafe { housekeeping.as_ref() }.mark_initialized();
+        housekeeping.mark_initialized();
 
         PageRef {
             page: NonNull::new(initialied).unwrap(),
@@ -193,6 +194,7 @@ impl Block {
     const HOUSEKEEPING_BLOCK_SIZE: Size = Size::of::<PageState>().multiply(Self::PAGE_COUNT);
 
     pub fn new() -> Self {
+        // TODO verify if this check can be removed
         let housekeeping: Box<dyn Allocation> = if cfg!(miri) {
             Box::new(StaticAllocation::new())
         } else {
@@ -216,7 +218,7 @@ impl Block {
 
         let housekeeping = unsafe { self.housekeeping_for(index) };
 
-        assert!(unsafe { housekeeping.as_ref() }.is_initialized());
+        assert!(housekeeping.is_initialized());
 
         let page = unsafe {
             self.data
@@ -284,14 +286,16 @@ impl Block {
         page_state
     }
 
-    unsafe fn housekeeping_for(&self, index: PageIndex) -> NonNull<PageState> {
+    unsafe fn housekeeping_for(&self, index: PageIndex) -> Pin<&PageState> {
         assert!(index.0 < Self::PAGE_COUNT as u64);
 
-        unsafe {
+        let address = unsafe {
             self.housekeeping
                 .base_address()
                 .cast()
                 .add(usize::try_from(index.0).unwrap())
-        }
+        };
+
+        unsafe { Pin::new_unchecked(address.as_ref()) }
     }
 }

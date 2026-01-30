@@ -1,6 +1,7 @@
 // TODO create a server + a test app which will run many threads with many simulatenous
 // transactions to strees test
 
+// TODO require `SAFETY: ...` comments
 #![deny(clippy::all, clippy::pedantic, clippy::nursery, warnings)]
 #![allow(clippy::missing_errors_doc)]
 // TODO clean up panics and then enable and document them
