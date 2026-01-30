@@ -1,9 +1,11 @@
 use std::{marker::PhantomPinned, pin::Pin, ptr, sync::atomic::AtomicU32, time::Duration};
 
-use libc::{EAGAIN, ETIMEDOUT, FUTEX_WAIT, FUTEX_WAKE, SYS_futex, syscall, timespec};
+use libc::{
+    EAGAIN, EFAULT, EINTR, EINVAL, ETIMEDOUT, FUTEX_WAIT, FUTEX_WAKE, SYS_futex, syscall, timespec,
+};
 use thiserror::Error;
 
-use crate::platform::{errno, panic_on_errno};
+use crate::platform::errno;
 
 #[derive(Debug, Error)]
 pub enum FutexError {
@@ -11,6 +13,8 @@ pub enum FutexError {
     Race,
     #[error("timed out")]
     Timeout,
+    #[error("the kernel state is inconsistent with the method called")]
+    InconsistentState,
 }
 
 #[derive(Debug)]
@@ -43,20 +47,26 @@ impl Futex {
         }
 
         match errno() {
-            EAGAIN => Err(FutexError::Race),
+            // EAGAIN means value was not the expectedd one, EINTR means we were interrupted by a
+            // signal
+            EAGAIN | EINTR => Err(FutexError::Race),
             ETIMEDOUT => Err(FutexError::Timeout),
-            // TODO handle all the possible errors here
-            _ => panic_on_errno(),
+            EFAULT => unreachable!("timespec address did not point to a valid address"),
+            EINVAL => unreachable!("timespec nanoseconds were over 1s"),
+            e => unreachable!("unexpected error: {e}"),
         }
     }
 
-    #[allow(clippy::unnecessary_wraps)] // TODO handle errors for real
-    pub fn wake(self: Pin<&Self>, count: u32) -> Result<(), FutexError> {
-        if unsafe { syscall(SYS_futex, &raw const self.0, FUTEX_WAKE, count) } == -1 {
-            panic_on_errno();
+    pub fn wake(self: Pin<&Self>, count: u32) -> Result<u64, FutexError> {
+        let callers_woken_up = unsafe { syscall(SYS_futex, &raw const self.0, FUTEX_WAKE, count) };
+        if callers_woken_up == -1 {
+            match errno() {
+                EINVAL => return Err(FutexError::InconsistentState),
+                e => unreachable!("unexpected error: {e}"),
+            }
         }
 
-        Ok(())
+        Ok(u64::try_from(callers_woken_up).unwrap())
     }
 
     pub const fn atomic(self: Pin<&Self>) -> &AtomicU32 {

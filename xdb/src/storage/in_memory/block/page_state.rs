@@ -130,6 +130,9 @@ impl PageState {
                     Ok(()) => Ok(()),
                     Err(FutexError::Timeout) => Err(LockError::Deadlock),
                     Err(FutexError::Race) => self.lock_read(),
+                    Err(FutexError::InconsistentState) => {
+                        unreachable!("futex was in an inconsistent state")
+                    }
                 }
             }
         }
