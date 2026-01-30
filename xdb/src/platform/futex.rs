@@ -1,4 +1,5 @@
-use std::{marker::PhantomPinned, pin::Pin, ptr, sync::atomic::AtomicU32, time::Duration};
+use crate::sync::atomic::{AtomicU32, Ordering};
+use std::{marker::PhantomPinned, pin::Pin, ptr, time::Duration};
 
 use libc::{
     EAGAIN, EFAULT, EINTR, EINVAL, ETIMEDOUT, FUTEX_WAIT, FUTEX_WAKE, SYS_futex, syscall, timespec,
@@ -27,6 +28,14 @@ impl Futex {
     }
 
     pub fn wait(self: Pin<&Self>, value: u32, timeout: Option<Duration>) -> Result<(), FutexError> {
+        if cfg!(feature = "shuttle") {
+            while self.0.load(Ordering::Acquire) == value {
+                crate::hint::spin_loop();
+            }
+
+            return Ok(());
+        }
+
         let timespec = timeout.map(|x| timespec {
             tv_sec: x.as_secs().cast_signed(),
             tv_nsec: i64::from(x.subsec_nanos()),
@@ -50,6 +59,7 @@ impl Futex {
             // EAGAIN means value was not the expectedd one, EINTR means we were interrupted by a
             // signal
             EAGAIN | EINTR => Err(FutexError::Race),
+
             ETIMEDOUT => Err(FutexError::Timeout),
             EFAULT => unreachable!("timespec address did not point to a valid address"),
             EINVAL => unreachable!("timespec nanoseconds were over 1s"),
@@ -58,6 +68,10 @@ impl Futex {
     }
 
     pub fn wake(self: Pin<&Self>, count: u32) -> Result<u64, FutexError> {
+        if cfg!(feature = "shuttle") {
+            return Ok(count.into());
+        }
+
         let callers_woken_up = unsafe { syscall(SYS_futex, &raw const self.0, FUTEX_WAKE, count) };
         if callers_woken_up == -1 {
             match errno() {

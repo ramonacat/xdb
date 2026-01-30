@@ -219,22 +219,16 @@ impl TreeHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        bplustree::{algorithms::find, debug::TransactionAction},
-        storage::instrumented::InstrumentedStorage,
+    use crate::sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
     };
+    use crate::{bplustree::debug::TransactionAction, storage::instrumented::InstrumentedStorage};
     use std::{
         collections::BTreeMap,
-        hint,
         io::Write,
         mem,
         panic::{RefUnwindSafe, UnwindSafe, catch_unwind},
-        sync::{
-            Arc, Mutex,
-            atomic::{AtomicBool, AtomicUsize, Ordering},
-            mpsc,
-        },
-        thread,
     };
 
     use crate::{
@@ -394,14 +388,8 @@ mod test {
     enum TestAction<TKey> {
         Insert(TKey, Vec<u8>),
         Delete(TKey),
-        Read(TKey),
         Commit,
         Rollback,
-    }
-
-    struct InThreadTestAction<TKey> {
-        thread: usize,
-        action: TestAction<TKey>,
     }
 
     fn execute_test_actions<TKey: TreeKey, const SIZE: usize>(
@@ -440,7 +428,6 @@ mod test {
 
                     result
                 }
-                TestAction::Read(key) => find(&mut transaction, key).map(|_| ()),
             };
 
             after_action(result);
@@ -448,80 +435,6 @@ mod test {
 
         commit(mem::take(&mut uncommitted_actions));
         transaction.commit().unwrap();
-    }
-
-    fn threaded_test_from_data<TKey: TreeKey + Send + Sync, const SIZE: usize>(
-        data: Vec<InThreadTestAction<BigKey<TKey, SIZE>>>,
-        expected_error: impl FnOnce(&TreeError) -> bool,
-    ) {
-        if !cfg!(miri) {
-            let _ = env_logger::builder().is_test(true).try_init();
-        }
-
-        let rust_tree = Arc::new(Mutex::new(BTreeMap::new()));
-        let storage = InMemoryStorage::new();
-        let tree = Arc::new(Tree::new(storage).unwrap());
-        let mut threads = vec![];
-        let error = Arc::new(Mutex::new(None));
-
-        for _ in 0..4 {
-            let (tx, rx) = mpsc::channel();
-            let rust_tree = rust_tree.clone();
-            let tree = tree.clone();
-            let done = Arc::new(AtomicBool::new(false));
-            let done_ = done.clone();
-            let error = error.clone();
-
-            let handle = thread::spawn(move || {
-                execute_test_actions(
-                    &tree,
-                    rx.into_iter(),
-                    |uncomitted| {
-                        for action in uncomitted {
-                            action.execute_on(&mut rust_tree.lock().unwrap());
-                        }
-                    },
-                    |result| {
-                        done_.store(true, Ordering::Release);
-                        if let Err(err) = result {
-                            *error.lock().unwrap() = Some(err);
-                        }
-                    },
-                );
-            });
-
-            threads.push((tx, handle, done));
-        }
-
-        for datum in data {
-            threads[datum.thread].2.store(false, Ordering::Release);
-
-            threads[datum.thread].0.send(datum.action).unwrap();
-
-            while !threads[datum.thread].2.load(Ordering::Acquire) {
-                if threads[datum.thread].1.is_finished() {
-                    panic!("thread exited unexpectedly");
-                }
-
-                hint::spin_loop();
-            }
-
-            if let Some(error) = error.lock().unwrap().clone() {
-                if expected_error(&error) {
-                    return;
-                }
-
-                panic!("Unexpected error: {error}");
-            }
-        }
-
-        for (tx, handle, _) in threads {
-            drop(tx);
-            handle.join().unwrap();
-        }
-
-        assert_tree_equal(&tree, &rust_tree.lock().unwrap(), |k| k.value());
-        assert_properties(&mut tree.transaction().unwrap());
     }
 
     fn test_from_data<TKey: TreeKey + UnwindSafe + RefUnwindSafe, const SIZE: usize>(
@@ -1295,40 +1208,5 @@ mod test {
             TestAction::Insert(BigKey::new(1), vec![0u8; 1]),
         ];
         test_from_data(data);
-    }
-
-    #[test]
-    fn write_read_deadlock() {
-        let data = vec![
-            InThreadTestAction {
-                thread: 3,
-                action: TestAction::Delete(BigKey::<u64, 1024>::new(18446462598749748992)),
-            },
-            InThreadTestAction {
-                thread: 0,
-                action: TestAction::Insert(BigKey::new(0), vec![0u8; 1]),
-            },
-        ];
-
-        threaded_test_from_data(data, |error| {
-            matches!(error, TreeError::StorageError(StorageError::Deadlock(_)))
-        });
-    }
-
-    #[test]
-    fn read_write_deadlock() {
-        let data = vec![
-            InThreadTestAction {
-                thread: 3,
-                action: TestAction::Read(BigKey::<u64, 1024>::new(12903093385206628604)),
-            },
-            InThreadTestAction {
-                thread: 0,
-                action: TestAction::Insert(BigKey::new(0), vec![0u8; 1]),
-            },
-        ];
-        threaded_test_from_data(data, |error| {
-            matches!(error, TreeError::StorageError(StorageError::Deadlock(_)))
-        });
     }
 }

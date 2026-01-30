@@ -8,13 +8,13 @@ use std::{
     ops::{Deref, DerefMut},
     pin::Pin,
     ptr::NonNull,
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use crate::{
     Size,
     page::{PAGE_SIZE, Page},
     storage::{PageIndex, StorageError, in_memory::block::page_state::PageState},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 #[derive(Debug)]

@@ -2,6 +2,9 @@
 resolver = "3"
 members = ["xdb", "xdb-cli", "fuzz", "xdb-server", "xdb-client"]
 
+# this needs a special feature, which breaks code that doesn't use shuttle
+exclude = ["xdb-shuttle"]
+
 [profile.release]
 debug = "line-tables-only"
 [profile.bench]

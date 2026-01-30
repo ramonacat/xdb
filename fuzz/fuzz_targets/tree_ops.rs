@@ -1,11 +1,8 @@
 use arbitrary::Arbitrary;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::mem;
-use std::ops::DerefMut;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, mpsc};
-use std::thread::{self, JoinHandle};
+use std::sync::{Arc, Mutex};
 use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::find;
 use xdb::bplustree::algorithms::insert::insert;
@@ -13,8 +10,8 @@ use xdb::bplustree::debug::TransactionAction;
 use xdb::bplustree::debug::{assert_properties, assert_tree_equal};
 use xdb::bplustree::{Tree, TreeError, TreeKey};
 use xdb::debug::BigKey;
+use xdb::storage::Storage;
 use xdb::storage::in_memory::InMemoryStorage;
-use xdb::storage::{Storage, StorageError};
 
 #[derive(PartialEq, Eq, Clone)]
 pub struct Value(pub Vec<u8>);
@@ -52,91 +49,6 @@ pub enum TreeAction<T: TreeKey, const KEY_SIZE: usize> {
     Read {
         key: BigKey<T, KEY_SIZE>,
     },
-}
-
-pub const THREAD_COUNT: usize = 4;
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct FuzzThreadId(pub usize);
-
-impl<'a> Arbitrary<'a> for FuzzThreadId {
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        Ok(Self(u.int_in_range(0..=THREAD_COUNT - 1)?))
-    }
-}
-
-#[derive(Debug, Arbitrary)]
-pub struct InThreadAction<T: TreeKey, const KEY_SIZE: usize> {
-    pub action: TreeAction<T, KEY_SIZE>,
-    pub thread_id: FuzzThreadId,
-}
-
-#[derive(Debug)]
-pub struct FuzzThread<TKey: TreeKey + Send + Sync, const KEY_SIZE: usize> {
-    handle: JoinHandle<Result<(), TreeError>>,
-    done: Arc<AtomicBool>,
-    tx: mpsc::Sender<TreeAction<TKey, KEY_SIZE>>,
-}
-
-impl<TKey: xdb::bplustree::TreeKey + std::marker::Send + std::marker::Sync, const KEY_SIZE: usize>
-    FuzzThread<TKey, KEY_SIZE>
-{
-    pub fn spawn<TStorage: Storage + 'static>(
-        tree: Arc<Tree<TStorage, BigKey<TKey, KEY_SIZE>>>,
-        rust_btree: Arc<Mutex<BTreeMap<TKey, Vec<u8>>>>,
-    ) -> Self {
-        let done = Arc::new(AtomicBool::new(true));
-        let (tx, rx) = mpsc::channel::<TreeAction<TKey, KEY_SIZE>>();
-
-        let done_ = done.clone();
-        let handle = thread::spawn(move || {
-            execute_actions(
-                tree.as_ref(),
-                rx.into_iter(),
-                || done_.store(true, Ordering::Relaxed),
-                |actions| {
-                    let mut tree = rust_btree.lock().unwrap();
-
-                    for action in actions {
-                        action.execute_on(tree.deref_mut());
-                    }
-                },
-            )
-        });
-
-        Self {
-            handle,
-            done: done.clone(),
-            tx,
-        }
-    }
-
-    #[must_use]
-    pub fn send_action(&mut self, action: TreeAction<TKey, KEY_SIZE>) -> bool {
-        self.done.store(false, Ordering::Relaxed);
-        self.tx.send(action).unwrap();
-
-        while !self.done.load(Ordering::Relaxed) {
-            if self.handle.is_finished() {
-                return false;
-            }
-
-            std::hint::spin_loop();
-        }
-
-        true
-    }
-
-    pub fn finalize(self) -> Result<(), TreeError> {
-        let Self {
-            handle,
-            done: _,
-            tx,
-        } = self;
-        drop(tx);
-
-        handle.join().unwrap()
-    }
 }
 
 fn execute_actions<TStorage: Storage, TKey: TreeKey, const KEY_SIZE: usize>(
@@ -248,75 +160,3 @@ pub fn run_ops<T: TreeKey, const KEY_SIZE: usize>(actions: &[TreeAction<T, KEY_S
 
 // TODO a lot of the code is duplicated with run_ops and also the btree tests run on very similar
 // concepts, clean this up
-#[allow(unused)]
-pub fn run_ops_threaded<T: TreeKey + Send + Sync, const KEY_SIZE: usize>(
-    actions: &[InThreadAction<T, KEY_SIZE>],
-) {
-    #[cfg(true)]
-    {
-        let mut result = "vec![\n".to_string();
-
-        for action in actions {
-            let formatted_action = match &action.action {
-                TreeAction::Insert { key, value } => &format!(
-                    "TestAction::Insert(BigKey::new({:?}), vec![0u8; {}]),",
-                    key.value(),
-                    value.0.len()
-                ),
-                TreeAction::Delete { key } => {
-                    &format!("TestAction::Delete(BigKey::new({:?})),", key.value())
-                }
-                TreeAction::Commit => "TestAction::Commit,",
-                TreeAction::Rollback => "TestAction::Rollback,",
-                TreeAction::Read { key } => {
-                    &format!("TestAction::Read(BigKey::new({:?})),", key.value())
-                }
-            };
-
-            result += &format!(
-                "InThreadTestAction {{ thread: {}, action: {} }},\n",
-                action.thread_id.0, formatted_action
-            );
-        }
-
-        result += "];\n";
-        std::fs::write("/tmp/actions", result).unwrap();
-    }
-
-    let storage = InMemoryStorage::new();
-    let tree = Arc::new(Tree::new(storage).unwrap());
-
-    let mut threads: HashMap<FuzzThreadId, FuzzThread<T, KEY_SIZE>> = HashMap::new();
-    let rust_btree = Arc::new(Mutex::new(BTreeMap::new()));
-    for i in 0..THREAD_COUNT {
-        let thread = FuzzThread::spawn(tree.clone(), rust_btree.clone());
-        threads.insert(FuzzThreadId(i), thread);
-    }
-
-    for action in actions {
-        let result = threads
-            .get_mut(&action.thread_id)
-            .unwrap()
-            .send_action(action.action.clone());
-        if !result {
-            break;
-        }
-    }
-
-    for thread in threads.into_values() {
-        match thread.finalize() {
-            Ok(_) => {}
-            Err(error) => {
-                if matches!(error, TreeError::StorageError(StorageError::Deadlock(_))) {
-                    return; // Dealocks are fine, those are generally expected and outside of a
-                    // test the action should simply be retried
-                }
-            }
-        }
-    }
-
-    let mut transaction = tree.transaction().unwrap();
-
-    assert_properties(&mut transaction);
-    assert_tree_equal(&tree, &rust_btree.lock().unwrap(), |k| k.value());
-}

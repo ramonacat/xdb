@@ -1,10 +1,10 @@
 #![deny(clippy::all, clippy::pedantic, clippy::nursery, warnings)]
 
-use std::sync::{
+use xdb::storage::instrumented::InstrumentedStorage;
+use xdb::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
-use xdb::storage::instrumented::InstrumentedStorage;
 
 use xdb::{
     bplustree::{

@@ -1,10 +1,8 @@
-use std::{
-    marker::PhantomData,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+use crate::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
 };
+use std::marker::PhantomData;
 
 use super::{Page, PageIndex, StorageError, Transaction};
 use crate::storage::Storage;

@@ -1,9 +1,5 @@
-use std::{
-    marker::PhantomPinned,
-    pin::Pin,
-    sync::atomic::{AtomicU32, Ordering},
-    time::Duration,
-};
+use crate::sync::atomic::{AtomicU32, Ordering};
+use std::{marker::PhantomPinned, pin::Pin, time::Duration};
 
 use thiserror::Error;
 
@@ -23,6 +19,7 @@ const fn mask32(start_bit: u32, end_bit: u32) -> u32 {
 #[repr(transparent)]
 pub struct PageState(Futex, PhantomPinned);
 
+#[cfg(not(feature = "shuttle"))]
 const _: () = assert!(size_of::<PageState>() == size_of::<u32>());
 
 #[derive(Debug, Error)]
