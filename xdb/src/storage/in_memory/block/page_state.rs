@@ -61,7 +61,7 @@ impl PageState {
         self.atomic().load(Ordering::Acquire) & Self::MASK_IS_INITIALIZED > 0
     }
 
-    pub fn lock_write(self: Pin<&Self>) {
+    pub fn lock_write(self: Pin<&Self>) -> Result<(), LockError> {
         debug_assert!(self.is_initialized());
 
         match self
@@ -78,8 +78,14 @@ impl PageState {
                 Some(f | Self::MASK_HAS_WRITER)
             }) {
             Ok(_) => {}
-            Err(_) => todo!(),
+            Err(old) => {
+                self.wait(old)?;
+
+                self.lock_write()?;
+            }
         }
+
+        Ok(())
     }
 
     pub fn unlock_write(self: Pin<&Self>) {

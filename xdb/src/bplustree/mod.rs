@@ -192,6 +192,7 @@ const _: () = assert!(
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum TreeError {
     #[error("Storage error: {0}")]
+    // TODO rename -> Storage
     StorageError(#[from] StorageError),
 }
 
@@ -212,6 +213,8 @@ impl TreeHeader {
         });
 
         transaction.insert_reserved(header_page, page)?;
+
+        transaction.commit()?;
 
         Ok(())
     }

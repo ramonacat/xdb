@@ -99,11 +99,18 @@ pub struct PageGuardMut<'block> {
 unsafe impl Send for PageGuardMut<'_> {}
 
 impl<'block> PageGuardMut<'block> {
-    unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
+    unsafe fn new(
+        page: NonNull<Page>,
+        block: &'block Block,
+        index: PageIndex,
+    ) -> Result<Self, StorageError> {
         let housekeeping = unsafe { block.housekeeping_for(index) };
-        housekeeping.lock_write();
+        housekeeping.lock_write().map_err(|e| match e {
+            // TODO this mapping is repeated in a few places, clean it up
+            LockError::Deadlock => StorageError::Deadlock(index),
+        })?;
 
-        Self { page, block, index }
+        Ok(Self { page, block, index })
     }
 }
 
@@ -142,7 +149,7 @@ impl<'block> PageRef<'block> {
         unsafe { PageGuard::new(self.page, self.block, self.index) }
     }
 
-    pub fn get_mut(&self) -> PageGuardMut<'block> {
+    pub fn get_mut(&self) -> Result<PageGuardMut<'block>, StorageError> {
         unsafe { PageGuardMut::new(self.page, self.block, self.index) }
     }
 }

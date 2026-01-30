@@ -92,6 +92,7 @@ impl Drop for InMemoryTransaction<'_> {
         if self.finalized {
             return;
         }
+
         error!("transaction dropped without being rolled back or comitted");
         self.do_rollback();
     }
@@ -151,7 +152,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
             }
 
             if !self.write_guards.contains_key(&index) {
-                let guard = self.storage.pages.get(index).get_mut();
+                let guard = self.storage.pages.get(index).get_mut()?;
                 let copy_index = self.copy_for_write(*guard);
 
                 self.write_guards
@@ -187,7 +188,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         let guard = page_guard.initialize(page);
 
         self.write_guards
-            .insert(index, WritePage::Inserted(guard.get_mut()));
+            .insert(index, WritePage::Inserted(guard.get_mut()?));
 
         Ok(())
     }
@@ -197,7 +198,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         let index = guard.index();
 
         self.write_guards
-            .insert(index, WritePage::Inserted(guard.get_mut()));
+            .insert(index, WritePage::Inserted(guard.get_mut()?));
 
         Ok(index)
     }
@@ -210,7 +211,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         let guard = if let Some(g) = guard {
             g
         } else {
-            let new_guard = self.storage.pages.get(page).get_mut();
+            let new_guard = self.storage.pages.get(page).get_mut()?;
             let copy_index = self.copy_for_write(*new_guard);
 
             self.write_guards.insert(
