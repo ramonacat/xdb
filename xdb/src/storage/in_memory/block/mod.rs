@@ -1,8 +1,9 @@
 // TODO separate the miri and non-miri code into modules
 
-mod allocation;
 mod page_state;
 
+use crate::platform::allocation::Allocation;
+use crate::platform::allocation::uncommitted::UncommittedAllocation;
 use std::{
     fmt::Debug,
     mem::{ManuallyDrop, MaybeUninit},
@@ -15,13 +16,7 @@ use std::{
 use crate::{
     Size,
     page::{PAGE_SIZE, Page},
-    storage::{
-        PageIndex, StorageError,
-        in_memory::block::{
-            allocation::{Allocation, uncommitted::UncommittedAllocation},
-            page_state::PageState,
-        },
-    },
+    storage::{PageIndex, StorageError, in_memory::block::page_state::PageState},
 };
 
 #[derive(Debug)]
