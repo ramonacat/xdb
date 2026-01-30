@@ -15,8 +15,6 @@ use crate::{
 
 // TODO impl Drop to return the page to free pool if it doesn't get written
 pub struct InMemoryPageReservation<'storage> {
-    #[allow(unused)] // TODO remove?
-    storage: &'storage InMemoryStorage,
     page_guard: UninitializedPageGuard<'storage>,
 }
 
@@ -99,7 +97,6 @@ impl Drop for InMemoryTransaction<'_> {
     }
 }
 
-// TODO when writing, make a copy of the page, and undo the original on rollback
 impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     for InMemoryTransaction<'storage>
 {
@@ -177,10 +174,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     fn reserve<'a>(&'a self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
         let page_guard = self.storage.pages.allocate();
 
-        Ok(InMemoryPageReservation {
-            storage: self.storage,
-            page_guard,
-        })
+        Ok(InMemoryPageReservation { page_guard })
     }
 
     fn insert_reserved(
@@ -188,10 +182,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         reservation: InMemoryPageReservation<'storage>,
         page: Page,
     ) -> Result<(), StorageError> {
-        let InMemoryPageReservation {
-            storage: _,
-            page_guard,
-        } = reservation;
+        let InMemoryPageReservation { page_guard } = reservation;
         let index = page_guard.index();
         let guard = page_guard.initialize(page);
 

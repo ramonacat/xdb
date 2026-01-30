@@ -240,14 +240,13 @@ fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
     }
 }
 
-// TODO should the value here just bec Vec<u8>?
-pub enum TransactionAction<K, V> {
-    Insert(K, V),
+pub enum TransactionAction<K> {
+    Insert(K, Vec<u8>),
     Delete(K),
 }
 
-impl<K: Ord, V> TransactionAction<K, V> {
-    pub fn execute_on(self, btree: &mut BTreeMap<K, V>) {
+impl<K: Ord> TransactionAction<K> {
+    pub fn execute_on(self, btree: &mut BTreeMap<K, Vec<u8>>) {
         match self {
             Self::Insert(k, v) => btree.insert(k, v),
             Self::Delete(k) => btree.remove(&k),

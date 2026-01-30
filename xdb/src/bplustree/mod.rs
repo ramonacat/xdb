@@ -85,7 +85,6 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
             .write(PageIndex::zero(), |[page]| write(page.data_mut()))?)
     }
 
-    // TODO take &mut self to avoid recursing!
     fn read_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
         &mut self,
         indices: TIndices,
@@ -96,7 +95,6 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         })?)
     }
 
-    // TODO take &mut self to avoid recursing!
     fn write_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
         &mut self,
         indices: TIndices,
@@ -405,7 +403,7 @@ mod test {
     fn execute_test_actions<TKey: TreeKey, const SIZE: usize>(
         tree: &Tree<InMemoryStorage, BigKey<TKey, SIZE>>,
         actions: impl Iterator<Item = TestAction<BigKey<TKey, SIZE>>>,
-        commit: impl Fn(Vec<TransactionAction<TKey, Vec<u8>>>),
+        commit: impl Fn(Vec<TransactionAction<TKey>>),
         after_action: impl Fn(Result<(), TreeError>),
     ) {
         let mut transaction = tree.transaction().unwrap();

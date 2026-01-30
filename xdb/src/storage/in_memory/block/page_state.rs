@@ -31,7 +31,6 @@ pub enum LockError {
     Deadlock,
 }
 
-// TODO move all the futex code into some neat abstraction that correctly handles errors, etc.
 impl PageState {
     const MASK_IS_INITIALIZED: u32 = 1 << 31;
     #[allow(unused)]

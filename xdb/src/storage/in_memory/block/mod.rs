@@ -1,5 +1,3 @@
-// TODO separate the miri and non-miri code into modules
-
 mod page_state;
 
 use crate::platform::allocation::Allocation;
@@ -55,7 +53,6 @@ impl<'block> PageGuard<'block> {
         let Self { page, block, index } = self;
 
         let housekeeping = unsafe { block.housekeeping_for(index) };
-        // TODO the error mapping is the same as in new(), create some helper for it
         housekeeping.lock_upgrade();
         // Do not drop self, as this would make us unlock the read lock, which is incorrect, as it
         // is now a write lock
@@ -187,7 +184,6 @@ impl Block {
     const HOUSEKEEPING_BLOCK_SIZE: Size = Size::of::<PageState>().multiply(Self::PAGE_COUNT);
 
     pub fn new() -> Self {
-        // TODO verify if this check can be removed
         let housekeeping: Box<dyn Allocation> =
             Box::new(UncommittedAllocation::new(Self::HOUSEKEEPING_BLOCK_SIZE));
         let data: Box<dyn Allocation> = Box::new(UncommittedAllocation::new(Self::SIZE));

@@ -143,7 +143,7 @@ fn execute_actions<TStorage: Storage, TKey: TreeKey, const KEY_SIZE: usize>(
     tree: &Tree<TStorage, BigKey<TKey, KEY_SIZE>>,
     actions: impl Iterator<Item = TreeAction<TKey, KEY_SIZE>>,
     after_action: impl Fn(),
-    transaction_commit: impl Fn(Vec<TransactionAction<TKey, Vec<u8>>>),
+    transaction_commit: impl Fn(Vec<TransactionAction<TKey>>),
 ) -> Result<(), TreeError> {
     let mut transaction = tree.transaction().unwrap();
 

@@ -41,8 +41,6 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
         right: AnyNodeId,
     ) -> Self {
         Self {
-            // TODO create a constructor for NodeHeader so that we don't have to directly touch the
-            // internals here
             header: NodeHeader::new_interior(parent.into()),
             entries: InteriorNodeEntries::new(left.page(), key, right.page()),
         }
