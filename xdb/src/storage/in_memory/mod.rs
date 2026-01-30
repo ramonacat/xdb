@@ -137,7 +137,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
 
         for index in indices {
             if let Some(read_guard) = self.read_guards.remove(&index) {
-                let write_guard = read_guard.upgrade();
+                let write_guard = read_guard.upgrade()?;
 
                 let copy_index = self.copy_for_write(*write_guard);
 

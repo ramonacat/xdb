@@ -123,16 +123,18 @@ impl PageState {
 
         match result {
             Ok(_) => Ok(()),
-            Err(old) => {
-                // TODO 1s is a lot of time
-                match self.futex().wait(old, Some(Duration::from_secs(1))) {
-                    Ok(()) => Ok(()),
-                    Err(FutexError::Timeout) => Err(LockError::Deadlock),
-                    Err(FutexError::Race) => self.lock_read(),
-                    Err(FutexError::InconsistentState) => {
-                        unreachable!("futex was in an inconsistent state")
-                    }
-                }
+            Err(old) => self.wait(old),
+        }
+    }
+
+    fn wait(self: Pin<&Self>, old: u32) -> Result<(), LockError> {
+        // TODO 1s is a lot of time, do a deadlock detection instead
+        match self.futex().wait(old, Some(Duration::from_secs(1))) {
+            Ok(()) => Ok(()),
+            Err(FutexError::Timeout) => Err(LockError::Deadlock),
+            Err(FutexError::Race) => self.lock_read(),
+            Err(FutexError::InconsistentState) => {
+                unreachable!("futex was in an inconsistent state")
             }
         }
     }
@@ -158,16 +160,21 @@ impl PageState {
         }
     }
 
-    pub fn lock_upgrade(self: Pin<&Self>) {
-        self.atomic()
+    pub fn lock_upgrade(self: Pin<&Self>) -> Result<(), LockError> {
+        match self
+            .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
-                // TODO we should wait on a futex here instead once we have multiple threads
-                assert!((x & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT == 1);
+                if (x & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT != 1 {
+                    return None;
+                }
+
                 assert!(x & Self::MASK_HAS_WRITER == 0);
 
                 Some((x & !Self::MASK_READER_COUNT) | Self::MASK_HAS_WRITER)
-            })
-            .unwrap();
+            }) {
+            Ok(_) => Ok(()),
+            Err(old) => self.wait(old),
+        }
     }
 }
 

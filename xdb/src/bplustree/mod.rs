@@ -219,7 +219,10 @@ impl TreeHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{bplustree::debug::TransactionAction, storage::instrumented::InstrumentedStorage};
+    use crate::{
+        bplustree::{algorithms::find, debug::TransactionAction},
+        storage::instrumented::InstrumentedStorage,
+    };
     use std::{
         collections::BTreeMap,
         hint,
@@ -391,6 +394,7 @@ mod test {
     enum TestAction<TKey> {
         Insert(TKey, Vec<u8>),
         Delete(TKey),
+        Read(TKey),
         Commit,
         Rollback,
     }
@@ -436,6 +440,7 @@ mod test {
 
                     result
                 }
+                TestAction::Read(key) => find(&mut transaction, key).map(|_| ()),
             };
 
             after_action(result);
@@ -463,7 +468,7 @@ mod test {
             let (tx, rx) = mpsc::channel();
             let rust_tree = rust_tree.clone();
             let tree = tree.clone();
-            let done = Arc::new(AtomicBool::new(true));
+            let done = Arc::new(AtomicBool::new(false));
             let done_ = done.clone();
             let error = error.clone();
 
@@ -1293,7 +1298,7 @@ mod test {
     }
 
     #[test]
-    fn simple_deadlock() {
+    fn write_read_deadlock() {
         let data = vec![
             InThreadTestAction {
                 thread: 3,
@@ -1305,6 +1310,23 @@ mod test {
             },
         ];
 
+        threaded_test_from_data(data, |error| {
+            matches!(error, TreeError::StorageError(StorageError::Deadlock(_)))
+        });
+    }
+
+    #[test]
+    fn read_write_deadlock() {
+        let data = vec![
+            InThreadTestAction {
+                thread: 3,
+                action: TestAction::Read(BigKey::<u64, 1024>::new(12903093385206628604)),
+            },
+            InThreadTestAction {
+                thread: 0,
+                action: TestAction::Insert(BigKey::new(0), vec![0u8; 1]),
+            },
+        ];
         threaded_test_from_data(data, |error| {
             matches!(error, TreeError::StorageError(StorageError::Deadlock(_)))
         });
