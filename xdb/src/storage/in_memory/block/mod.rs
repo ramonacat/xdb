@@ -13,7 +13,7 @@ use std::{
 use crate::{
     Size,
     page::{PAGE_SIZE, Page},
-    storage::{PageIndex, StorageError, in_memory::block::page_state::PageState},
+    storage::{PageIndex, in_memory::block::page_state::PageState},
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -33,33 +33,21 @@ pub struct PageGuard<'block> {
 
 unsafe impl Send for PageGuard<'_> {}
 
-const fn handle_lock_error(error: &LockError, index: PageIndex) -> StorageError {
-    match error {
-        LockError::Deadlock => StorageError::Deadlock(index),
-    }
-}
-
 impl<'block> PageGuard<'block> {
     unsafe fn new(
         page: NonNull<Page>,
         block: &'block Block,
         index: PageIndex,
-    ) -> Result<Self, StorageError> {
+    ) -> Result<Self, LockError> {
         let housekeeping = unsafe { block.housekeeping_for(index) };
+        housekeeping.lock_read()?;
 
-        match housekeeping.lock_read() {
-            Ok(()) => Ok(Self { page, block, index }),
-            Err(error) => Err(handle_lock_error(&error, index)),
-        }
+        Ok(Self { page, block, index })
     }
 
-    pub fn upgrade(self) -> Result<PageGuardMut<'block>, StorageError> {
+    pub fn upgrade(self) -> Result<PageGuardMut<'block>, LockError> {
         let Self { page, block, index } = self;
-
-        match unsafe { block.housekeeping_for(index) }.lock_upgrade() {
-            Ok(()) => {}
-            Err(e) => return Err(handle_lock_error(&e, index)),
-        }
+        unsafe { block.housekeeping_for(index) }.lock_upgrade()?;
 
         // Do not drop self, as this would make us unlock the read lock, which is incorrect, as it
         // is now a write lock
@@ -103,12 +91,9 @@ impl<'block> PageGuardMut<'block> {
         page: NonNull<Page>,
         block: &'block Block,
         index: PageIndex,
-    ) -> Result<Self, StorageError> {
+    ) -> Result<Self, LockError> {
         let housekeeping = unsafe { block.housekeeping_for(index) };
-        housekeeping.lock_write().map_err(|e| match e {
-            // TODO this mapping is repeated in a few places, clean it up
-            LockError::Deadlock => StorageError::Deadlock(index),
-        })?;
+        housekeeping.lock_write()?;
 
         Ok(Self { page, block, index })
     }
@@ -145,11 +130,11 @@ impl<'block> PageRef<'block> {
         self.index
     }
 
-    pub fn get(&self) -> Result<PageGuard<'block>, StorageError> {
+    pub fn get(&self) -> Result<PageGuard<'block>, LockError> {
         unsafe { PageGuard::new(self.page, self.block, self.index) }
     }
 
-    pub fn get_mut(&self) -> Result<PageGuardMut<'block>, StorageError> {
+    pub fn get_mut(&self) -> Result<PageGuardMut<'block>, LockError> {
         unsafe { PageGuardMut::new(self.page, self.block, self.index) }
     }
 }

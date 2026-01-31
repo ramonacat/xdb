@@ -1,9 +1,9 @@
 use crate::sync::atomic::{AtomicU32, Ordering};
-use std::{marker::PhantomPinned, pin::Pin, time::Duration};
+use std::{marker::PhantomPinned, pin::Pin};
 
 use thiserror::Error;
 
-use crate::platform::futex::{Futex, FutexError};
+use crate::platform::futex::Futex;
 
 const fn mask32(start_bit: u32, end_bit: u32) -> u32 {
     assert!(end_bit <= start_bit);
@@ -24,8 +24,8 @@ const _: () = assert!(size_of::<PageState>() == size_of::<u32>());
 
 #[derive(Debug, Error)]
 pub enum LockError {
-    #[error("would deadlock")]
-    Deadlock,
+    #[error("contended")]
+    Contended,
 }
 
 impl PageState {
@@ -78,10 +78,8 @@ impl PageState {
                 Some(f | Self::MASK_HAS_WRITER)
             }) {
             Ok(_) => {}
-            Err(old) => {
-                self.wait(old)?;
-
-                self.lock_write()?;
+            Err(_) => {
+                return Err(LockError::Contended);
             }
         }
 
@@ -96,9 +94,7 @@ impl PageState {
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 Some(x & !Self::MASK_HAS_WRITER)
             }) {
-            Ok(_) => {
-                self.futex().wake(1).unwrap();
-            }
+            Ok(_) => {}
             Err(_) => todo!(),
         }
     }
@@ -124,22 +120,8 @@ impl PageState {
 
         match result {
             Ok(_) => Ok(()),
-            Err(old) => {
-                self.wait(old)?;
-
-                self.lock_read()
-            }
-        }
-    }
-
-    fn wait(self: Pin<&Self>, old: u32) -> Result<(), LockError> {
-        // TODO 1s is a lot of time, do a deadlock detection instead
-        match self.futex().wait(old, Some(Duration::from_secs(1))) {
-            Ok(()) => Ok(()),
-            Err(FutexError::Timeout) => Err(LockError::Deadlock),
-            Err(FutexError::Race) => self.lock_read(),
-            Err(FutexError::InconsistentState) => {
-                unreachable!("futex was in an inconsistent state")
+            Err(_) => {
+                return Err(LockError::Contended);
             }
         }
     }
@@ -158,9 +140,7 @@ impl PageState {
 
                 Some((x & !Self::MASK_READER_COUNT) | shifted_new_reader_count)
             }) {
-            Ok(_) => {
-                self.futex().wake(1).unwrap();
-            }
+            Ok(_) => {}
             Err(_) => todo!(),
         }
     }
@@ -178,10 +158,8 @@ impl PageState {
                 Some((x & !Self::MASK_READER_COUNT) | Self::MASK_HAS_WRITER)
             }) {
             Ok(_) => Ok(()),
-            Err(old) => {
-                self.wait(old)?;
-
-                self.lock_upgrade()
+            Err(_) => {
+                return Err(LockError::Contended);
             }
         }
     }

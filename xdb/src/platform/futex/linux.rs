@@ -12,6 +12,7 @@ use crate::platform::errno;
 #[repr(transparent)]
 pub struct Futex(AtomicU32, PhantomPinned);
 
+#[allow(unused)] // TODO remvove if really unused
 impl Futex {
     pub const fn new(value: u32) -> Self {
         Self(AtomicU32::new(value), PhantomPinned)
