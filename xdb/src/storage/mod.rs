@@ -1,6 +1,11 @@
 pub mod in_memory;
 pub mod instrumented;
 
+use std::{
+    fmt::Debug,
+    sync::atomic::{AtomicU64, Ordering},
+};
+
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
 
@@ -47,7 +52,18 @@ impl From<PageIndex> for [PageIndex; 1] {
     }
 }
 
-pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>>: Send {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TransactionId(u64);
+
+static LATEST_TRANSACTION_ID: AtomicU64 = AtomicU64::new(0);
+
+impl TransactionId {
+    fn next() -> Self {
+        Self(LATEST_TRANSACTION_ID.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>>: Send + Debug {
     fn read<T, const N: usize>(
         &mut self,
         indices: impl Into<[PageIndex; N]>,
@@ -60,7 +76,7 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>>: Se
         write: impl FnOnce([&mut Page; N]) -> T,
     ) -> Result<T, StorageError>;
 
-    fn reserve(&self) -> Result<TPageReservation, StorageError>;
+    fn reserve(&mut self) -> Result<TPageReservation, StorageError>;
 
     fn insert_reserved(
         &mut self,
@@ -76,7 +92,7 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>>: Se
     fn rollback(self) -> Result<(), StorageError>;
 }
 
-pub trait Storage: Send + Sync {
+pub trait Storage: Send + Sync + Debug {
     type PageReservation<'storage>: PageReservation<'storage>
     where
         Self: 'storage;

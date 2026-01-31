@@ -52,6 +52,7 @@ pub struct Tree<T: Storage, TKey: TreeKey> {
     _key: PhantomData<TKey>,
 }
 
+// TODO move to a separate mod
 pub struct TreeTransaction<'storage, TStorage: Storage + 'storage, TKey>
 where
     Self: 'storage,
@@ -90,7 +91,10 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         indices: TIndices,
         read: impl for<'node> FnOnce(TIndices::Nodes<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        Ok(self.transaction.read(indices.to_page_indices(), |pages| {
+        let page_indices = indices.to_page_indices();
+        debug_assert!(!page_indices.iter().any(|x| *x == PageIndex::zero()));
+
+        Ok(self.transaction.read(page_indices, |pages| {
             read(TIndices::pages_to_nodes(pages.map(|x| x)))
         })?)
     }
@@ -100,12 +104,15 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         indices: TIndices,
         write: impl for<'node> FnOnce(TIndices::NodesMut<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
-        Ok(self.transaction.write(indices.to_page_indices(), |pages| {
+        let page_indices = indices.to_page_indices();
+        debug_assert!(!page_indices.iter().any(|x| *x == PageIndex::zero()));
+
+        Ok(self.transaction.write(page_indices, |pages| {
             write(TIndices::pages_to_nodes_mut(pages.map(|x| x)))
         })?)
     }
 
-    fn reserve_node(&self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
+    fn reserve_node(&mut self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
         Ok(self.transaction.reserve()?)
     }
 
@@ -116,6 +123,8 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         reservation: TStorage::PageReservation<'storage>,
         page: impl Node<TKey>,
     ) -> Result<(), TreeError> {
+        debug_assert!(reservation.index() != PageIndex::zero());
+
         self.transaction
             .insert_reserved(reservation, Page::from_data(page))?;
 
@@ -914,6 +923,10 @@ mod test {
 
     #[test]
     fn simple_delete() {
+        if !cfg!(miri) {
+            let _ = env_logger::Builder::new().is_test(true).try_init();
+        }
+
         let storage = InMemoryStorage::new();
         let tree = Tree::new(storage).unwrap();
         let mut transaction = tree.transaction().unwrap();

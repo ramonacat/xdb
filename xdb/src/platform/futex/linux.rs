@@ -54,6 +54,7 @@ impl Futex {
         let callers_woken_up = unsafe { syscall(SYS_futex, &raw const self.0, FUTEX_WAKE, count) };
         if callers_woken_up == -1 {
             match errno() {
+                // TODO do we really really want to expose this?
                 EINVAL => return Err(FutexError::InconsistentState),
                 e => unreachable!("unexpected error: {e}"),
             }

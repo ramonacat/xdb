@@ -1,13 +1,15 @@
 mod page_state;
 
+use crate::platform::allocation::Allocation;
 use crate::platform::allocation::uncommitted::UncommittedAllocation;
-use crate::{platform::allocation::Allocation, storage::in_memory::block::page_state::LockError};
+use log::debug;
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     mem::{ManuallyDrop, MaybeUninit},
     ops::{Deref, DerefMut},
     pin::Pin,
     ptr::NonNull,
+    sync::atomic::AtomicU16,
 };
 
 use crate::{
@@ -17,7 +19,7 @@ use crate::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct PageRef<'block> {
     page: NonNull<Page>,
     block: &'block Block,
@@ -34,26 +36,26 @@ pub struct PageGuard<'block> {
 unsafe impl Send for PageGuard<'_> {}
 
 impl<'block> PageGuard<'block> {
-    unsafe fn new(
-        page: NonNull<Page>,
-        block: &'block Block,
-        index: PageIndex,
-    ) -> Result<Self, LockError> {
+    unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
         let housekeeping = unsafe { block.housekeeping_for(index) };
-        housekeeping.lock_read()?;
+        housekeeping.lock_read();
 
-        Ok(Self { page, block, index })
+        Self { page, block, index }
     }
 
-    pub fn upgrade(self) -> Result<PageGuardMut<'block>, LockError> {
+    pub fn upgrade(self) -> PageGuardMut<'block> {
         let Self { page, block, index } = self;
-        unsafe { block.housekeeping_for(index) }.lock_upgrade()?;
+        unsafe { block.housekeeping_for(index) }.lock_upgrade();
 
         // Do not drop self, as this would make us unlock the read lock, which is incorrect, as it
         // is now a write lock
         let _ = ManuallyDrop::new(self);
 
-        Ok(PageGuardMut { page, block, index })
+        PageGuardMut { page, block, index }
+    }
+
+    pub const fn index(&self) -> PageIndex {
+        self.index
     }
 }
 
@@ -87,15 +89,15 @@ pub struct PageGuardMut<'block> {
 unsafe impl Send for PageGuardMut<'_> {}
 
 impl<'block> PageGuardMut<'block> {
-    unsafe fn new(
-        page: NonNull<Page>,
-        block: &'block Block,
-        index: PageIndex,
-    ) -> Result<Self, LockError> {
+    unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
         let housekeeping = unsafe { block.housekeeping_for(index) };
-        housekeeping.lock_write()?;
+        housekeeping.lock_write();
 
-        Ok(Self { page, block, index })
+        Self { page, block, index }
+    }
+
+    pub const fn index(&self) -> PageIndex {
+        self.index
     }
 }
 
@@ -130,11 +132,11 @@ impl<'block> PageRef<'block> {
         self.index
     }
 
-    pub fn get(&self) -> Result<PageGuard<'block>, LockError> {
+    pub fn get(&self) -> PageGuard<'block> {
         unsafe { PageGuard::new(self.page, self.block, self.index) }
     }
 
-    pub fn get_mut(&self) -> Result<PageGuardMut<'block>, LockError> {
+    pub fn get_mut(&self) -> PageGuardMut<'block> {
         unsafe { PageGuardMut::new(self.page, self.block, self.index) }
     }
 }
@@ -170,8 +172,20 @@ impl<'block> UninitializedPageGuard<'block> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct BlockId(u16);
+
+impl Display for BlockId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:#04x}", self.0)
+    }
+}
+
+static LATEST_BLOCK_ID: AtomicU16 = AtomicU16::new(0);
+
 #[derive(Debug)]
 pub struct Block {
+    id: BlockId,
     housekeeping: Box<dyn Allocation>,
     data: Box<dyn Allocation>,
     latest_page: AtomicU64,
@@ -188,6 +202,7 @@ impl Block {
         let data: Box<dyn Allocation> = Box::new(UncommittedAllocation::new(Self::SIZE));
 
         Self {
+            id: BlockId(LATEST_BLOCK_ID.fetch_add(1, Ordering::Relaxed)),
             housekeeping,
             data,
             latest_page: AtomicU64::new(0),
@@ -195,6 +210,8 @@ impl Block {
     }
 
     pub fn get(&self, index: PageIndex) -> PageRef<'_> {
+        debug!("[{}] reading page {index:?}", self.id);
+
         assert!(index.0 < self.latest_page.load(Ordering::Acquire));
 
         let housekeeping = unsafe { self.housekeeping_for(index) };
@@ -233,6 +250,7 @@ impl Block {
 
     fn allocate_housekeeping(&self, index: PageIndex) -> NonNull<PageState> {
         assert!(index.0 < Self::PAGE_COUNT as u64);
+        debug!("[{}] allocating housekeeping for {index:?}", self.id);
 
         // TODO this way we do the mprotect multiple times, it doesn't really matter, but might
         // make sense to only do that when index%PAGE_SIZE == 0??? (though then we have to

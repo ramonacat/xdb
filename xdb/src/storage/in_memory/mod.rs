@@ -1,6 +1,8 @@
 mod block;
+mod lock_manager;
 mod transaction;
 
+use crate::storage::in_memory::lock_manager::LockManager;
 use crate::storage::in_memory::transaction::InMemoryTransaction;
 
 use crate::storage::{
@@ -23,6 +25,7 @@ impl<'storage> PageReservation<'storage> for InMemoryPageReservation<'storage> {
 pub struct InMemoryStorage {
     pages: Block,
     rollback_copies: Block,
+    lock_manager: LockManager,
 }
 
 impl Default for InMemoryStorage {
@@ -37,6 +40,7 @@ impl InMemoryStorage {
         Self {
             pages: Block::new(),
             rollback_copies: Block::new(),
+            lock_manager: LockManager::new(),
         }
     }
 }

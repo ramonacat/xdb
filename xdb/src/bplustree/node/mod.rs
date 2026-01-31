@@ -61,7 +61,9 @@ impl LeafNodeId {
         Self(unknown.0)
     }
 
-    pub const fn new(index: PageIndex) -> Self {
+    pub fn new(index: PageIndex) -> Self {
+        assert!(index != PageIndex::zero());
+
         Self(index)
     }
 }

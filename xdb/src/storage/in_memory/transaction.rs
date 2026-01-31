@@ -1,4 +1,7 @@
-use std::{collections::HashMap, ops::Deref as _};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref as _,
+};
 
 use bytemuck::Zeroable as _;
 use log::error;
@@ -6,7 +9,7 @@ use log::error;
 use crate::{
     page::Page,
     storage::{
-        PageIndex, StorageError, Transaction,
+        PageIndex, StorageError, Transaction, TransactionId,
         in_memory::{
             InMemoryPageReservation, InMemoryStorage,
             block::{PageGuard, PageGuardMut, PageRef},
@@ -43,24 +46,40 @@ impl<'storage> WritePage<'storage> {
             | WritePage::Inserted(guard) => guard,
         }
     }
+
+    fn into_guard(self) -> PageGuardMut<'storage> {
+        match self {
+            WritePage::Modified {
+                guard,
+                copy_index: _,
+            }
+            | WritePage::Inserted(guard) => guard,
+        }
+    }
 }
 
+#[derive(Debug)]
 pub struct InMemoryTransaction<'storage> {
+    id: TransactionId,
     storage: &'storage InMemoryStorage,
     read_guards: HashMap<PageIndex, PageGuard<'storage>>,
     write_guards: HashMap<PageIndex, WritePage<'storage>>,
     finalized: bool,
+    reserved_pages: HashSet<PageIndex>,
 }
 
 impl<'storage> InMemoryTransaction<'storage> {
     pub fn new(storage: &'storage InMemoryStorage) -> Self {
         Self {
+            id: TransactionId::next(),
             storage,
             read_guards: HashMap::new(),
             write_guards: HashMap::new(),
             finalized: false,
+            reserved_pages: HashSet::new(),
         }
     }
+
     // TODO avoid passing by value?
     #[allow(clippy::large_types_passed_by_value)]
     fn copy_for_write(&self, page: Page) -> PageIndex {
@@ -75,7 +94,7 @@ impl<'storage> InMemoryTransaction<'storage> {
         for guard in self.write_guards.values_mut() {
             match guard {
                 WritePage::Modified { guard, copy_index } => {
-                    **guard = *self.storage.rollback_copies.get(*copy_index).get().unwrap();
+                    **guard = *self.storage.rollback_copies.get(*copy_index).get();
                 }
                 WritePage::Inserted(_) => {
                     // TODO delete from storage
@@ -84,39 +103,42 @@ impl<'storage> InMemoryTransaction<'storage> {
         }
     }
 
+    // TODO remove these methods and inline them?
+    // TODO should we have some sort of LockManagerTransaction to avoid passing the txid to each
+    // method?
     fn read_page(&self, page: PageRef<'storage>) -> Result<PageGuard<'storage>, StorageError> {
-        match page.get() {
-            Ok(page) => Ok(page),
-            Err(_) => todo!(),
-        }
+        self.storage.lock_manager.lock_read(self.id, page)
     }
 
     fn upgrade_page(
         &self,
         guard: PageGuard<'storage>,
     ) -> Result<PageGuardMut<'storage>, StorageError> {
-        match guard.upgrade() {
-            Ok(g) => Ok(g),
-            Err(_) => todo!(),
-        }
+        self.storage.lock_manager.lock_upgrade(self.id, guard)
     }
 
     fn write_page(&self, page: PageRef<'storage>) -> Result<PageGuardMut<'storage>, StorageError> {
-        match page.get_mut() {
-            Ok(page) => Ok(page),
-            Err(_) => todo!(),
-        }
+        self.storage.lock_manager.lock_write(self.id, page)
     }
 }
 
 impl Drop for InMemoryTransaction<'_> {
     fn drop(&mut self) {
-        if self.finalized {
-            return;
+        if !self.finalized {
+            error!("transaction dropped without being rolled back or comitted");
+            self.do_rollback();
         }
 
-        error!("transaction dropped without being rolled back or comitted");
-        self.do_rollback();
+        // TODO the LockManager should probably handle the guards internally?
+        for (_, read_guard) in self.read_guards.drain() {
+            self.storage.lock_manager.unlock_read(self.id, read_guard);
+        }
+
+        for (_, write_page) in self.write_guards.drain() {
+            self.storage
+                .lock_manager
+                .unlock_write(self.id, write_page.into_guard());
+        }
     }
 }
 
@@ -130,6 +152,8 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     ) -> Result<T, StorageError> {
         let indices: [PageIndex; N] = indices.into();
         for index in indices {
+            assert!(!self.reserved_pages.contains(&index));
+
             if self.write_guards.contains_key(&index) {
                 continue;
             }
@@ -157,6 +181,8 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         let indices: [PageIndex; N] = indices.into();
 
         for index in indices {
+            assert!(!self.reserved_pages.contains(&index));
+
             if let Some(read_guard) = self.read_guards.remove(&index) {
                 let write_guard = self.upgrade_page(read_guard)?;
 
@@ -192,8 +218,9 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         Ok(write(guards))
     }
 
-    fn reserve<'a>(&'a self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
+    fn reserve(&mut self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
         let page_guard = self.storage.pages.allocate();
+        self.reserved_pages.insert(page_guard.index());
 
         Ok(InMemoryPageReservation { page_guard })
     }
@@ -209,6 +236,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
 
         self.write_guards
             .insert(index, WritePage::Inserted(self.write_page(guard)?));
+        self.reserved_pages.remove(&index);
 
         Ok(())
     }

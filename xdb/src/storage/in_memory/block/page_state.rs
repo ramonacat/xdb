@@ -1,7 +1,6 @@
 use crate::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 use std::{marker::PhantomPinned, pin::Pin};
-
-use thiserror::Error;
 
 use crate::platform::futex::Futex;
 
@@ -21,12 +20,6 @@ pub struct PageState(Futex, PhantomPinned);
 
 #[cfg(not(feature = "shuttle"))]
 const _: () = assert!(size_of::<PageState>() == size_of::<u32>());
-
-#[derive(Debug, Error)]
-pub enum LockError {
-    #[error("contended")]
-    Contended,
-}
 
 #[must_use]
 #[derive(Debug, Clone, Copy)] // TODO make debug pretty print the actual information, not just the
@@ -98,7 +91,7 @@ impl PageState {
         PageStateValue(self.atomic().load(Ordering::Acquire)).is_initialized()
     }
 
-    pub fn lock_write(self: Pin<&Self>) -> Result<(), LockError> {
+    pub fn lock_write(self: Pin<&Self>) {
         debug_assert!(self.is_initialized());
 
         match self
@@ -117,12 +110,19 @@ impl PageState {
                 Some(f.with_writer().0)
             }) {
             Ok(_) => {}
-            Err(_) => {
-                return Err(LockError::Contended);
+            Err(previous) => {
+                // TODO drop the timeout once we're confident in deadlock detection
+                match self.futex().wait(previous, Some(Duration::from_secs(5))) {
+                    Ok(()) => {}
+                    Err(error) => match error {
+                        crate::platform::futex::FutexError::Race => todo!(),
+                        // TODO we should stop this from happening at all!
+                        crate::platform::futex::FutexError::Timeout => todo!(),
+                        crate::platform::futex::FutexError::InconsistentState => todo!(),
+                    },
+                }
             }
         }
-
-        Ok(())
     }
 
     pub fn unlock_write(self: Pin<&Self>) {
@@ -134,12 +134,16 @@ impl PageState {
                 let x = PageStateValue(x);
                 Some(x.without_writer().0)
             }) {
-            Ok(_) => {}
+            Ok(_) => {
+                // TODO probably should be more optimized as to choosing whether to wake up readers
+                // or writers
+                self.futex().wake(u32::MAX).unwrap();
+            }
             Err(_) => todo!(),
         }
     }
 
-    pub fn lock_read(self: Pin<&Self>) -> Result<(), LockError> {
+    pub fn lock_read(self: Pin<&Self>) {
         debug_assert!(self.is_initialized());
 
         let result = self
@@ -154,9 +158,18 @@ impl PageState {
             });
 
         match result {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                return Err(LockError::Contended);
+            Ok(_) => {}
+            Err(previous) => {
+                // TODO drop the timeout once we're confident in deadlock detection
+                match self.futex().wait(previous, Some(Duration::from_secs(5))) {
+                    Ok(()) => {}
+                    Err(error) => match error {
+                        crate::platform::futex::FutexError::Race => todo!(),
+                        // TODO we should stop this from happening at all!
+                        crate::platform::futex::FutexError::Timeout => todo!(),
+                        crate::platform::futex::FutexError::InconsistentState => todo!(),
+                    },
+                }
             }
         }
     }
@@ -175,12 +188,14 @@ impl PageState {
 
                 Some(x.with_readers(reader_count - 1).0)
             }) {
-            Ok(_) => {}
+            Ok(_) => {
+                self.futex().wake(u32::MAX).unwrap();
+            }
             Err(_) => todo!(),
         }
     }
 
-    pub fn lock_upgrade(self: Pin<&Self>) -> Result<(), LockError> {
+    pub fn lock_upgrade(self: Pin<&Self>) {
         match self
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
@@ -193,9 +208,18 @@ impl PageState {
 
                 Some(x.with_readers(0).with_writer().0)
             }) {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                return Err(LockError::Contended);
+            Ok(_) => {}
+            Err(previous) => {
+                // TODO drop the timeout once we're confident in deadlock detection
+                match self.futex().wait(previous, Some(Duration::from_secs(5))) {
+                    Ok(()) => {}
+                    Err(error) => match error {
+                        crate::platform::futex::FutexError::Race => todo!(),
+                        // TODO we should stop this from happening at all!
+                        crate::platform::futex::FutexError::Timeout => self.lock_read(),
+                        crate::platform::futex::FutexError::InconsistentState => todo!(),
+                    },
+                }
             }
         }
     }

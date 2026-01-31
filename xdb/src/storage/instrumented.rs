@@ -7,6 +7,7 @@ use std::marker::PhantomData;
 use super::{Page, PageIndex, StorageError, Transaction};
 use crate::storage::Storage;
 
+#[derive(Debug)]
 pub struct InstrumentedTransaction<
     'a,
     T: Transaction<'a, TStorage::PageReservation<'a>>,
@@ -32,7 +33,7 @@ impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
         self.0.write(indices, write)
     }
 
-    fn reserve(&self) -> Result<TStorage::PageReservation<'a>, StorageError> {
+    fn reserve(&mut self) -> Result<TStorage::PageReservation<'a>, StorageError> {
         self.0.reserve()
     }
 
@@ -67,6 +68,7 @@ impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
 
 // TODO generalize this so more metrics can be extracted (transactions per second, total
 // transactions, writes, reads, latency, etc.)
+#[derive(Debug)]
 pub struct InstrumentedStorage<T: Storage> {
     page_count: Arc<AtomicUsize>,
     inner: T,
