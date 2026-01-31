@@ -28,16 +28,52 @@ pub enum LockError {
     Contended,
 }
 
-impl PageState {
+#[must_use]
+#[derive(Debug, Clone, Copy)] // TODO make debug pretty print the actual information, not just the
+// raw number
+struct PageStateValue(u32);
+
+impl PageStateValue {
     const MASK_IS_INITIALIZED: u32 = 1 << 31;
-    #[allow(unused)]
-    const MASK_READERS_WAITING: u32 = 1 << 30;
-    #[allow(unused)]
-    const MASK_WRITERS_WAITING: u32 = 1 << 29;
+    const _UNUSED1: u32 = 1 << 30;
+    const _UNUSED2: u32 = 1 << 29;
     const SHIFT_READER_COUNT: u32 = 12;
     const MASK_READER_COUNT: u32 = mask32(28, Self::SHIFT_READER_COUNT);
     const MASK_HAS_WRITER: u32 = 1 << 11;
 
+    const fn is_initialized(self) -> bool {
+        self.0 & Self::MASK_IS_INITIALIZED != 0
+    }
+
+    const fn readers(self) -> u32 {
+        (self.0 & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT
+    }
+
+    const fn with_readers(self, new_count: u32) -> Self {
+        let shifted_new_count = new_count << Self::SHIFT_READER_COUNT;
+        // TODO should we just treat this as any other lock contention?
+        assert!(
+            (shifted_new_count & !Self::MASK_READER_COUNT) == 0,
+            "too many readers"
+        );
+
+        Self((self.0 & !Self::MASK_READER_COUNT) | shifted_new_count)
+    }
+
+    const fn has_writer(self) -> bool {
+        self.0 & Self::MASK_HAS_WRITER != 0
+    }
+
+    const fn with_writer(self) -> Self {
+        Self(self.0 | Self::MASK_HAS_WRITER)
+    }
+
+    const fn without_writer(self) -> Self {
+        Self(self.0 & !Self::MASK_HAS_WRITER)
+    }
+}
+
+impl PageState {
     pub const fn new() -> Self {
         Self(Futex::new(0), PhantomPinned)
     }
@@ -53,12 +89,13 @@ impl PageState {
     pub fn mark_initialized(self: Pin<&Self>) {
         let previous_state = self
             .atomic()
-            .fetch_or(Self::MASK_IS_INITIALIZED, Ordering::Release);
-        assert!(previous_state & Self::MASK_IS_INITIALIZED == 0);
+            .fetch_or(PageStateValue::MASK_IS_INITIALIZED, Ordering::Release);
+
+        assert!(!PageStateValue(previous_state).is_initialized());
     }
 
     pub fn is_initialized(self: Pin<&Self>) -> bool {
-        self.atomic().load(Ordering::Acquire) & Self::MASK_IS_INITIALIZED > 0
+        PageStateValue(self.atomic().load(Ordering::Acquire)).is_initialized()
     }
 
     pub fn lock_write(self: Pin<&Self>) -> Result<(), LockError> {
@@ -67,15 +104,17 @@ impl PageState {
         match self
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
-                if ((f & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT) > 0 {
+                let f = PageStateValue(f);
+
+                if f.readers() > 0 {
                     return None;
                 }
 
-                if (f & Self::MASK_HAS_WRITER) > 0 {
+                if f.has_writer() {
                     return None;
                 }
 
-                Some(f | Self::MASK_HAS_WRITER)
+                Some(f.with_writer().0)
             }) {
             Ok(_) => {}
             Err(_) => {
@@ -92,7 +131,8 @@ impl PageState {
         match self
             .atomic()
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
-                Some(x & !Self::MASK_HAS_WRITER)
+                let x = PageStateValue(x);
+                Some(x.without_writer().0)
             }) {
             Ok(_) => {}
             Err(_) => todo!(),
@@ -105,17 +145,12 @@ impl PageState {
         let result = self
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
-                if x & Self::MASK_HAS_WRITER > 0 {
+                let x = PageStateValue(x);
+                if x.has_writer() {
                     return None;
                 }
 
-                let reader_count = (x & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT;
-                let new_reader_count = reader_count + 1;
-                let shifted_new_reader_count = new_reader_count << Self::SHIFT_READER_COUNT;
-
-                assert!(shifted_new_reader_count & !Self::MASK_READER_COUNT == 0);
-
-                Some((x & !Self::MASK_READER_COUNT) | shifted_new_reader_count)
+                Some(x.with_readers(x.readers() + 1).0)
             });
 
         match result {
@@ -132,13 +167,13 @@ impl PageState {
         match self
             .atomic()
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
-                assert!(x & Self::MASK_HAS_WRITER == 0);
+                let x = PageStateValue(x);
+                assert!(!x.has_writer());
 
-                let reader_count = (x & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT;
+                let reader_count = x.readers();
                 assert!(reader_count > 0);
-                let shifted_new_reader_count = (reader_count - 1) << Self::SHIFT_READER_COUNT;
 
-                Some((x & !Self::MASK_READER_COUNT) | shifted_new_reader_count)
+                Some(x.with_readers(reader_count - 1).0)
             }) {
             Ok(_) => {}
             Err(_) => todo!(),
@@ -149,13 +184,14 @@ impl PageState {
         match self
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
-                if (x & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT != 1 {
+                let x = PageStateValue(x);
+                if x.readers() != 1 {
                     return None;
                 }
 
-                assert!(x & Self::MASK_HAS_WRITER == 0);
+                assert!(!x.has_writer());
 
-                Some((x & !Self::MASK_READER_COUNT) | Self::MASK_HAS_WRITER)
+                Some(x.with_readers(0).with_writer().0)
             }) {
             Ok(_) => Ok(()),
             Err(_) => {
