@@ -183,12 +183,15 @@ impl Drop for PageGuardMut<'_> {
     }
 }
 
+#[derive(Debug)]
 pub struct UninitializedPageGuard<'block> {
     block: &'block Block,
     page: NonNull<MaybeUninit<Page>>,
     index: PageIndex,
     txid: TransactionId,
 }
+
+unsafe impl Send for UninitializedPageGuard<'_> {}
 
 impl<'block> UninitializedPageGuard<'block> {
     const fn new(
@@ -238,6 +241,7 @@ impl Display for BlockId {
 static LATEST_BLOCK_ID: AtomicU16 = AtomicU16::new(0);
 
 #[derive(Debug)]
+// TODO give the blocks names for use in debugging
 pub struct Block {
     id: BlockId,
     housekeeping: Box<dyn Allocation>,

@@ -23,6 +23,8 @@ pub struct ManagedPageGuard<'storage> {
     txid: TransactionId,
 }
 
+unsafe impl Send for ManagedPageGuard<'_> {}
+
 impl<'storage> ManagedPageGuard<'storage> {
     pub fn upgrade(mut self) -> Result<ManagedPageGuardMut<'storage>, StorageError> {
         let Self {
@@ -71,6 +73,8 @@ pub struct ManagedPageGuardMut<'storage> {
     lock_manager: &'storage LockManager,
     txid: TransactionId,
 }
+
+unsafe impl Send for ManagedPageGuardMut<'_> {}
 
 impl Drop for ManagedPageGuardMut<'_> {
     fn drop(&mut self) {

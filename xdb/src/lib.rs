@@ -3,6 +3,7 @@
 // TODO see what we can prove with creusot
 // TODO remove xdb-cli
 // TODO replace InMemoryStorage with a file-backed one
+// TODO setup clippy/cargo-fmt to automatically format and group imports
 
 // TODO require `SAFETY: ...` comments
 #![deny(clippy::all, clippy::pedantic, clippy::nursery, warnings)]
