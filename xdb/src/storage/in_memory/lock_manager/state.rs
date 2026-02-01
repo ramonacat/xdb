@@ -173,6 +173,7 @@ impl LockManagerState {
             }
         }
 
+        // TODO if my_blockers.is_empty(), do we still need to even call this?
         if self.would_cycle_with(txid, &my_blockers, kind) {
             return false;
         }

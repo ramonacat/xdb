@@ -12,7 +12,6 @@ use crate::platform::errno;
 #[repr(transparent)]
 pub struct Futex(AtomicU32, PhantomPinned);
 
-#[allow(unused)] // TODO remvove if really unused
 impl Futex {
     pub const fn new(value: u32) -> Self {
         Self(AtomicU32::new(value), PhantomPinned)
@@ -50,17 +49,16 @@ impl Futex {
         }
     }
 
-    pub fn wake(self: Pin<&Self>, count: u32) -> Result<u64, FutexError> {
+    pub fn wake(self: Pin<&Self>, count: u32) -> u64 {
         let callers_woken_up = unsafe { syscall(SYS_futex, &raw const self.0, FUTEX_WAKE, count) };
         if callers_woken_up == -1 {
             match errno() {
-                // TODO do we really really want to expose this?
-                EINVAL => return Err(FutexError::InconsistentState),
+                EINVAL => unreachable!("inconsistent futex state"),
                 e => unreachable!("unexpected error: {e}"),
             }
         }
 
-        Ok(u64::try_from(callers_woken_up).unwrap())
+        u64::try_from(callers_woken_up).unwrap()
     }
 
     pub const fn atomic(self: Pin<&Self>) -> &AtomicU32 {

@@ -179,16 +179,17 @@ impl PageState {
 
                 debug!("[{debug_context:?}] write unlocked from {previous:?}");
 
-                self.wake();
+                self.wake(debug_context);
             }
             Err(_) => todo!(),
         }
     }
 
-    pub fn wake(self: Pin<&Self>) {
+    pub fn wake(self: Pin<&Self>, debug_context: DebugContext) {
         // TODO probably should be more optimized as to choosing whether to wake up readers
         // or writers
-        self.futex().wake(u32::MAX).unwrap();
+        let awoken = self.futex().wake(u32::MAX);
+        debug!("[{debug_context:?}] awoken {awoken} waiters");
     }
 
     pub fn lock_read(self: Pin<&Self>, debug_context: DebugContext) {
@@ -259,7 +260,7 @@ impl PageState {
                 debug!("[{debug_context:?}] reader removed from {previous:?}");
 
                 if previous.readers() == 1 {
-                    self.wake();
+                    self.wake(debug_context);
                 }
             }
             Err(previous) => {

@@ -43,7 +43,8 @@ impl<'block> PageRef<'block> {
     }
 
     pub(crate) fn wake(&self) {
-        unsafe { self.block.housekeeping_for(self.index) }.wake();
+        unsafe { self.block.housekeeping_for(self.index) }
+            .wake(DebugContext::new(self.txid, self.index));
     }
 }
 

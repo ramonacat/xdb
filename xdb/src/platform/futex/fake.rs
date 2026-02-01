@@ -30,8 +30,8 @@ impl Futex {
     }
 
     #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
-    pub fn wake(self: Pin<&Self>, count: u32) -> Result<u64, FutexError> {
-        Ok(u64::from(count))
+    pub fn wake(self: Pin<&Self>, count: u32) -> u64 {
+        u64::from(count)
     }
 
     pub const fn atomic(self: Pin<&Self>) -> &AtomicU32 {

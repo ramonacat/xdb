@@ -4,6 +4,8 @@
 // TODO remove xdb-cli
 // TODO replace InMemoryStorage with a file-backed one
 // TODO setup clippy/cargo-fmt to automatically format and group imports
+// TODO multithreaded fuzzing? not ideal, because it's not deterministic, but maybe could be a bit
+// better at finding bugs?
 
 // TODO require `SAFETY: ...` comments
 #![deny(clippy::all, clippy::pedantic, clippy::nursery, warnings)]
