@@ -1171,23 +1171,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "xdb-cli"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "env_logger",
- "xdb",
-]
-
-[[package]]
-name = "xdb-client"
-version = "0.1.0"
-dependencies = [
- "env_logger",
- "rand 0.9.2",
-]
-
-[[package]]
 name = "xdb-fuzz"
 version = "0.0.0"
 dependencies = [
@@ -1199,12 +1182,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "xdb-server"
+name = "xdb-tests"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
+ "arbitrary",
  "env_logger",
  "log",
+ "rand 0.9.2",
  "xdb",
 ]
 

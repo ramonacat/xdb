@@ -1,0 +1,187 @@
+use log::debug;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver, Sender},
+    },
+    thread::{self, JoinHandle},
+    time::{self, Duration},
+};
+
+use arbitrary::{Arbitrary, Unstructured};
+use log::info;
+use rand::{Rng, rng};
+use xdb::{
+    bplustree::{
+        Tree, TreeError, TreeTransaction,
+        algorithms::{delete::delete, find, insert::insert},
+        debug::assert_properties,
+    },
+    debug::BigKey,
+    storage::{StorageError, in_memory::InMemoryStorage},
+};
+
+const THREAD_COUNT: usize = 16;
+type KeyType = BigKey<u16, 1024>;
+
+#[derive(Debug)]
+struct Value(Vec<u8>);
+
+impl<'a> Arbitrary<'a> for Value {
+    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+        let mut buffer = vec![0u8; u.int_in_range(1..=128)?];
+
+        u.fill_buffer(&mut buffer)?;
+
+        Ok(Value(buffer))
+    }
+}
+
+#[derive(Debug, Arbitrary)]
+enum Command {
+    Insert(KeyType, Value),
+    Delete(KeyType),
+    Read(KeyType),
+}
+
+#[derive(Debug, Arbitrary)]
+struct TransactionCommands {
+    commands: Vec<Command>,
+    commit: bool,
+}
+
+struct ServerThread {
+    id: usize,
+    tx: Sender<TransactionCommands>,
+    handle: JoinHandle<()>,
+}
+
+fn retry_on_deadlock<T>(
+    tree: Arc<Tree<InMemoryStorage, KeyType>>,
+    callable: impl Fn(TreeTransaction<InMemoryStorage, KeyType>) -> Result<T, TreeError>,
+) -> Result<T, TreeError> {
+    for i in 0..10 {
+        let transaction = tree.transaction().unwrap();
+
+        match callable(transaction) {
+            Ok(ok) => return Ok(ok),
+            Err(TreeError::StorageError(StorageError::Deadlock(_))) => {}
+            error @ Err(_) => return error,
+        };
+
+        thread::sleep(Duration::from_millis(2u64.pow(i)));
+        debug!("retrying: {i}");
+    }
+
+    info!("last retry after 10 tries");
+
+    let transaction = tree.transaction().unwrap();
+    callable(transaction)
+}
+
+fn server_thread(
+    _id: usize,
+    rx: Receiver<TransactionCommands>,
+    tree: Arc<Tree<InMemoryStorage, KeyType>>,
+) {
+    while let Ok(TransactionCommands { commands, commit }) = rx.recv() {
+        retry_on_deadlock(tree.clone(), |mut transaction| {
+            for command in &commands {
+                match command {
+                    Command::Insert(key, value) => {
+                        insert(&mut transaction, *key, &value.0).map(|_| ())?
+                    }
+                    Command::Delete(key) => delete(&mut transaction, *key).map(|_| ())?,
+                    Command::Read(key) => find(&mut transaction, *key).map(|_| ())?,
+                };
+            }
+
+            if commit {
+                transaction.commit()?;
+            } else {
+                transaction.rollback()?;
+            }
+
+            Ok(())
+        })
+        .unwrap();
+    }
+}
+
+fn main() {
+    env_logger::init();
+
+    let storage = InMemoryStorage::new();
+    let tree = Arc::new(Tree::new(storage).unwrap());
+
+    let server_threads: Vec<_> = (0..THREAD_COUNT)
+        .map(|id| {
+            let (tx, rx) = mpsc::channel();
+            let tree = tree.clone();
+
+            let handle = thread::Builder::new()
+                .name(format!("server-{id:02}"))
+                .spawn(move || {
+                    server_thread(id, rx, tree);
+                })
+                .unwrap();
+
+            ServerThread { id, tx, handle }
+        })
+        .collect();
+
+    let stop = Arc::new(AtomicBool::new(false));
+
+    let mut client_threads = vec![];
+
+    for thread in server_threads {
+        let stop = stop.clone();
+
+        let handle = thread::Builder::new()
+            .name(format!("client-{:02}", thread.id))
+            .spawn(move || {
+                let mut rng = rng();
+                while !stop.load(Ordering::Relaxed) {
+                    let mut buffer = [0u8; 1024];
+                    rng.fill(&mut buffer);
+                    let mut unstructured = Unstructured::new(&buffer);
+
+                    let command = TransactionCommands::arbitrary(&mut unstructured).unwrap();
+                    thread.tx.send(command).unwrap();
+                }
+
+                thread.handle.join().unwrap();
+            })
+            .unwrap();
+
+        client_threads.push(handle);
+    }
+
+    info!("threads started up, going to sleep");
+
+    let run_length = Duration::from_secs(60);
+    let start = time::Instant::now();
+
+    while time::Instant::now() - start < run_length {
+        thread::sleep(Duration::from_secs(10));
+
+        info!("still running...");
+    }
+
+    info!("time's up, wrapping up");
+
+    stop.store(true, Ordering::Relaxed);
+
+    for thread in client_threads {
+        thread.join().unwrap();
+    }
+
+    info!("all threads stopped, checking tree properties...");
+
+    let mut trx = tree.transaction().unwrap();
+    assert_properties(&mut trx);
+    trx.rollback().unwrap();
+
+    info!("all done");
+}

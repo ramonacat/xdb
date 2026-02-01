@@ -5,8 +5,6 @@ use std::{
     ops::Deref as _,
 };
 
-use log::error;
-
 use crate::{
     page::Page,
     storage::{
@@ -99,14 +97,6 @@ impl<'storage> InMemoryTransaction<'storage> {
 
 impl Drop for InMemoryTransaction<'_> {
     fn drop(&mut self) {
-        if self.finalized {
-            return;
-        }
-
-        error!(
-            "[{:?}] transaction dropped without being rolled back or comitted",
-            self.id
-        );
         // TODO do an actual rollback
     }
 }

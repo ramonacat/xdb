@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["xdb", "xdb-cli", "fuzz", "xdb-server", "xdb-client"]
+members = ["xdb", "fuzz", "xdb-tests"]
 
 # this needs a special feature, which breaks code that doesn't use shuttle
 exclude = ["xdb-shuttle"]
