@@ -1,4 +1,5 @@
 use crate::sync::atomic::{AtomicU32, Ordering};
+use crate::thread;
 use std::pin::Pin;
 
 use crate::platform::futex::FutexError;
@@ -17,10 +18,15 @@ impl Futex {
         }
     }
 
-    // TODO yield and check the value before entering the loop, to add some potential for races
     pub fn wait(self: Pin<&Self>, value: u32) -> Result<(), FutexError> {
+        thread::yield_now();
+
+        if self.value.load(Ordering::SeqCst) != value {
+            return Err(FutexError::Race);
+        }
+
         loop {
-            crate::thread::yield_now();
+            thread::yield_now();
 
             if self.value.load(Ordering::SeqCst) == value {
                 continue;
