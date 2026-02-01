@@ -256,6 +256,9 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
 
     fn commit(mut self) -> Result<(), StorageError> {
         debug!("[{:?}] committing transaction", self.id);
+
+        self.finalized = true;
+
         // TODO make the commit consistent in event of a crash:
         //    1. write to a transaction log
         //    2. fsync the transaction log
@@ -278,8 +281,6 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
                 }
             }
         }
-
-        self.finalized = true;
 
         // TODO delete all the pages from self.storage.rollback_copies
         Ok(())

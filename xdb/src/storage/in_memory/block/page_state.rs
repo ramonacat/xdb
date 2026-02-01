@@ -151,7 +151,9 @@ impl PageState {
 
                 // TODO drop the timeout once we're confident in deadlock detection
                 match self.futex().wait(previous.0, Some(Duration::from_secs(5))) {
-                    Ok(()) => {}
+                    Ok(()) => {
+                        self.lock_write(debug_context);
+                    }
                     Err(error) => match error {
                         crate::platform::futex::FutexError::Race => todo!(),
                         // TODO we should stop this from happening at all!
@@ -215,8 +217,11 @@ impl PageState {
                 debug!("[{debug_context:?}] failed to lock for read from {previous:?}");
 
                 // TODO drop the timeout once we're confident in deadlock detection
+                // TODO this match around wait is repeated in a few places, clean it up
                 match self.futex().wait(previous.0, Some(Duration::from_secs(5))) {
-                    Ok(()) => {}
+                    Ok(()) => {
+                        self.lock_read(debug_context);
+                    }
                     Err(error) => match error {
                         crate::platform::futex::FutexError::Race => todo!(),
                         // TODO we should stop this from happening at all!
@@ -235,10 +240,16 @@ impl PageState {
             .atomic()
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 let x = PageStateValue(x);
-                assert!(!x.has_writer());
+
+                if x.has_writer() {
+                    return None;
+                }
 
                 let reader_count = x.readers();
-                assert!(reader_count > 0);
+
+                if reader_count == 0 {
+                    return None;
+                }
 
                 Some(x.with_readers(reader_count - 1).0)
             }) {
@@ -251,7 +262,13 @@ impl PageState {
                     self.wake();
                 }
             }
-            Err(_) => todo!(),
+            Err(previous) => {
+                let previous = PageStateValue(previous);
+
+                panic!(
+                    "[{debug_context:?}] [{previous:?}] unlocking failed because of invalid state"
+                );
+            }
         }
     }
 }

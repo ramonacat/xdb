@@ -139,7 +139,6 @@ impl LockManager {
         Ok(page.get())
     }
 
-    // TODO make private
     fn lock_upgrade<'storage>(
         &self,
         txid: TransactionId,
