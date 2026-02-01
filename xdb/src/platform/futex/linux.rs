@@ -1,10 +1,8 @@
 use crate::platform::futex::FutexError;
 use crate::sync::atomic::AtomicU32;
-use std::{marker::PhantomPinned, pin::Pin, ptr, time::Duration};
+use std::{ffi::c_void, marker::PhantomPinned, pin::Pin, ptr};
 
-use libc::{
-    EAGAIN, EFAULT, EINTR, EINVAL, ETIMEDOUT, FUTEX_WAIT, FUTEX_WAKE, SYS_futex, syscall, timespec,
-};
+use libc::{EAGAIN, EFAULT, EINTR, EINVAL, ETIMEDOUT, FUTEX_WAIT, FUTEX_WAKE, SYS_futex, syscall};
 
 use crate::platform::errno;
 
@@ -17,19 +15,14 @@ impl Futex {
         Self(AtomicU32::new(value), PhantomPinned)
     }
 
-    pub fn wait(self: Pin<&Self>, value: u32, timeout: Option<Duration>) -> Result<(), FutexError> {
-        let timespec = timeout.map(|x| timespec {
-            tv_sec: x.as_secs().cast_signed(),
-            tv_nsec: i64::from(x.subsec_nanos()),
-        });
-
+    pub fn wait(self: Pin<&Self>, value: u32) -> Result<(), FutexError> {
         let result = unsafe {
             syscall(
                 SYS_futex,
                 &raw const self.0,
                 FUTEX_WAIT,
                 value,
-                timespec.as_ref().map_or(ptr::null(), ptr::from_ref),
+                ptr::null::<c_void>(),
             )
         };
 
@@ -42,7 +35,7 @@ impl Futex {
             // signal
             EAGAIN | EINTR => Err(FutexError::Race),
 
-            ETIMEDOUT => Err(FutexError::Timeout),
+            ETIMEDOUT => unreachable!("futex timeout despite no timeout being set"),
             EFAULT => unreachable!("timespec address did not point to a valid address"),
             EINVAL => unreachable!("timespec nanoseconds were over 1s"),
             e => unreachable!("unexpected error: {e}"),

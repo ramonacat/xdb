@@ -143,8 +143,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         Ok(read(guards))
     }
 
-    // TODO improve error handling - return an error when a page got removed in the current
-    // transaction
+    // TODO this method is a bit complex, simplify
     fn write<T, const N: usize>(
         &mut self,
         indices: impl Into<[PageIndex; N]>,
@@ -169,22 +168,24 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
                 );
             }
 
-            if !self.write_guards.contains_key(&index) {
-                let guard = self.storage.lock_manager.get_write(self.id, index)?;
-                let cow_guard = self.copy_for_write(*guard);
+            match self.write_guards.get(&index) {
+                Some(WritePage::Deleted { .. }) => {
+                    return Err(StorageError::PageNotFound(index));
+                }
+                Some(WritePage::Modified { .. } | WritePage::Inserted { .. }) => {}
+                None => {
+                    let guard = self.storage.lock_manager.get_write(self.id, index)?;
+                    let cow_guard = self.copy_for_write(*guard);
 
-                self.write_guards
-                    .insert(index, WritePage::Modified { guard, cow_guard });
+                    self.write_guards
+                        .insert(index, WritePage::Modified { guard, cow_guard });
+                }
             }
         }
 
-        let mut index_refs: [Option<&PageIndex>; N] = [None; N];
-        for (i, idx) in indices.iter().enumerate() {
-            index_refs[i] = Some(idx);
-        }
         let guards = self
             .write_guards
-            .get_disjoint_mut(index_refs.map(|x| x.unwrap()))
+            .get_disjoint_mut(indices.each_ref())
             .map(|x| &mut **x.unwrap().cow_guard_mut().unwrap());
 
         Ok(write(guards))

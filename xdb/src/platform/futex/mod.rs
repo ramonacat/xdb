@@ -1,14 +1,10 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-#[allow(unused)]
 pub enum FutexError {
+    #[allow(unused)] // TODO try to simulate this case in the fake futex
     #[error("the value has changed while the wait was attempted")]
     Race,
-    #[error("timed out")]
-    Timeout,
-    #[error("the kernel state is inconsistent with the method called")]
-    InconsistentState,
 }
 
 mod fake;

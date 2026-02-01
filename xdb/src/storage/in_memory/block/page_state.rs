@@ -3,10 +3,9 @@ use log::debug;
 use crate::storage::{PageIndex, TransactionId};
 use crate::sync::atomic::{AtomicU32, Ordering};
 use std::fmt::Debug;
-use std::time::Duration;
 use std::{marker::PhantomPinned, pin::Pin};
 
-use crate::platform::futex::Futex;
+use crate::platform::futex::{Futex, FutexError};
 
 const fn mask32(start_bit: u32, end_bit: u32) -> u32 {
     assert!(end_bit <= start_bit);
@@ -149,19 +148,15 @@ impl PageState {
 
                 debug!("[{debug_context:?}] failed to lock for write, previous {previous:?}");
 
-                // TODO drop the timeout once we're confident in deadlock detection
-                match self.futex().wait(previous.0, Some(Duration::from_secs(5))) {
-                    Ok(()) => {
-                        self.lock_write(debug_context);
-                    }
-                    Err(error) => match error {
-                        crate::platform::futex::FutexError::Race => todo!(),
-                        // TODO we should stop this from happening at all!
-                        crate::platform::futex::FutexError::Timeout => todo!(),
-                        crate::platform::futex::FutexError::InconsistentState => todo!(),
-                    },
-                }
+                self.wait(previous);
+                self.lock_write(debug_context);
             }
+        }
+    }
+
+    fn wait(self: Pin<&Self>, previous: PageStateValue) {
+        match self.futex().wait(previous.0) {
+            Ok(()) | Err(FutexError::Race) => {}
         }
     }
 
@@ -217,19 +212,8 @@ impl PageState {
 
                 debug!("[{debug_context:?}] failed to lock for read from {previous:?}");
 
-                // TODO drop the timeout once we're confident in deadlock detection
-                // TODO this match around wait is repeated in a few places, clean it up
-                match self.futex().wait(previous.0, Some(Duration::from_secs(5))) {
-                    Ok(()) => {
-                        self.lock_read(debug_context);
-                    }
-                    Err(error) => match error {
-                        crate::platform::futex::FutexError::Race => todo!(),
-                        // TODO we should stop this from happening at all!
-                        crate::platform::futex::FutexError::Timeout => todo!(),
-                        crate::platform::futex::FutexError::InconsistentState => todo!(),
-                    },
-                }
+                self.wait(previous);
+                self.lock_read(debug_context);
             }
         }
     }

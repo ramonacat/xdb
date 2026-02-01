@@ -1,5 +1,5 @@
 use crate::sync::atomic::{AtomicU32, Ordering};
-use std::{pin::Pin, time::Duration};
+use std::pin::Pin;
 
 use crate::platform::futex::FutexError;
 
@@ -17,7 +17,8 @@ impl Futex {
         }
     }
 
-    pub fn wait(self: Pin<&Self>, value: u32, timeout: Option<Duration>) -> Result<(), FutexError> {
+    // TODO yield and check the value before entering the loop, to add some potential for races
+    pub fn wait(self: Pin<&Self>, value: u32) -> Result<(), FutexError> {
         loop {
             crate::thread::yield_now();
 
