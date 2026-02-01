@@ -1,5 +1,8 @@
-// TODO create a server + a test app which will run many threads with many simulatenous
-// transactions to strees test
+// TODO replace xdb-client/xdb-server with a single app that runs random parallel transactions and
+// ensures the tree is consistent when doing that
+// TODO see what we can prove with creusot
+// TODO remove xdb-cli
+// TODO replace InMemoryStorage with a file-backed one
 
 // TODO require `SAFETY: ...` comments
 #![deny(clippy::all, clippy::pedantic, clippy::nursery, warnings)]
