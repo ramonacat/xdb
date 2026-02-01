@@ -9,6 +9,12 @@ use crate::storage::{PageIndex, TransactionId};
 pub enum LockKind {
     Read,
     Write,
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum LockRequestKind {
+    Read,
+    Write,
     Upgrade,
 }
 
@@ -41,19 +47,19 @@ impl LockedPages {
         }
     }
 
-    fn add(&mut self, index: PageIndex, kind: LockKind) {
+    fn add(&mut self, index: PageIndex, kind: LockRequestKind) {
         match kind {
-            LockKind::Read => {
+            LockRequestKind::Read => {
                 debug_assert!(!self.write.contains(&index));
 
                 *self.read.entry(index).or_insert(0) += 1;
             }
-            LockKind::Write => {
+            LockRequestKind::Write => {
                 debug_assert!(*self.read.get(&index).unwrap_or(&0) == 0);
 
                 self.write.insert(index);
             }
-            LockKind::Upgrade => {
+            LockRequestKind::Upgrade => {
                 debug_assert!(*self.read.get(&index).unwrap_or(&0) == 1);
 
                 *self.read.get_mut(&index).unwrap() = 0;
@@ -82,7 +88,6 @@ impl LockedPages {
 
                 true
             }
-            LockKind::Upgrade => todo!(),
         }
     }
 
@@ -138,20 +143,30 @@ impl LockManagerState {
     }
 
     #[must_use]
-    pub fn add_page(&mut self, txid: TransactionId, index: PageIndex, kind: LockKind) -> bool {
+    pub fn add_page(
+        &mut self,
+        txid: TransactionId,
+        index: PageIndex,
+        kind: LockRequestKind,
+    ) -> bool {
         let mut my_blockers = HashSet::new();
 
         for (blocker_txid, pages) in &self.pages {
             if let Some(blocker_status) = pages.get_status(index) {
                 if *blocker_txid == txid {
                     let blocks_with_self = match (kind, blocker_status) {
-                        (LockKind::Read, LockStatus::Read(_))
-                        | (LockKind::Upgrade, LockStatus::Read(1)) => false,
+                        (LockRequestKind::Read, LockStatus::Read(_))
+                        | (LockRequestKind::Upgrade, LockStatus::Read(1)) => false,
                         (
-                            LockKind::Read | LockKind::Write | LockKind::Upgrade,
+                            LockRequestKind::Read
+                            | LockRequestKind::Write
+                            | LockRequestKind::Upgrade,
                             LockStatus::Write,
                         )
-                        | (LockKind::Write | LockKind::Upgrade, LockStatus::Read(_)) => true,
+                        | (
+                            LockRequestKind::Write | LockRequestKind::Upgrade,
+                            LockStatus::Read(_),
+                        ) => true,
                     };
 
                     if blocks_with_self {
@@ -162,7 +177,6 @@ impl LockManagerState {
                         return false;
                     }
                 } else {
-                    // TODO should the special casing happen in would_cycle_with instead?
                     my_blockers.insert(Edge {
                         from: txid,
                         to: *blocker_txid,
@@ -179,7 +193,7 @@ impl LockManagerState {
 
         self.pages_for_mut(txid).add(index, kind);
 
-        if kind == LockKind::Upgrade {
+        if kind == LockRequestKind::Upgrade {
             self.edges
                 .retain(|x| !(x.from == txid && x.kind == LockKind::Read && x.page == index));
         }
@@ -223,7 +237,7 @@ impl LockManagerState {
         &self,
         txid: TransactionId,
         virtual_edges: &HashSet<Edge>,
-        kind: LockKind,
+        kind: LockRequestKind,
     ) -> bool {
         struct Visitor<'a> {
             edges: &'a HashSet<Edge>,

@@ -1,6 +1,6 @@
 mod state;
 
-use crate::sync::RwLock;
+use crate::{storage::in_memory::lock_manager::state::LockRequestKind, sync::RwLock};
 use std::ops::{Deref, DerefMut};
 
 use log::debug;
@@ -124,7 +124,7 @@ impl LockManager {
     ) -> Result<PageGuard<'storage>, StorageError> {
         let mut state_guard = self.state.write().unwrap();
 
-        if !state_guard.add_page(txid, page.index(), LockKind::Read) {
+        if !state_guard.add_page(txid, page.index(), LockRequestKind::Read) {
             return Err(StorageError::Deadlock(page.index()));
         }
 
@@ -146,7 +146,7 @@ impl LockManager {
     ) -> Result<PageGuardMut<'storage>, StorageError> {
         let mut state_guard = self.state.write().unwrap();
 
-        if !state_guard.add_page(txid, guard.index(), LockKind::Upgrade) {
+        if !state_guard.add_page(txid, guard.index(), LockRequestKind::Upgrade) {
             return Err(StorageError::Deadlock(guard.index()));
         }
 
@@ -194,7 +194,7 @@ impl LockManager {
     ) -> Result<PageGuardMut<'storage>, StorageError> {
         let mut state_guard = self.state.write().unwrap();
 
-        if !state_guard.add_page(txid, page.index(), LockKind::Write) {
+        if !state_guard.add_page(txid, page.index(), LockRequestKind::Write) {
             return Err(StorageError::Deadlock(page.index()));
         }
 
