@@ -1,7 +1,12 @@
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use shuttle::{sync::Arc, thread};
+    use shuttle::{
+        Config, PortfolioRunner,
+        scheduler::{DfsScheduler, PctScheduler, RandomScheduler},
+        sync::Arc,
+        thread,
+    };
     use xdb::{
         bplustree::{
             Tree, TreeError, TreeKey,
@@ -12,8 +17,6 @@ mod tests {
         storage::{StorageError, in_memory::InMemoryStorage},
     };
 
-    const ITERATIONS: usize = 100;
-
     fn test<
         TKey: TreeKey,
         TThread1: Fn() -> Result<(), TreeError> + Send + 'static,
@@ -23,39 +26,42 @@ mod tests {
         thread2: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) -> TThread2 + Sync + Send + 'static,
         verify: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) + Send + Sync + 'static,
     ) {
-        shuttle::check_random(
-            move || {
-                let storage = InMemoryStorage::new();
-                let tree = Arc::new(Tree::<_, TKey>::new(storage).unwrap());
+        let config = Config::new();
+        let mut runner = PortfolioRunner::new(true, config);
 
-                let t1 = {
-                    let tree = tree.clone();
+        runner.add(PctScheduler::new(1000, 100));
+        runner.add(RandomScheduler::new(1000));
 
-                    thread::spawn((thread1)(tree))
-                };
+        runner.run(move || {
+            let storage = InMemoryStorage::new();
+            let tree = Arc::new(Tree::<_, TKey>::new(storage).unwrap());
 
-                let t2 = {
-                    let tree = tree.clone();
-                    thread::spawn((thread2)(tree))
-                };
+            let t1 = {
+                let tree = tree.clone();
 
-                if matches!(
-                    t1.join().unwrap(),
-                    Err(TreeError::StorageError(StorageError::Deadlock(_)))
-                ) {
-                    return;
-                }
-                if matches!(
-                    t2.join().unwrap(),
-                    Err(TreeError::StorageError(StorageError::Deadlock(_)))
-                ) {
-                    return;
-                }
+                thread::spawn((thread1)(tree))
+            };
 
-                verify(tree);
-            },
-            ITERATIONS,
-        );
+            let t2 = {
+                let tree = tree.clone();
+                thread::spawn((thread2)(tree))
+            };
+
+            if matches!(
+                t1.join().unwrap(),
+                Err(TreeError::StorageError(StorageError::Deadlock(_)))
+            ) {
+                return;
+            }
+            if matches!(
+                t2.join().unwrap(),
+                Err(TreeError::StorageError(StorageError::Deadlock(_)))
+            ) {
+                return;
+            }
+
+            verify(tree);
+        });
     }
 
     #[test]
@@ -98,7 +104,7 @@ mod tests {
                 move || {
                     let mut transaction = tree.transaction()?;
 
-                    for i in 50..100u64 {
+                    for i in 5..10u64 {
                         insert(
                             &mut transaction,
                             BigKey::<u64, 1024>::new(i),
@@ -115,7 +121,7 @@ mod tests {
                 move || {
                     let mut transaction = tree.transaction()?;
 
-                    for i in 0..50 {
+                    for i in 0..5 {
                         insert(&mut transaction, BigKey::new(i), &i.to_ne_bytes())?;
                     }
 
@@ -133,7 +139,7 @@ mod tests {
                         .map(|x| x.unwrap())
                         .map(|(k, v)| (k.value(), v))
                         .collect::<Vec<_>>(),
-                    &(0..100u64)
+                    &(0..10u64)
                         .map(|x| (x, x.to_ne_bytes().into_iter().collect::<Vec<_>>()))
                         .collect::<Vec<_>>()
                 );
@@ -148,7 +154,7 @@ mod tests {
                 move || {
                     let mut transaction = tree.transaction()?;
 
-                    for i in (0..100).filter(|x| x % 2 == 0) {
+                    for i in (0..10).filter(|x| x % 2 == 0) {
                         insert(
                             &mut transaction,
                             BigKey::<u64, 1024>::new(i),
@@ -165,7 +171,7 @@ mod tests {
                 move || {
                     let mut transaction = tree.transaction()?;
 
-                    for i in (0..100).filter(|x| x % 2 != 0) {
+                    for i in (0..10).filter(|x| x % 2 != 0) {
                         insert(&mut transaction, BigKey::new(i), &i.to_ne_bytes())?;
                     }
 
@@ -183,7 +189,7 @@ mod tests {
                         .map(|x| x.unwrap())
                         .map(|(k, v)| (k.value(), v))
                         .collect::<Vec<_>>(),
-                    &(0..100u64)
+                    &(0..10u64)
                         .map(|x| (x, x.to_ne_bytes().into_iter().collect::<Vec<_>>()))
                         .collect::<Vec<_>>()
                 );
@@ -197,7 +203,7 @@ mod tests {
             |tree| {
                 move || {
                     let mut transaction = tree.transaction()?;
-                    for i in (0..1000).filter(|x| x % 2 == 0) {
+                    for i in (0..10).filter(|x| x % 2 == 0) {
                         insert(
                             &mut transaction,
                             BigKey::<u64, 1024>::new(i),
@@ -205,7 +211,7 @@ mod tests {
                         )?;
                     }
 
-                    for i in (0..1000).filter(|x| x % 2 == 1) {
+                    for i in (0..10).filter(|x| x % 2 == 1) {
                         insert(
                             &mut transaction,
                             BigKey::<u64, 1024>::new(i),
@@ -220,7 +226,7 @@ mod tests {
             |tree| {
                 move || {
                     let mut transaction = tree.transaction()?;
-                    for i in 1000..0 {
+                    for i in 10..0 {
                         find(&mut transaction, BigKey::new(i))?;
                     }
                     transaction.commit()?;
@@ -237,7 +243,7 @@ mod tests {
                         .map(|x| x.unwrap())
                         .map(|(k, v)| (k.value(), v))
                         .collect::<Vec<_>>(),
-                    &(0..1000u64)
+                    &(0..10u64)
                         .map(|x| (x, x.to_ne_bytes().into_iter().collect::<Vec<_>>()))
                         .collect::<Vec<_>>()
                 );

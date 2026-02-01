@@ -18,7 +18,7 @@ impl Futex {
     }
 
     pub fn wait(self: Pin<&Self>, value: u32, timeout: Option<Duration>) -> Result<(), FutexError> {
-        for i in 0..1000 {
+        loop {
             crate::thread::yield_now();
 
             if self.value.load(Ordering::SeqCst) == value {
@@ -27,8 +27,6 @@ impl Futex {
 
             return Ok(());
         }
-
-        Err(FutexError::Timeout)
     }
 
     #[allow(clippy::unused_self, clippy::unnecessary_wraps)]

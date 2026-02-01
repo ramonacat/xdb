@@ -6,3 +6,4 @@ flamegraph.svg
 fuzz/target
 fuzz/artifacts
 fuzz/coverage
+.direnv/

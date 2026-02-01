@@ -1,4 +1,8 @@
+use log::debug;
+
+use crate::storage::{PageIndex, TransactionId};
 use crate::sync::atomic::{AtomicU32, Ordering};
+use std::fmt::Debug;
 use std::time::Duration;
 use std::{marker::PhantomPinned, pin::Pin};
 
@@ -14,6 +18,22 @@ const fn mask32(start_bit: u32, end_bit: u32) -> u32 {
     1 << start_bit | mask32(start_bit - 1, end_bit)
 }
 
+#[derive(Debug, Clone, Copy)]
+#[allow(
+    unused,
+    reason = "the whole point of this struct is to just be for debug printing"
+)]
+pub struct DebugContext {
+    transaction: TransactionId,
+    page: PageIndex,
+}
+
+impl DebugContext {
+    pub const fn new(transaction: TransactionId, page: PageIndex) -> Self {
+        Self { transaction, page }
+    }
+}
+
 #[derive(Debug)]
 #[repr(transparent)]
 pub struct PageState(Futex, PhantomPinned);
@@ -22,9 +42,19 @@ pub struct PageState(Futex, PhantomPinned);
 const _: () = assert!(size_of::<PageState>() == size_of::<u32>());
 
 #[must_use]
-#[derive(Debug, Clone, Copy)] // TODO make debug pretty print the actual information, not just the
-// raw number
+#[derive(Clone, Copy)]
 struct PageStateValue(u32);
+
+impl Debug for PageStateValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PageStateValue")
+            .field("is_initialized", &self.is_initialized())
+            .field("readers", &self.readers())
+            .field("has_writer", &self.has_writer())
+            .field("raw", &format!("{:#b}", self.0))
+            .finish()
+    }
+}
 
 impl PageStateValue {
     const MASK_IS_INITIALIZED: u32 = 1 << 31;
@@ -91,7 +121,7 @@ impl PageState {
         PageStateValue(self.atomic().load(Ordering::Acquire)).is_initialized()
     }
 
-    pub fn lock_write(self: Pin<&Self>) {
+    pub fn lock_write(self: Pin<&Self>, debug_context: DebugContext) {
         debug_assert!(self.is_initialized());
 
         match self
@@ -109,10 +139,18 @@ impl PageState {
 
                 Some(f.with_writer().0)
             }) {
-            Ok(_) => {}
+            Ok(previous) => {
+                let previous = PageStateValue(previous);
+
+                debug!("[{debug_context:?}] locked for write, previous {previous:?}");
+            }
             Err(previous) => {
+                let previous = PageStateValue(previous);
+
+                debug!("[{debug_context:?}] failed to lock for write, previous {previous:?}");
+
                 // TODO drop the timeout once we're confident in deadlock detection
-                match self.futex().wait(previous, Some(Duration::from_secs(5))) {
+                match self.futex().wait(previous.0, Some(Duration::from_secs(5))) {
                     Ok(()) => {}
                     Err(error) => match error {
                         crate::platform::futex::FutexError::Race => todo!(),
@@ -125,7 +163,7 @@ impl PageState {
         }
     }
 
-    pub fn unlock_write(self: Pin<&Self>) {
+    pub fn unlock_write(self: Pin<&Self>, debug_context: DebugContext) {
         debug_assert!(self.is_initialized());
 
         match self
@@ -134,16 +172,24 @@ impl PageState {
                 let x = PageStateValue(x);
                 Some(x.without_writer().0)
             }) {
-            Ok(_) => {
-                // TODO probably should be more optimized as to choosing whether to wake up readers
-                // or writers
-                self.futex().wake(u32::MAX).unwrap();
+            Ok(previous) => {
+                let previous = PageStateValue(previous);
+
+                debug!("[{debug_context:?}] write unlocked from {previous:?}");
+
+                self.wake();
             }
             Err(_) => todo!(),
         }
     }
 
-    pub fn lock_read(self: Pin<&Self>) {
+    pub fn wake(self: Pin<&Self>) {
+        // TODO probably should be more optimized as to choosing whether to wake up readers
+        // or writers
+        self.futex().wake(u32::MAX).unwrap();
+    }
+
+    pub fn lock_read(self: Pin<&Self>, debug_context: DebugContext) {
         debug_assert!(self.is_initialized());
 
         let result = self
@@ -158,10 +204,18 @@ impl PageState {
             });
 
         match result {
-            Ok(_) => {}
+            Ok(previous) => {
+                let previous = PageStateValue(previous);
+
+                debug!("[{debug_context:?}] read locked from {previous:?}");
+            }
             Err(previous) => {
+                let previous = PageStateValue(previous);
+
+                debug!("[{debug_context:?}] failed to lock for read from {previous:?}");
+
                 // TODO drop the timeout once we're confident in deadlock detection
-                match self.futex().wait(previous, Some(Duration::from_secs(5))) {
+                match self.futex().wait(previous.0, Some(Duration::from_secs(5))) {
                     Ok(()) => {}
                     Err(error) => match error {
                         crate::platform::futex::FutexError::Race => todo!(),
@@ -174,7 +228,7 @@ impl PageState {
         }
     }
 
-    pub fn unlock_read(self: Pin<&Self>) {
+    pub fn unlock_read(self: Pin<&Self>, debug_context: DebugContext) {
         debug_assert!(self.is_initialized());
 
         match self
@@ -188,39 +242,16 @@ impl PageState {
 
                 Some(x.with_readers(reader_count - 1).0)
             }) {
-            Ok(_) => {
-                self.futex().wake(u32::MAX).unwrap();
+            Ok(previous) => {
+                let previous = PageStateValue(previous);
+
+                debug!("[{debug_context:?}] reader removed from {previous:?}");
+
+                if previous.readers() == 1 {
+                    self.wake();
+                }
             }
             Err(_) => todo!(),
-        }
-    }
-
-    pub fn lock_upgrade(self: Pin<&Self>) {
-        match self
-            .atomic()
-            .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
-                let x = PageStateValue(x);
-                if x.readers() != 1 {
-                    return None;
-                }
-
-                assert!(!x.has_writer());
-
-                Some(x.with_readers(0).with_writer().0)
-            }) {
-            Ok(_) => {}
-            Err(previous) => {
-                // TODO drop the timeout once we're confident in deadlock detection
-                match self.futex().wait(previous, Some(Duration::from_secs(5))) {
-                    Ok(()) => {}
-                    Err(error) => match error {
-                        crate::platform::futex::FutexError::Race => todo!(),
-                        // TODO we should stop this from happening at all!
-                        crate::platform::futex::FutexError::Timeout => self.lock_read(),
-                        crate::platform::futex::FutexError::InconsistentState => todo!(),
-                    },
-                }
-            }
         }
     }
 }

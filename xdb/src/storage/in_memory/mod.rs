@@ -23,7 +23,6 @@ impl<'storage> PageReservation<'storage> for InMemoryPageReservation<'storage> {
 
 #[derive(Debug)]
 pub struct InMemoryStorage {
-    pages: Block,
     rollback_copies: Block,
     lock_manager: LockManager,
 }
@@ -38,9 +37,8 @@ impl InMemoryStorage {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            pages: Block::new(),
             rollback_copies: Block::new(),
-            lock_manager: LockManager::new(),
+            lock_manager: LockManager::new(Block::new()),
         }
     }
 }

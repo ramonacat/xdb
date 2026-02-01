@@ -1,26 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::RwLock,
-};
+use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
 
-use arbitrary::Result;
-use log::debug;
+use log::{Level, debug, log_enabled};
 
-use crate::storage::{
-    PageIndex, StorageError, TransactionId,
-    in_memory::block::{PageGuard, PageGuardMut, PageRef},
-};
+use crate::storage::{PageIndex, TransactionId};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-enum LockKind {
+pub enum LockKind {
     Read,
     Write,
-}
-
-#[derive(Debug)]
-struct LockedPages {
-    read: HashMap<PageIndex, usize>,
-    write: HashSet<PageIndex>,
+    Upgrade,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -36,6 +25,12 @@ impl From<LockStatus> for LockKind {
             LockStatus::Write => Self::Write,
         }
     }
+}
+
+#[derive(Debug)]
+struct LockedPages {
+    read: HashMap<PageIndex, usize>,
+    write: HashSet<PageIndex>,
 }
 
 impl LockedPages {
@@ -54,16 +49,14 @@ impl LockedPages {
                 *self.read.entry(index).or_insert(0) += 1;
             }
             LockKind::Write => {
-                debug_assert!(*self.read.get(&index).unwrap_or(&0) <= 1);
+                debug_assert!(*self.read.get(&index).unwrap_or(&0) == 0);
 
-                // this is to handle upgrades (TODO should those be requested explicitly?)
-                if let Some(read_locks) = self.read.get_mut(&index) {
-                    if *read_locks <= 1 {
-                        *read_locks = 0;
-                    } else {
-                        panic!("more than one read lock found");
-                    }
-                }
+                self.write.insert(index);
+            }
+            LockKind::Upgrade => {
+                debug_assert!(*self.read.get(&index).unwrap_or(&0) == 1);
+
+                *self.read.get_mut(&index).unwrap() = 0;
 
                 self.write.insert(index);
             }
@@ -89,6 +82,7 @@ impl LockedPages {
 
                 true
             }
+            LockKind::Upgrade => todo!(),
         }
     }
 
@@ -96,6 +90,7 @@ impl LockedPages {
         if self.write.contains(&index) {
             return Some(LockStatus::Write);
         }
+
         let read_count = *self.read.get(&index).unwrap_or(&0);
         if read_count > 0 {
             return Some(LockStatus::Read(read_count));
@@ -113,14 +108,29 @@ struct Edge {
     kind: LockKind,
 }
 
+impl Edge {
+    pub fn debug(&self, highlight: Option<PageIndex>) -> String {
+        let highlight = if highlight.is_some_and(|x| x == self.page) {
+            "**"
+        } else {
+            ""
+        };
+
+        format!(
+            "{:?} -> {:?} ({:?} {}{:?}{})",
+            self.from, self.to, self.kind, highlight, self.page, highlight
+        )
+    }
+}
+
 #[derive(Debug)]
-struct LockManagerState {
+pub struct LockManagerState {
     edges: HashSet<Edge>,
     pages: HashMap<TransactionId, LockedPages>,
 }
 
 impl LockManagerState {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             edges: HashSet::new(),
             pages: HashMap::new(),
@@ -128,7 +138,7 @@ impl LockManagerState {
     }
 
     #[must_use]
-    fn add_page(&mut self, txid: TransactionId, index: PageIndex, kind: LockKind) -> bool {
+    pub fn add_page(&mut self, txid: TransactionId, index: PageIndex, kind: LockKind) -> bool {
         let mut my_blockers = HashSet::new();
 
         for (blocker_txid, pages) in &self.pages {
@@ -136,11 +146,12 @@ impl LockManagerState {
                 if *blocker_txid == txid {
                     let blocks_with_self = match (kind, blocker_status) {
                         (LockKind::Read, LockStatus::Read(_))
-                        // upgrade
-                        | (LockKind::Write, LockStatus::Read(1)) => false,
-                        (LockKind::Read | LockKind::Write, LockStatus::Write)
-                        | (LockKind::Write, LockStatus::Read(_))
-                         => true,
+                        | (LockKind::Upgrade, LockStatus::Read(1)) => false,
+                        (
+                            LockKind::Read | LockKind::Write | LockKind::Upgrade,
+                            LockStatus::Write,
+                        )
+                        | (LockKind::Write | LockKind::Upgrade, LockStatus::Read(_)) => true,
                     };
 
                     if blocks_with_self {
@@ -153,8 +164,8 @@ impl LockManagerState {
                 } else {
                     // TODO should the special casing happen in would_cycle_with instead?
                     my_blockers.insert(Edge {
-                        from: *blocker_txid,
-                        to: txid,
+                        from: txid,
+                        to: *blocker_txid,
                         page: index,
                         kind: blocker_status.into(),
                     });
@@ -162,13 +173,16 @@ impl LockManagerState {
             }
         }
 
-        if self.would_cycle_with(&my_blockers, kind) {
-            log::info!("would create a cycle: {txid:?} {index:?} {kind:?} :: {self:?}");
-
+        if self.would_cycle_with(txid, &my_blockers, kind) {
             return false;
         }
 
         self.pages_for_mut(txid).add(index, kind);
+
+        if kind == LockKind::Upgrade {
+            self.edges
+                .retain(|x| !(x.from == txid && x.kind == LockKind::Read && x.page == index));
+        }
 
         for edge in my_blockers {
             self.edges.insert(edge);
@@ -177,27 +191,40 @@ impl LockManagerState {
         true
     }
 
-    fn remove_page(&mut self, txid: TransactionId, index: PageIndex, kind: LockKind) {
+    #[must_use]
+    pub fn remove_page(
+        &mut self,
+        txid: TransactionId,
+        index: PageIndex,
+        kind: LockKind,
+    ) -> Vec<PageIndex> {
         let lock_removed = self.pages_for_mut(txid).remove(index, kind);
         if !lock_removed {
-            return;
+            return vec![];
         }
 
-        let removed = self.edges.extract_if(|edge| {
+        let removed_edges = self.edges.extract_if(|edge| {
             (edge.from == txid && edge.kind == kind && edge.page == index)
                 || (edge.to == txid && edge.page == index)
         });
 
-        for _edge in removed {
-            // TODO wake up the related waiters
-        }
+        removed_edges
+            .map(|x| x.page)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect()
     }
 
     fn pages_for_mut(&mut self, txid: TransactionId) -> &mut LockedPages {
         self.pages.entry(txid).or_insert_with(LockedPages::new)
     }
 
-    fn would_cycle_with(&self, virtual_edges: &HashSet<Edge>, kind: LockKind) -> bool {
+    fn would_cycle_with(
+        &self,
+        txid: TransactionId,
+        virtual_edges: &HashSet<Edge>,
+        kind: LockKind,
+    ) -> bool {
         struct Visitor<'a> {
             edges: &'a HashSet<Edge>,
             virtual_edges: &'a HashSet<Edge>,
@@ -250,6 +277,26 @@ impl LockManagerState {
             }
         }
 
+        if log_enabled!(Level::Debug) {
+            let formatted_virtual_edges = if virtual_edges.is_empty() {
+                "[none]".to_string()
+            } else {
+                "\n".to_string()
+                    + &virtual_edges
+                        .iter()
+                        .map(|x| x.debug(None))
+                        .fold(String::new(), |a, x| a + "\n    " + &x)
+            };
+            let own_edges = if self.edges.is_empty() {
+                String::new()
+            } else {
+                format!("\n    ===\n{}", self.edges_debug(None))
+            };
+            debug!(
+                "checking for cycle {txid:?} {kind:?} edges: {formatted_virtual_edges}{own_edges}",
+            );
+        }
+
         let cycle = (Visitor {
             edges: &self.edges,
             virtual_edges,
@@ -258,99 +305,23 @@ impl LockManagerState {
         })
         .visit(self.pages.keys().copied().collect());
 
-        #[allow(clippy::match_same_arms)]
-        match kind {
-            LockKind::Write => !cycle.is_empty(),
-            // TODO we don't care about cycles if all the locks involved are for read
-            LockKind::Read => !cycle.is_empty(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct LockManager {
-    state: RwLock<LockManagerState>,
-}
-
-impl LockManager {
-    pub fn new() -> Self {
-        Self {
-            state: RwLock::new(LockManagerState::new()),
-        }
-    }
-
-    // TODO all these lock_* methods are practically the same, can we unify them?
-
-    pub fn lock_read<'storage>(
-        &self,
-        txid: TransactionId,
-        page: PageRef<'storage>,
-    ) -> Result<PageGuard<'storage>, StorageError> {
-        let mut state_guard = self.state.write().unwrap();
-
-        if !state_guard.add_page(txid, page.index(), LockKind::Read) {
-            return Err(StorageError::Deadlock(page.index()));
+        // TODO if kind is LockKind::Read and the cycle is only reads, then we should return false,
+        // as read cycles are okay
+        if !cycle.is_empty() {
+            log::info!("would create a cycle: {txid:?} {kind:?} :: {cycle:?}");
+            return true;
         }
 
-        debug!("locking for read {txid:?} {:?}", page.index());
-
-        Ok(page.get())
+        false
     }
 
-    pub fn lock_upgrade<'storage>(
-        &self,
-        txid: TransactionId,
-        guard: PageGuard<'storage>,
-    ) -> Result<PageGuardMut<'storage>, StorageError> {
-        let mut state_guard = self.state.write().unwrap();
+    pub fn edges_debug(&self, highlight: Option<PageIndex>) -> String {
+        let mut result = String::new();
 
-        // TODO do we need to differentiate between LockKind::Write and LockKind::Upgrade? All the
-        // transaction code guards against it, but the API doesn't stop anyone from requesting a separate write
-        // lock when there's already a read lock
-        if !state_guard.add_page(txid, guard.index(), LockKind::Write) {
-            return Err(StorageError::Deadlock(guard.index()));
+        for edge in &self.edges {
+            writeln!(result, "    {}", edge.debug(highlight)).unwrap();
         }
 
-        debug!("upgrading lock {txid:?} {:?}", guard.index());
-
-        Ok(guard.upgrade())
-    }
-
-    pub fn lock_write<'storage>(
-        &self,
-        txid: TransactionId,
-        page: PageRef<'storage>,
-    ) -> Result<PageGuardMut<'storage>, StorageError> {
-        let mut state_guard = self.state.write().unwrap();
-
-        if !state_guard.add_page(txid, page.index(), LockKind::Write) {
-            return Err(StorageError::Deadlock(page.index()));
-        }
-
-        debug!("locking for write {txid:?} {:?}", page.index());
-
-        Ok(page.get_mut())
-    }
-
-    // TODO we should probably deal with the guards internally here, so that it is impossible to
-    // drop one without being accounted for
-    pub fn unlock_read(&self, txid: TransactionId, page: PageGuard<'_>) {
-        let index = page.index();
-
-        let mut state_guard = self.state.write().unwrap();
-
-        drop(page);
-
-        state_guard.remove_page(txid, index, LockKind::Read);
-    }
-
-    pub fn unlock_write(&self, txid: TransactionId, page: PageGuardMut<'_>) {
-        let index = page.index();
-
-        let mut state_guard = self.state.write().unwrap();
-
-        drop(page);
-
-        state_guard.remove_page(txid, index, LockKind::Write);
+        result
     }
 }
