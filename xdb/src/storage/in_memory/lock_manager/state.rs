@@ -173,8 +173,7 @@ impl LockManagerState {
             }
         }
 
-        // TODO if my_blockers.is_empty(), do we still need to even call this?
-        if self.would_cycle_with(txid, &my_blockers, kind) {
+        if !my_blockers.is_empty() && self.would_cycle_with(txid, &my_blockers, kind) {
             return false;
         }
 
@@ -235,15 +234,14 @@ impl LockManagerState {
         }
 
         impl Visitor<'_> {
-            fn visit(mut self, vertices: Vec<TransactionId>) -> HashSet<TransactionId> {
+            fn visit(mut self, vertices: Vec<TransactionId>) -> Option<HashSet<TransactionId>> {
                 for vertex in vertices {
                     if self.visit_inner(vertex) {
-                        return self.visited;
+                        return Some(self.visited);
                     }
                 }
 
-                // TODO return an Option<> instead?
-                HashSet::new()
+                None
             }
 
             fn neighbours_of(&self, from: TransactionId) -> Vec<TransactionId> {
@@ -308,7 +306,7 @@ impl LockManagerState {
 
         // TODO if kind is LockKind::Read and the cycle is only reads, then we should return false,
         // as read cycles are okay
-        if !cycle.is_empty() {
+        if cycle.is_some() {
             log::info!("would create a cycle: {txid:?} {kind:?} :: {cycle:?}");
             return true;
         }

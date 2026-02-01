@@ -157,7 +157,6 @@ impl LockManager {
         Ok(guard.upgrade())
     }
 
-    // TODO we should wrap the PageGuard into our own type to handle unlocks on drop
     pub fn get_read(
         &self,
         txid: TransactionId,
@@ -206,9 +205,7 @@ impl LockManager {
         Ok(page.get_mut())
     }
 
-    // TODO we should probably deal with the guards internally here, so that it is impossible to
-    // drop one without being accounted for
-    pub fn unlock_read(&self, txid: TransactionId, page: PageGuard<'_>) {
+    fn unlock_read(&self, txid: TransactionId, page: PageGuard<'_>) {
         let index = page.index();
 
         debug!("[{txid:?}] removing read lock {index:?}");
@@ -222,7 +219,7 @@ impl LockManager {
         self.wake_all(potentially_unlocked_pages, txid);
     }
 
-    pub fn unlock_write(&self, txid: TransactionId, page: PageGuardMut<'_>) {
+    fn unlock_write(&self, txid: TransactionId, page: PageGuardMut<'_>) {
         let index = page.index();
 
         debug!("[{txid:?}] removing write lock {index:?}");
