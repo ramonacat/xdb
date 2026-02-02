@@ -3,7 +3,7 @@ use bytemuck::{
 };
 use thiserror::Error;
 
-use crate::{Size, checksum::Checksum};
+use crate::{Size, checksum::Checksum, storage::TransactionId};
 
 pub const PAGE_SIZE: Size = Size::B(4096);
 pub const PAGE_DATA_SIZE: Size = PAGE_SIZE.subtract(Size::of::<PageHeader>());
@@ -18,10 +18,13 @@ pub enum PageError {
 #[repr(C, align(8))]
 struct PageHeader {
     checksum: Checksum,
-    _unused: u32,
+    _unused1: u32,
+    visible_from: TransactionId,
+    visible_until: TransactionId,
+    _unused2: u64,
 }
 
-const _: () = assert!(size_of::<PageHeader>() == size_of::<u64>());
+const _: () = assert!(size_of::<PageHeader>() == 4 * size_of::<u64>());
 
 #[derive(Debug, Pod, Clone, Copy, Zeroable)]
 #[repr(C, align(8))]
@@ -40,7 +43,8 @@ impl Page {
         }
     }
 
-    #[allow(unused)] // TODO this will be needed for file storage
+    #[allow(unused)] // TODO we don't need the whole method, but we need a checksum check on read,
+    // and an update on write
     pub fn serialize(mut self) -> [u8; PAGE_SIZE.as_bytes()] {
         self.header.checksum.clear();
 
@@ -54,7 +58,8 @@ impl Page {
         bytes
     }
 
-    #[allow(unused)] // TODO this will be needed for file storage
+    #[allow(unused)] // TODO we don't need most of this, but we need to do a checksum update on
+    // write
     pub fn deserialize(mut bytes: [u8; PAGE_SIZE.as_bytes()]) -> Result<Self, PageError> {
         let expected_checksum =
             Checksum::from_bytes(bytes[0..size_of::<Checksum>()].try_into().unwrap());

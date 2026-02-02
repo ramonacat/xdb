@@ -52,7 +52,8 @@ impl From<PageIndex> for [PageIndex; 1] {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Pod, Zeroable)]
+#[repr(transparent)]
 pub struct TransactionId(u64);
 
 static LATEST_TRANSACTION_ID: AtomicU64 = AtomicU64::new(0);
