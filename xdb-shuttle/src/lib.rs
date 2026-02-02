@@ -1,12 +1,7 @@
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use shuttle::{
-        Config, PortfolioRunner,
-        scheduler::{DfsScheduler, PctScheduler},
-        sync::Arc,
-        thread,
-    };
+    use shuttle::{Config, PortfolioRunner, scheduler::PctScheduler, sync::Arc, thread};
     use xdb::{
         bplustree::{
             Tree, TreeError, TreeKey,
@@ -17,87 +12,56 @@ mod tests {
         storage::{StorageError, in_memory::InMemoryStorage},
     };
 
-    struct Test {
-        closure: Box<dyn Fn() -> Box<dyn Fn() + Send + Sync>>,
-    }
+    fn test<
+        TKey: TreeKey,
+        TThread1: Fn() -> Result<(), TreeError> + Send + 'static,
+        TThread2: Fn() -> Result<(), TreeError> + Send + 'static,
+    >(
+        thread1: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) -> TThread1 + Sync + Send + Clone + 'static,
+        thread2: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) -> TThread2 + Sync + Send + Clone + 'static,
+        verify: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) + Send + Sync + Clone + 'static,
+    ) {
+        let mut config = Config::new();
+        config.max_steps = shuttle::MaxSteps::ContinueAfter(1_000_000);
+        let mut runner = PortfolioRunner::new(true, config);
 
-    impl Test {
-        fn new<
-            TKey: TreeKey,
-            TThread1: Fn() -> Result<(), TreeError> + Send + 'static,
-            TThread2: Fn() -> Result<(), TreeError> + Send + 'static,
-        >(
-            thread1: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) -> TThread1
-            + Sync
-            + Send
-            + Clone
-            + 'static,
-            thread2: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) -> TThread2
-            + Sync
-            + Send
-            + Clone
-            + 'static,
-            verify: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) + Send + Sync + Clone + 'static,
-        ) -> Self {
-            Self {
-                closure: Box::new(move || {
-                    let thread1 = thread1.clone();
-                    let thread2 = thread2.clone();
-                    let verify = verify.clone();
-                    Box::new(move || {
-                        let storage = InMemoryStorage::new();
-                        let tree = Arc::new(Tree::<_, TKey>::new(storage).unwrap());
+        runner.add(PctScheduler::new(1000, 100_000));
 
-                        let t1 = {
-                            let tree = tree.clone();
+        runner.run(move || {
+            let storage = InMemoryStorage::new();
+            let tree = Arc::new(Tree::<_, TKey>::new(storage).unwrap());
 
-                            thread::spawn((thread1)(tree))
-                        };
+            let t1 = {
+                let tree = tree.clone();
 
-                        let t2 = {
-                            let tree = tree.clone();
-                            thread::spawn((thread2)(tree))
-                        };
+                thread::spawn((thread1)(tree))
+            };
 
-                        if matches!(
-                            t1.join().unwrap(),
-                            Err(TreeError::StorageError(StorageError::Deadlock(_)))
-                        ) {
-                            return;
-                        }
-                        if matches!(
-                            t2.join().unwrap(),
-                            Err(TreeError::StorageError(StorageError::Deadlock(_)))
-                        ) {
-                            return;
-                        }
+            let t2 = {
+                let tree = tree.clone();
+                thread::spawn((thread2)(tree))
+            };
 
-                        verify(tree);
-                    })
-                }),
+            if matches!(
+                t1.join().unwrap(),
+                Err(TreeError::StorageError(StorageError::Deadlock(_)))
+            ) {
+                return;
             }
-        }
+            if matches!(
+                t2.join().unwrap(),
+                Err(TreeError::StorageError(StorageError::Deadlock(_)))
+            ) {
+                return;
+            }
 
-        fn run(&self) {
-            let mut config = Config::new();
-            config.max_steps = shuttle::MaxSteps::ContinueAfter(1_000_000);
-            let mut runner = PortfolioRunner::new(true, config);
-
-            runner.add(PctScheduler::new(1_000, 10_000));
-            runner.add(DfsScheduler::new(Some(10_000), false));
-
-            runner.run((self.closure)());
-        }
-
-        #[allow(unused)]
-        fn replay(&self, schedule: &str) {
-            shuttle::annotate_replay((self.closure)(), schedule);
-        }
+            verify(tree);
+        });
     }
 
     #[test]
     fn parallel_read_and_write() {
-        let test = Test::new(
+        test(
             |tree| {
                 move || {
                     let mut transaction = tree.transaction()?;
@@ -132,12 +96,11 @@ mod tests {
                 );
             },
         );
-        test.run();
     }
 
     #[test]
     fn big_writes_no_overlap() {
-        let test = Test::new(
+        test(
             |tree| {
                 move || {
                     let mut transaction = tree.transaction()?;
@@ -183,12 +146,11 @@ mod tests {
                 );
             },
         );
-        test.run();
     }
 
     #[test]
     fn big_writes() {
-        let test = Test::new(
+        test(
             |tree| {
                 move || {
                     let mut transaction = tree.transaction()?;
@@ -234,12 +196,11 @@ mod tests {
                 );
             },
         );
-        test.run();
     }
 
     #[test]
     fn big_writes_and_read() {
-        let test = Test::new(
+        test(
             |tree| {
                 move || {
                     let mut transaction = tree.transaction()?;
@@ -289,6 +250,5 @@ mod tests {
                 );
             },
         );
-        test.run();
     }
 }

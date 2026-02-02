@@ -37,8 +37,10 @@ impl InMemoryStorage {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            cow_copies: Block::new(),
-            lock_manager: LockManager::new(Block::new()),
+            // TODO give the InMemoryStorage a name so we can differentiate the blocks if we have
+            // multiple storages?
+            cow_copies: Block::new("cow copies".into()),
+            lock_manager: LockManager::new(Block::new("main block".into())),
         }
     }
 }
@@ -49,9 +51,5 @@ impl Storage for InMemoryStorage {
 
     fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError> {
         Ok(InMemoryTransaction::new(self))
-    }
-
-    fn debug_locks(&self, page: PageIndex) -> String {
-        self.lock_manager.debug_locks(page)
     }
 }

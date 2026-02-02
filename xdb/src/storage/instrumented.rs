@@ -8,15 +8,17 @@ use super::{Page, PageIndex, StorageError, Transaction};
 use crate::storage::Storage;
 
 #[derive(Debug)]
-pub struct InstrumentedTransaction<
-    'a,
-    T: Transaction<'a, TStorage::PageReservation<'a>>,
-    TStorage: Storage,
->(T, Arc<AtomicUsize>, PhantomData<&'a TStorage>);
+pub struct InstrumentedTransaction<'a, T: Transaction<'a>, TStorage: Storage>(
+    T,
+    Arc<AtomicUsize>,
+    PhantomData<&'a TStorage>,
+);
 
-impl<'a, TTx: Transaction<'a, TStorage::PageReservation<'a>>, TStorage: Storage>
-    Transaction<'a, TStorage::PageReservation<'a>> for InstrumentedTransaction<'a, TTx, TStorage>
+impl<'a, TTx: Transaction<'a, Storage = TStorage>, TStorage: Storage> Transaction<'a>
+    for InstrumentedTransaction<'a, TTx, TStorage>
 {
+    type Storage = InstrumentedStorage<TStorage>;
+
     fn read<TReturn, const N: usize>(
         &mut self,
         indices: impl Into<[PageIndex; N]>,
@@ -97,9 +99,5 @@ impl<T: Storage> Storage for InstrumentedStorage<T> {
             self.page_count.clone(),
             PhantomData,
         ))
-    }
-
-    fn debug_locks(&self, page: PageIndex) -> String {
-        self.inner.debug_locks(page)
     }
 }

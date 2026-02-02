@@ -14,6 +14,16 @@ pub enum PageError {
     Checksum,
 }
 
+#[derive(Debug, Pod, Zeroable, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct PageVersion(u64);
+
+impl PageVersion {
+    const fn next(self) -> Self {
+        Self(self.0 + 1)
+    }
+}
+
 #[derive(Debug, Pod, Clone, Copy, Zeroable)]
 #[repr(C, align(8))]
 struct PageHeader {
@@ -21,7 +31,7 @@ struct PageHeader {
     _unused1: u32,
     visible_from: Option<TransactionId>,
     visible_until: Option<TransactionId>,
-    _unused2: u64,
+    version: PageVersion,
 }
 
 const _: () = assert!(size_of::<PageHeader>() == 4 * size_of::<u64>());
@@ -83,20 +93,36 @@ impl Page {
         from_bytes_mut(&mut self.data)
     }
 
-    pub(crate) fn is_visible_in(&self, txid: TransactionId) -> bool {
-        if let Some(from) = self.header.visible_from && from > txid {
+    pub fn is_visible_in(&self, txid: TransactionId) -> bool {
+        if let Some(from) = self.header.visible_from
+            && from > txid
+        {
             return false;
         }
 
-        if let Some(to) = self.header.visible_until && to < txid {
+        if let Some(to) = self.header.visible_until
+            && to < txid
+        {
             return false;
         }
 
         true
     }
 
-    pub(crate) fn set_visible_from(&mut self, txid: TransactionId) {
+    pub const fn set_visible_from(&mut self, txid: TransactionId) {
         self.header.visible_from = Some(txid);
+    }
+
+    pub const fn set_visible_until(&mut self, txid: TransactionId) {
+        self.header.visible_until = Some(txid);
+    }
+
+    pub const fn version(&self) -> PageVersion {
+        self.header.version
+    }
+
+    pub const fn increment_version(&mut self) {
+        self.header.version = self.header.version.next();
     }
 }
 

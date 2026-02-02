@@ -1,5 +1,6 @@
 use log::debug;
 
+use crate::storage::in_memory::block::LockError;
 use crate::storage::{PageIndex, TransactionId};
 use crate::sync::atomic::{AtomicU32, Ordering};
 use std::fmt::Debug;
@@ -32,7 +33,7 @@ const _: () = assert!(size_of::<PageState>() == size_of::<u32>());
 
 #[must_use]
 #[derive(Clone, Copy)]
-struct PageStateValue(u32);
+pub struct PageStateValue(u32);
 
 impl Debug for PageStateValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -90,7 +91,7 @@ impl PageState {
         PageStateValue(self.atomic().load(Ordering::Acquire)).is_initialized()
     }
 
-    pub fn lock(self: Pin<&Self>, debug_context: DebugContext) {
+    pub fn lock_nowait(self: Pin<&Self>, debug_context: DebugContext) -> Result<(), LockError> {
         debug_assert!(self.is_initialized());
 
         match self
@@ -108,18 +109,31 @@ impl PageState {
                 let previous = PageStateValue(previous);
 
                 debug!("[{debug_context:?}] locked, previous {previous:?}");
+
+                Ok(())
             }
             Err(previous) => {
                 let previous = PageStateValue(previous);
 
                 debug!("[{debug_context:?}] failed to lock, previous {previous:?}");
 
-                self.wait(previous);
-                self.lock(debug_context);
+                Err(LockError::Contended(previous))
             }
         }
     }
 
+    pub fn lock(self: Pin<&Self>, debug_context: DebugContext) {
+        match self.lock_nowait(debug_context) {
+            Ok(()) => {}
+            Err(LockError::Contended(previous)) => {
+                self.wait(previous);
+
+                self.lock(debug_context);
+            }
+        }
+    }
+    // TODO we should wait on locks when we're sure there will be no deadlock
+    #[allow(unused)]
     fn wait(self: Pin<&Self>, previous: PageStateValue) {
         match self.futex().wait(previous.0) {
             Ok(()) | Err(FutexError::Race) => {}

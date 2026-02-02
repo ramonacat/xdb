@@ -183,10 +183,6 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
             _key: PhantomData,
         })
     }
-
-    pub fn debug_locks(&self, page: PageIndex) -> String {
-        self.storage.debug_locks(page)
-    }
 }
 
 #[derive(Debug, Pod, Zeroable, Clone, Copy)]

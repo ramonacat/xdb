@@ -2,19 +2,14 @@ mod page_state;
 
 use crate::platform::allocation::uncommitted::UncommittedAllocation;
 use crate::storage::TransactionId;
+use crate::storage::in_memory::block::page_state::PageStateValue;
 use crate::{
     platform::allocation::Allocation, storage::in_memory::block::page_state::DebugContext,
 };
 use log::debug;
 use std::ops::DerefMut;
-use std::{
-    fmt::{Debug, Display},
-    mem::MaybeUninit,
-    ops::Deref,
-    pin::Pin,
-    ptr::NonNull,
-    sync::atomic::AtomicU16,
-};
+use std::{fmt::Debug, mem::MaybeUninit, ops::Deref, pin::Pin, ptr::NonNull};
+use thiserror::Error;
 
 use crate::{
     Size,
@@ -30,18 +25,22 @@ pub struct PageRef<'block> {
     index: PageIndex,
     txid: TransactionId,
 }
+
+unsafe impl Send for PageRef<'_> {}
+
+#[derive(Debug, Error)]
+pub enum LockError {
+    #[error("contended")]
+    Contended(PageStateValue),
+}
+
 impl<'block> PageRef<'block> {
-    pub const fn index(&self) -> PageIndex {
-        self.index
+    pub fn lock_nowait(&self) -> Result<PageGuard<'block>, LockError> {
+        unsafe { PageGuard::new_nowait(self.page, self.block, self.index, self.txid) }
     }
 
     pub fn lock(&self) -> PageGuard<'block> {
         unsafe { PageGuard::new(self.page, self.block, self.index, self.txid) }
-    }
-
-    pub(crate) fn wake(&self) {
-        unsafe { self.block.housekeeping_for(self.index) }
-            .wake(DebugContext::new(self.txid, self.index));
     }
 }
 
@@ -73,8 +72,21 @@ impl<'block> PageGuard<'block> {
         }
     }
 
-    pub const fn index(&self) -> PageIndex {
-        self.index
+    unsafe fn new_nowait(
+        page: NonNull<Page>,
+        block: &'block Block,
+        index: PageIndex,
+        txid: TransactionId,
+    ) -> Result<Self, LockError> {
+        let housekeeping = unsafe { block.housekeeping_for(index) };
+        housekeeping.lock_nowait(DebugContext::new(txid, index))?;
+
+        Ok(Self {
+            page,
+            block,
+            index,
+            txid,
+        })
     }
 }
 
@@ -151,21 +163,10 @@ impl<'block> UninitializedPageGuard<'block> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct BlockId(u16);
-
-impl Display for BlockId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:#04x}", self.0)
-    }
-}
-
-static LATEST_BLOCK_ID: AtomicU16 = AtomicU16::new(0);
-
 #[derive(Debug)]
 // TODO give the blocks names for use in debugging
 pub struct Block {
-    id: BlockId,
+    name: String,
     housekeeping: Box<dyn Allocation>,
     data: Box<dyn Allocation>,
     latest_page: AtomicU64,
@@ -176,13 +177,13 @@ impl Block {
     const PAGE_COUNT: usize = Self::SIZE.divide(PAGE_SIZE);
     const HOUSEKEEPING_BLOCK_SIZE: Size = Size::of::<PageState>().multiply(Self::PAGE_COUNT);
 
-    pub fn new() -> Self {
+    pub fn new(name: String) -> Self {
         let housekeeping: Box<dyn Allocation> =
             Box::new(UncommittedAllocation::new(Self::HOUSEKEEPING_BLOCK_SIZE));
         let data: Box<dyn Allocation> = Box::new(UncommittedAllocation::new(Self::SIZE));
 
         Self {
-            id: BlockId(LATEST_BLOCK_ID.fetch_add(1, Ordering::Relaxed)),
+            name,
             housekeeping,
             data,
             latest_page: AtomicU64::new(0),
@@ -190,13 +191,17 @@ impl Block {
     }
 
     pub fn get(&self, index: PageIndex, txid: TransactionId) -> PageRef<'_> {
-        debug!("[{}] reading page {index:?}", self.id);
+        debug!("[{}] reading page {index:?}", self.name);
 
         assert!(index.0 < self.latest_page.load(Ordering::Acquire));
 
         let housekeeping = unsafe { self.housekeeping_for(index) };
 
-        assert!(housekeeping.is_initialized());
+        assert!(
+            housekeeping.is_initialized(),
+            "[{:?}] [{txid:?}] trying to get {index:?}, but housekeeping is not initialized",
+            self.name
+        );
 
         let page = unsafe {
             self.data
@@ -217,7 +222,7 @@ impl Block {
         let index = self.latest_page.fetch_add(1, Ordering::Acquire);
 
         let index = PageIndex(index);
-        self.allocate_housekeeping(index);
+        self.allocate_housekeeping(index, txid);
 
         let page = unsafe {
             self.data
@@ -229,9 +234,15 @@ impl Block {
         UninitializedPageGuard::new(self, page, index, txid)
     }
 
-    fn allocate_housekeeping(&self, index: PageIndex) -> NonNull<PageState> {
-        assert!(index.0 < Self::PAGE_COUNT as u64);
-        debug!("[{}] allocating housekeeping for {index:?}", self.id);
+    fn allocate_housekeeping(&self, index: PageIndex, txid: TransactionId) -> NonNull<PageState> {
+        debug!("[{}] allocating housekeeping for {index:?}", self.name);
+
+        assert!(
+            index.0 < Self::PAGE_COUNT as u64,
+            "[{:?}] [{txid:?}] [{index:?}] index too high? latest_page: {:?}",
+            self.name,
+            self.latest_page.load(Ordering::Relaxed)
+        );
 
         // TODO this way we do the mprotect multiple times, it doesn't really matter, but might
         // make sense to only do that when index%PAGE_SIZE == 0??? (though then we have to

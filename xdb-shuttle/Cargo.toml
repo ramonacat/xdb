@@ -6,7 +6,7 @@ edition = "2024"
 [dev-dependencies]
 log = "0.4.29"
 pretty_assertions = "1.4.1"
-shuttle = { version = "0.8.1", features = ["annotation"] }
+shuttle = { git = "https://github.com/awslabs/shuttle.git", branch="main" }
 xdb = {path = "../xdb/", features = ["shuttle"]}
 
 [dependencies]

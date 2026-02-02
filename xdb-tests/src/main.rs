@@ -77,16 +77,8 @@ fn retry_on_deadlock<T>(
     info!("last retry after 13 tries");
 
     let transaction = tree.transaction().unwrap();
-    let result = callable(transaction);
 
-    if let Err(TreeError::StorageError(StorageError::Deadlock(deadlock_index))) = result {
-        error!(
-            "deadlock after retries {deadlock_index:?}:\n{}",
-            tree.debug_locks(deadlock_index)
-        );
-    }
-
-    result
+    callable(transaction)
 }
 
 fn server_thread(
@@ -171,7 +163,9 @@ fn main() {
 
     info!("threads started up, going to sleep");
 
-    let run_length = Duration::from_secs(60);
+    // TODO change this to a longer time, once we can handle running out of memory without
+    // panicking
+    let run_length = Duration::from_secs(5);
     let start = time::Instant::now();
 
     'outer: while time::Instant::now() - start < run_length {

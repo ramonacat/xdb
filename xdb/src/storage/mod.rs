@@ -1,9 +1,8 @@
 pub mod in_memory;
 pub mod instrumented;
 
-use std::{
-    fmt::Debug, num::NonZeroU64, sync::atomic::{AtomicU64, Ordering}
-};
+use crate::sync::atomic::{AtomicU64, Ordering};
+use std::{fmt::Debug, num::NonZeroU64};
 
 use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
 use thiserror::Error;
@@ -67,7 +66,10 @@ impl TransactionId {
     }
 }
 
-pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>>: Send + Debug {
+// TODO the page reservation should probably be an associated type instad?
+pub trait Transaction<'storage>: Send + Debug {
+    type Storage: Storage + 'storage;
+
     fn read<T, const N: usize>(
         &mut self,
         indices: impl Into<[PageIndex; N]>,
@@ -80,11 +82,13 @@ pub trait Transaction<'storage, TPageReservation: PageReservation<'storage>>: Se
         write: impl FnOnce([&mut Page; N]) -> T,
     ) -> Result<T, StorageError>;
 
-    fn reserve(&mut self) -> Result<TPageReservation, StorageError>;
+    fn reserve(
+        &mut self,
+    ) -> Result<<Self::Storage as Storage>::PageReservation<'storage>, StorageError>;
 
     fn insert_reserved(
         &mut self,
-        reservation: TPageReservation,
+        reservation: <Self::Storage as Storage>::PageReservation<'storage>,
         page: Page,
     ) -> Result<(), StorageError>;
 
@@ -100,14 +104,11 @@ pub trait Storage: Send + Sync + Debug {
     type PageReservation<'storage>: PageReservation<'storage>
     where
         Self: 'storage;
-    type Transaction<'storage>: Transaction<'storage, Self::PageReservation<'storage>>
+    type Transaction<'storage>: Transaction<'storage, Storage = Self>
     where
         Self: 'storage;
 
     fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError>
     where
         Self: Sized;
-
-    // TODO separte `StorageDebug` trait?
-    fn debug_locks(&self, page: PageIndex) -> String;
 }

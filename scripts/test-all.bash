@@ -7,7 +7,8 @@ cargo clippy
 cargo fmt --check
 cargo +nightly miri nextest run
 pushd xdb-shuttle
-cargo test --release
+# it is important that the tests are ran with nextest, as it runs each test in a separate process, and without that we will run into trouble with static atomics when running shuttle
+cargo nextest run --release
 cargo clippy
 cargo fmt --check
 popd

@@ -1,125 +1,213 @@
-mod state;
+// TODO this should really be called VersionManager
 
-use crate::sync::RwLock;
-use std::ops::{Deref, DerefMut};
-
-use log::debug;
+use crate::{
+    page::{PAGE_DATA_SIZE, PageVersion},
+    storage::in_memory::{
+        InMemoryStorage,
+        block::{LockError, PageRef},
+    },
+    thread,
+};
+use std::collections::{HashMap, hash_map::Entry};
 
 use crate::{
     page::Page,
     storage::{
         PageIndex, StorageError, TransactionId,
-        in_memory::{
-            block::{Block, PageGuard, UninitializedPageGuard},
-            lock_manager::state::LockManagerState,
-        },
+        in_memory::block::{Block, PageGuard, UninitializedPageGuard},
     },
 };
 
 #[derive(Debug)]
-pub struct ManagedPageGuard<'storage> {
-    guard: Option<PageGuard<'storage>>,
-    lock_manager: &'storage LockManager,
-    txid: TransactionId,
+enum MainPageRef<'storage> {
+    Initialized(PageRef<'storage>),
+    Uninitialized(UninitializedPageGuard<'storage>),
 }
 
-unsafe impl Send for ManagedPageGuard<'_> {}
+#[derive(Debug)]
+struct CowPage<'storage> {
+    main: MainPageRef<'storage>,
+    cow: PageRef<'storage>,
+    version: PageVersion,
+}
 
-impl Drop for ManagedPageGuard<'_> {
-    fn drop(&mut self) {
-        debug!(
-            "[{:?}] dropping read guard {:?}",
-            self.txid,
-            self.guard.as_ref().map(PageGuard::index)
-        );
+#[derive(Debug)]
+pub struct VersionManagerTransaction<'storage> {
+    id: TransactionId,
+    pages: HashMap<PageIndex, CowPage<'storage>>,
+    storage: &'storage InMemoryStorage,
+}
 
-        if let Some(guard) = self.guard.take() {
-            let index = guard.index();
+// TODO do we want a timeout here?
+fn retry_contended<T>(callback: impl Fn() -> Result<T, LockError>) -> T {
+    loop {
+        match callback() {
+            Ok(r) => return r,
+            Err(error) => match error {
+                LockError::Contended(_) => {}
+            },
+        }
 
-            debug!("[{:?}] removing read lock {index:?}", self.txid);
+        thread::yield_now();
+    }
+}
 
-            let mut state_guard = self.lock_manager.state.write().unwrap();
-
-            drop(guard);
-
-            let potentially_unlocked_pages = state_guard.remove_page(self.txid, index);
-
-            self.lock_manager
-                .wake_all(potentially_unlocked_pages, self.txid);
+impl<'storage> VersionManagerTransaction<'storage> {
+    pub fn new(id: TransactionId, storage: &'storage InMemoryStorage) -> Self {
+        Self {
+            id,
+            pages: HashMap::new(),
+            storage,
         }
     }
-}
 
-impl Deref for ManagedPageGuard<'_> {
-    type Target = Page;
+    pub(crate) fn read(&mut self, index: PageIndex) -> Result<PageGuard<'storage>, StorageError> {
+        let page = match self.pages.entry(index) {
+            Entry::Occupied(occupied) => occupied.get().cow.lock(),
+            Entry::Vacant(vacant) => {
+                let main = self.storage.lock_manager.block.get(index, self.id);
+                let main_lock = main.lock();
 
-    fn deref(&self) -> &Self::Target {
-        self.guard.as_ref().unwrap().deref()
+                if !main_lock.is_visible_in(self.id) {
+                    return Err(StorageError::Deadlock(index));
+                }
+
+                // TODO we really need to free up the cow pages once we're done, as allocating for
+                // every read eats the memory up extremely fast
+                let cow = self
+                    .storage
+                    .cow_copies
+                    .allocate(self.id)
+                    .initialize(*main_lock);
+
+                let inserted = vacant.insert(CowPage {
+                    main: MainPageRef::Initialized(main),
+                    cow,
+                    version: main_lock.version(),
+                });
+
+                inserted.cow.lock()
+            }
+        };
+
+        Ok(page)
     }
-}
 
-impl DerefMut for ManagedPageGuard<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.guard.as_mut().unwrap().deref_mut()
+    pub(crate) fn reserve(&self) -> UninitializedPageGuard<'storage> {
+        self.storage.lock_manager.block.allocate(self.id)
+    }
+
+    // TODO can we avoid passing this by value?
+    #[allow(clippy::large_types_passed_by_value)]
+    pub(crate) fn insert_reserved(
+        &mut self,
+        page_guard: UninitializedPageGuard<'storage>,
+        page: Page,
+    ) {
+        let cow = self.storage.cow_copies.allocate(self.id).initialize(page);
+
+        self.pages.insert(
+            page_guard.index(),
+            CowPage {
+                main: MainPageRef::Uninitialized(page_guard),
+                cow,
+                version: page.version(),
+            },
+        );
+    }
+
+    pub(crate) fn delete(&mut self, page: PageIndex) {
+        self.pages.entry(page).or_insert_with(|| {
+            let main = self.storage.lock_manager.block.get(page, self.id);
+            let main_lock = main.lock();
+
+            let cow = self
+                .storage
+                .cow_copies
+                .allocate(self.id)
+                .initialize(*main_lock);
+
+            let mut cow_lock = cow.lock();
+            cow_lock.set_visible_until(self.id);
+            // TODO do we really care about zeroing, or do we just need to improve change
+            // detection in the lock manager to consider header-only changes?
+            *cow_lock.data_mut::<[u8; PAGE_DATA_SIZE.as_bytes()]>() = [0; _];
+
+            CowPage {
+                main: MainPageRef::Initialized(main),
+                cow,
+                version: main_lock.version(),
+            }
+        });
+    }
+
+    pub(crate) fn commit(&mut self) -> Result<(), StorageError> {
+        // TODO make the commit consistent in event of a crash:
+        //    1. write to a transaction log
+        //    2. fsync the transaction log
+        //    3. fsync the modified pages
+        // TODO cleanup the cow_pages, once they're copied to the main storage
+
+        let mut locks = retry_contended(|| {
+            let mut locks = HashMap::new();
+            for (index, page) in &self.pages {
+                match &page.main {
+                    MainPageRef::Initialized(page_ref) => {
+                        let lock = page_ref.lock_nowait()?;
+
+                        if lock.version() != page.version {
+                            return Ok(Err(StorageError::Deadlock(*index)));
+                        }
+
+                        locks.insert(*index, lock);
+                    }
+                    MainPageRef::Uninitialized(_) => {}
+                }
+            }
+            Ok(Ok(locks))
+        })?;
+
+        for (index, page) in self.pages.drain() {
+            match page.main {
+                MainPageRef::Initialized(_) => {
+                    // It's very tempting to change this `get_mut` to `remove`, but that would be
+                    // incorrect, as we'd be unlocking locks while still modifying the stored data.
+                    // We can only start unlocking after this loop is done.
+                    let lock = locks.get_mut(&index).unwrap();
+
+                    let mut modfied_copy = *page.cow.lock();
+
+                    if modfied_copy.data::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
+                        != lock.data::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
+                    {
+                        modfied_copy.set_visible_from(self.id);
+                        modfied_copy.increment_version();
+
+                        **lock = modfied_copy;
+                    }
+                }
+                MainPageRef::Uninitialized(guard) => {
+                    let mut page = *page.cow.lock();
+
+                    page.set_visible_from(self.id);
+
+                    guard.initialize(page);
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
 #[derive(Debug)]
+// TODO just get rid of this lol
 pub struct LockManager {
-    state: RwLock<LockManagerState>,
     block: Block,
 }
 
 impl LockManager {
-    pub fn new(block: Block) -> Self {
-        Self {
-            block,
-            state: RwLock::new(LockManagerState::new()),
-        }
-    }
-
-    // TODO instead of passing txid over and over, should we have some sorta
-    // `TransactionLockManager` that keeps per-transaction state?
-    pub fn lock(
-        &self,
-        txid: TransactionId,
-        index: PageIndex,
-    ) -> Result<ManagedPageGuard<'_>, StorageError> {
-        let mut state_guard = self.state.write().unwrap();
-        let page = self.block.get(index, txid);
-
-        if !state_guard.add_page(txid, page.index()) {
-            return Err(StorageError::Deadlock(page.index()));
-        }
-
-        debug!(
-            "[{txid:?}] locking for read {:?} edges: \n{}",
-            page.index(),
-            &state_guard.edges_debug(Some(page.index()))
-        );
-
-        drop(state_guard);
-
-        Ok(ManagedPageGuard {
-            guard: Some(page.lock()),
-            lock_manager: self,
-            txid,
-        })
-    }
-
-    pub fn reserve(&self, txid: TransactionId) -> UninitializedPageGuard<'_> {
-        self.block.allocate(txid)
-    }
-
-    fn wake_all(&self, pages: Vec<PageIndex>, txid: TransactionId) {
-        debug!("[{txid:?}] waking potential waiters: {pages:?}");
-
-        for page in pages {
-            self.block.get(page, txid).wake();
-        }
-    }
-
-    pub(crate) fn debug_locks(&self, page: PageIndex) -> String {
-        self.state.write().unwrap().edges_debug(Some(page))
+    pub const fn new(block: Block) -> Self {
+        Self { block }
     }
 }
