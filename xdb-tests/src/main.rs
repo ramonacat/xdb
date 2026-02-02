@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, error};
 use std::{
     sync::{
         Arc,
@@ -61,7 +61,7 @@ fn retry_on_deadlock<T>(
     tree: Arc<Tree<InMemoryStorage, KeyType>>,
     callable: impl Fn(TreeTransaction<InMemoryStorage, KeyType>) -> Result<T, TreeError>,
 ) -> Result<T, TreeError> {
-    for i in 0..10 {
+    for i in 0..32 {
         let transaction = tree.transaction().unwrap();
 
         match callable(transaction) {
@@ -70,14 +70,23 @@ fn retry_on_deadlock<T>(
             error @ Err(_) => return error,
         };
 
-        thread::sleep(Duration::from_millis(2u64.pow(i)));
+        thread::sleep(Duration::from_millis(2u64.pow(i / 4)));
         debug!("retrying: {i}");
     }
 
-    info!("last retry after 10 tries");
+    info!("last retry after 13 tries");
 
     let transaction = tree.transaction().unwrap();
-    callable(transaction)
+    let result = callable(transaction);
+
+    if let Err(TreeError::StorageError(StorageError::Deadlock(deadlock_index))) = result {
+        error!(
+            "deadlock after retries {deadlock_index:?}:\n{}",
+            tree.debug_locks(deadlock_index)
+        );
+    }
+
+    result
 }
 
 fn server_thread(
@@ -92,7 +101,9 @@ fn server_thread(
                     Command::Insert(key, value) => {
                         insert(&mut transaction, *key, &value.0).map(|_| ())?
                     }
-                    Command::Delete(key) => delete(&mut transaction, *key).map(|_| ())?,
+                    Command::Delete(key) => {
+                        delete(&mut transaction, *key).map(|_| ())?;
+                    }
                     Command::Read(key) => find(&mut transaction, *key).map(|_| ())?,
                 };
             }
@@ -163,13 +174,20 @@ fn main() {
     let run_length = Duration::from_secs(60);
     let start = time::Instant::now();
 
-    while time::Instant::now() - start < run_length {
-        thread::sleep(Duration::from_secs(10));
+    'outer: while time::Instant::now() - start < run_length {
+        thread::sleep(Duration::from_secs(1));
 
-        info!("still running...");
+        for thread in &client_threads {
+            if thread.is_finished() {
+                error!("thread finished prematurely, exiting...");
+
+                stop.store(true, Ordering::Relaxed);
+                break 'outer;
+            }
+        }
     }
 
-    info!("time's up, wrapping up");
+    info!("wrapping up");
 
     stop.store(true, Ordering::Relaxed);
 

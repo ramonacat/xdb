@@ -1,9 +1,6 @@
 use bytemuck::Zeroable;
 use log::debug;
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Deref as _,
-};
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     page::Page,
@@ -11,43 +8,50 @@ use crate::{
         PageIndex, StorageError, Transaction, TransactionId,
         in_memory::{
             InMemoryPageReservation, InMemoryStorage,
-            block::{PageGuardMut, UninitializedPageGuard},
-            lock_manager::{ManagedPageGuard, ManagedPageGuardMut},
+            block::{PageGuard, UninitializedPageGuard},
+            lock_manager::ManagedPageGuard,
         },
     },
 };
 
 #[derive(Debug)]
+// TODO rename -> LockedPage
 enum WritePage<'storage> {
+    Read {
+        guard: ManagedPageGuard<'storage>,
+    },
     Modified {
-        guard: ManagedPageGuardMut<'storage>,
-        cow_guard: PageGuardMut<'storage>,
+        guard: ManagedPageGuard<'storage>,
+        cow_guard: PageGuard<'storage>,
     },
     Inserted {
         guard: UninitializedPageGuard<'storage>,
-        cow_guard: PageGuardMut<'storage>,
+        cow_guard: PageGuard<'storage>,
     },
     Deleted {
-        guard: ManagedPageGuardMut<'storage>,
+        guard: ManagedPageGuard<'storage>,
     },
 }
 
-impl<'storage> WritePage<'storage> {
-    const fn cow_guard(&self) -> Option<&PageGuardMut<'storage>> {
+impl WritePage<'_> {
+    // TODO rename -> page() or something
+    fn cow_guard(&self) -> Option<&Page> {
         match self {
+            WritePage::Read { guard } => Some(guard),
             WritePage::Modified {
                 guard: _,
-                cow_guard,
+                cow_guard: guard,
             }
             | WritePage::Inserted {
                 guard: _,
-                cow_guard,
-            } => Some(cow_guard),
+                cow_guard: guard,
+            } => Some(guard),
             WritePage::Deleted { guard: _ } => None,
         }
     }
 
-    const fn cow_guard_mut(&mut self) -> Option<&mut PageGuardMut<'storage>> {
+    // TODO rename -> page_mut() or something
+    fn cow_guard_mut(&mut self) -> Option<&mut Page> {
         match self {
             WritePage::Modified {
                 guard: _,
@@ -57,6 +61,7 @@ impl<'storage> WritePage<'storage> {
                 guard: _,
                 cow_guard,
             } => Some(cow_guard),
+            WritePage::Read { guard } => Some(guard),
             WritePage::Deleted { guard: _ } => None,
         }
     }
@@ -66,8 +71,7 @@ impl<'storage> WritePage<'storage> {
 pub struct InMemoryTransaction<'storage> {
     id: TransactionId,
     storage: &'storage InMemoryStorage,
-    read_guards: HashMap<PageIndex, ManagedPageGuard<'storage>>,
-    write_guards: HashMap<PageIndex, WritePage<'storage>>,
+    guards: HashMap<PageIndex, WritePage<'storage>>,
     finalized: bool,
     reserved_pages: HashSet<PageIndex>,
 }
@@ -77,8 +81,7 @@ impl<'storage> InMemoryTransaction<'storage> {
         Self {
             id: TransactionId::next(),
             storage,
-            read_guards: HashMap::new(),
-            write_guards: HashMap::new(),
+            guards: HashMap::new(),
             finalized: false,
             reserved_pages: HashSet::new(),
         }
@@ -86,12 +89,12 @@ impl<'storage> InMemoryTransaction<'storage> {
 
     // TODO avoid passing by value?
     #[allow(clippy::large_types_passed_by_value)]
-    fn copy_for_write(&self, page: Page) -> PageGuardMut<'storage> {
+    fn copy_for_write(&self, page: Page) -> PageGuard<'storage> {
         self.storage
             .cow_copies
             .allocate(self.id)
             .initialize(page)
-            .get_mut()
+            .lock()
     }
 }
 
@@ -101,6 +104,16 @@ impl Drop for InMemoryTransaction<'_> {
     }
 }
 
+// TODO we need to implement real MVCC, since right now we pages can change during a transaction,
+// leading to inconsistencies.
+// Example.
+//  1. transaction A starts
+//  2. transaction B starts
+//  3. transaction A locks and reads page 1
+//  4. transaction B locks and writes page 2
+//  5. transaction B commits
+//  6. transaction A locks and reads page 2
+//      !!! this page is now inconsistent with the state we've, seen in step #3, TROUBLE !!!
 impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
     for InMemoryTransaction<'storage>
 {
@@ -113,27 +126,24 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         for index in indices {
             assert!(!self.reserved_pages.contains(&index));
 
-            if self.write_guards.contains_key(&index) {
+            if self.guards.contains_key(&index) {
                 continue;
             }
 
-            if !self.read_guards.contains_key(&index) {
-                self.read_guards
-                    .insert(index, self.storage.lock_manager.get_read(self.id, index)?);
-            }
+            self.guards.insert(
+                index,
+                WritePage::Read {
+                    guard: self.storage.lock_manager.lock(self.id, index)?,
+                },
+            );
         }
 
-        let guards = indices.map(|x| {
-            self.write_guards.get(&x).map_or_else(
-                || self.read_guards.get(&x).unwrap().deref(),
-                |x| x.cow_guard().unwrap(),
-            )
-        });
+        let guards = indices.map(|x| self.guards.get(&x).map(|x| x.cow_guard().unwrap()).unwrap());
 
         Ok(read(guards))
     }
 
-    // TODO this method is a bit complex, simplify
+    // TODO this method is hacky around replacing Read entry with Modified, can this be simplified?
     fn write<T, const N: usize>(
         &mut self,
         indices: impl Into<[PageIndex; N]>,
@@ -144,39 +154,40 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         for index in indices {
             assert!(!self.reserved_pages.contains(&index));
 
-            if let Some(read_guard) = self.read_guards.remove(&index) {
-                let write_guard = read_guard.upgrade()?;
-
-                let cow_guard = self.copy_for_write(*write_guard);
-
-                self.write_guards.insert(
-                    index,
-                    WritePage::Modified {
-                        guard: write_guard,
-                        cow_guard,
-                    },
-                );
-            }
-
-            match self.write_guards.get(&index) {
-                Some(WritePage::Deleted { .. }) => {
-                    return Err(StorageError::PageNotFound(index));
+            let create_copy = if let Some(entry) = self.guards.get(&index) {
+                match entry {
+                    WritePage::Read { .. } => true,
+                    WritePage::Modified { .. } | WritePage::Inserted { .. } => false,
+                    WritePage::Deleted { .. } => {
+                        return Err(StorageError::PageNotFound(index));
+                    }
                 }
-                Some(WritePage::Modified { .. } | WritePage::Inserted { .. }) => {}
-                None => {
-                    let guard = self.storage.lock_manager.get_write(self.id, index)?;
-                    let cow_guard = self.copy_for_write(*guard);
+            } else {
+                let guard = self.storage.lock_manager.lock(self.id, index).unwrap();
+                let cow_guard = self.copy_for_write(*guard);
 
-                    self.write_guards
-                        .insert(index, WritePage::Modified { guard, cow_guard });
-                }
+                self.guards
+                    .insert(index, WritePage::Modified { guard, cow_guard });
+
+                false
+            };
+
+            if create_copy {
+                let guard = self.guards.remove(&index).unwrap();
+                let WritePage::Read { guard } = guard else {
+                    panic!();
+                };
+                let cow_guard = self.copy_for_write(*guard);
+
+                self.guards
+                    .insert(index, WritePage::Modified { guard, cow_guard });
             }
         }
 
         let guards = self
-            .write_guards
+            .guards
             .get_disjoint_mut(indices.each_ref())
-            .map(|x| &mut **x.unwrap().cow_guard_mut().unwrap());
+            .map(|x| &mut *x.unwrap().cow_guard_mut().unwrap());
 
         Ok(write(guards))
     }
@@ -199,11 +210,11 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
             .cow_copies
             .allocate(self.id)
             .initialize(page)
-            .get_mut();
+            .lock();
 
         let index = page_guard.index();
 
-        self.write_guards.insert(
+        self.guards.insert(
             index,
             WritePage::Inserted {
                 guard: page_guard,
@@ -222,27 +233,27 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
             .cow_copies
             .allocate(self.id)
             .initialize(page)
-            .get_mut();
+            .lock();
         let index = guard.index();
 
-        self.write_guards
+        self.guards
             .insert(index, WritePage::Inserted { guard, cow_guard });
 
         Ok(index)
     }
 
     fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
-        let guard = self.write_guards.get_mut(&page);
+        let guard = self.guards.get_mut(&page);
 
         match guard {
-            Some(WritePage::Modified { .. }) | None => {
-                let new_guard = self.storage.lock_manager.get_write(self.id, page)?;
+            Some(WritePage::Modified { .. } | WritePage::Read { .. }) | None => {
+                let new_guard = self.storage.lock_manager.lock(self.id, page)?;
 
-                self.write_guards
+                self.guards
                     .insert(page, WritePage::Deleted { guard: new_guard });
             }
             Some(WritePage::Inserted { .. }) => {
-                self.write_guards.remove(&page);
+                self.guards.remove(&page);
             }
             Some(WritePage::Deleted { .. }) => {}
         }
@@ -261,7 +272,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
         //    3. fsync the modified pages
         // TODO cleanup the cow_pages, once they're copied to the main storage
 
-        for (_, guard) in self.write_guards.drain() {
+        for (_, guard) in self.guards.drain() {
             match guard {
                 WritePage::Modified {
                     mut guard,
@@ -276,6 +287,7 @@ impl<'storage> Transaction<'storage, InMemoryPageReservation<'storage>>
                     // TODO really delete!
                     *guard = Page::zeroed();
                 }
+                WritePage::Read { .. } => {}
             }
         }
 

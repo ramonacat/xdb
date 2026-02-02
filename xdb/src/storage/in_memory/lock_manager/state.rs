@@ -5,103 +5,29 @@ use log::{Level, debug, log_enabled};
 
 use crate::storage::{PageIndex, TransactionId};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum LockKind {
-    Read,
-    Write,
-}
-
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum LockRequestKind {
-    Read,
-    Write,
-    Upgrade,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum LockStatus {
-    Read(usize),
-    Write,
-}
-
-impl From<LockStatus> for LockKind {
-    fn from(value: LockStatus) -> Self {
-        match value {
-            LockStatus::Read(_) => Self::Read,
-            LockStatus::Write => Self::Write,
-        }
-    }
-}
-
 #[derive(Debug)]
 struct LockedPages {
-    read: HashMap<PageIndex, usize>,
-    write: HashSet<PageIndex>,
+    pages: HashSet<PageIndex>,
 }
 
 impl LockedPages {
     pub fn new() -> Self {
         Self {
-            read: HashMap::new(),
-            write: HashSet::new(),
+            pages: HashSet::new(),
         }
     }
 
-    fn add(&mut self, index: PageIndex, kind: LockRequestKind) {
-        match kind {
-            LockRequestKind::Read => {
-                debug_assert!(!self.write.contains(&index));
-
-                *self.read.entry(index).or_insert(0) += 1;
-            }
-            LockRequestKind::Write => {
-                debug_assert!(*self.read.get(&index).unwrap_or(&0) == 0);
-
-                self.write.insert(index);
-            }
-            LockRequestKind::Upgrade => {
-                debug_assert!(*self.read.get(&index).unwrap_or(&0) == 1);
-
-                *self.read.get_mut(&index).unwrap() = 0;
-
-                self.write.insert(index);
-            }
-        }
+    fn add(&mut self, index: PageIndex) {
+        self.pages.insert(index);
     }
 
-    #[must_use]
-    fn remove(&mut self, index: PageIndex, kind: LockKind) -> bool {
-        match kind {
-            LockKind::Read => {
-                debug_assert!(!self.write.contains(&index));
-
-                let reader_count = self.read.get_mut(&index).unwrap();
-                *reader_count = reader_count.strict_sub(1);
-
-                *reader_count == 0
-            }
-            LockKind::Write => {
-                debug_assert!(*self.read.get(&index).unwrap_or(&0) == 0);
-
-                let removed = self.write.remove(&index);
-                assert!(removed);
-
-                true
-            }
-        }
+    fn remove(&mut self, index: PageIndex) {
+        let removed = self.pages.remove(&index);
+        assert!(removed);
     }
 
-    fn get_status(&self, index: PageIndex) -> Option<LockStatus> {
-        if self.write.contains(&index) {
-            return Some(LockStatus::Write);
-        }
-
-        let read_count = *self.read.get(&index).unwrap_or(&0);
-        if read_count > 0 {
-            return Some(LockStatus::Read(read_count));
-        }
-
-        None
+    fn is_locked(&self, index: PageIndex) -> bool {
+        self.pages.contains(&index)
     }
 }
 
@@ -110,7 +36,6 @@ struct Edge {
     from: TransactionId,
     to: TransactionId,
     page: PageIndex,
-    kind: LockKind,
 }
 
 impl Edge {
@@ -122,8 +47,8 @@ impl Edge {
         };
 
         format!(
-            "{:?} -> {:?} ({:?} {}{:?}{})",
-            self.from, self.to, self.kind, highlight, self.page, highlight
+            "{:?} -> {:?} ({}{:?}{})",
+            self.from, self.to, highlight, self.page, highlight
         )
     }
 }
@@ -143,60 +68,31 @@ impl LockManagerState {
     }
 
     #[must_use]
-    pub fn add_page(
-        &mut self,
-        txid: TransactionId,
-        index: PageIndex,
-        kind: LockRequestKind,
-    ) -> bool {
+    pub fn add_page(&mut self, txid: TransactionId, index: PageIndex) -> bool {
         let mut my_blockers = HashSet::new();
 
         for (blocker_txid, pages) in &self.pages {
-            if let Some(blocker_status) = pages.get_status(index) {
-                if *blocker_txid == txid {
-                    let blocks_with_self = match (kind, blocker_status) {
-                        (LockRequestKind::Read, LockStatus::Read(_))
-                        | (LockRequestKind::Upgrade, LockStatus::Read(1)) => false,
-                        (
-                            LockRequestKind::Read
-                            | LockRequestKind::Write
-                            | LockRequestKind::Upgrade,
-                            LockStatus::Write,
-                        )
-                        | (
-                            LockRequestKind::Write | LockRequestKind::Upgrade,
-                            LockStatus::Read(_),
-                        ) => true,
-                    };
-
-                    if blocks_with_self {
-                        log::debug!(
-                            "would block with self: {index:?} {txid:?} {blocker_status:?} {kind:?} :: {self:?}"
-                        );
-
-                        return false;
-                    }
-                } else {
-                    my_blockers.insert(Edge {
-                        from: txid,
-                        to: *blocker_txid,
-                        page: index,
-                        kind: blocker_status.into(),
-                    });
-                }
+            if !pages.is_locked(index) {
+                continue;
             }
+            if *blocker_txid == txid {
+                log::debug!("would block with self: {index:?} {txid:?} :: {self:?}");
+
+                return false;
+            }
+
+            my_blockers.insert(Edge {
+                from: txid,
+                to: *blocker_txid,
+                page: index,
+            });
         }
 
-        if !my_blockers.is_empty() && self.would_cycle_with(txid, &my_blockers, kind) {
+        if !my_blockers.is_empty() && self.would_cycle_with(txid, &my_blockers) {
             return false;
         }
 
-        self.pages_for_mut(txid).add(index, kind);
-
-        if kind == LockRequestKind::Upgrade {
-            self.edges
-                .retain(|x| !(x.from == txid && x.kind == LockKind::Read && x.page == index));
-        }
+        self.pages_for_mut(txid).add(index);
 
         for edge in my_blockers {
             self.edges.insert(edge);
@@ -206,21 +102,12 @@ impl LockManagerState {
     }
 
     #[must_use]
-    pub fn remove_page(
-        &mut self,
-        txid: TransactionId,
-        index: PageIndex,
-        kind: LockKind,
-    ) -> Vec<PageIndex> {
-        let lock_removed = self.pages_for_mut(txid).remove(index, kind);
-        if !lock_removed {
-            return vec![];
-        }
+    pub fn remove_page(&mut self, txid: TransactionId, index: PageIndex) -> Vec<PageIndex> {
+        self.pages_for_mut(txid).remove(index);
 
-        let removed_edges = self.edges.extract_if(|edge| {
-            (edge.from == txid && edge.kind == kind && edge.page == index)
-                || (edge.to == txid && edge.page == index)
-        });
+        let removed_edges = self
+            .edges
+            .extract_if(|edge| edge.from == txid && edge.page == index);
 
         removed_edges
             .map(|x| x.page)
@@ -233,12 +120,7 @@ impl LockManagerState {
         self.pages.entry(txid).or_insert_with(LockedPages::new)
     }
 
-    fn would_cycle_with(
-        &self,
-        txid: TransactionId,
-        virtual_edges: &HashSet<Edge>,
-        kind: LockRequestKind,
-    ) -> bool {
+    fn would_cycle_with(&self, txid: TransactionId, virtual_edges: &HashSet<Edge>) -> bool {
         struct Visitor<'a> {
             edges: &'a HashSet<Edge>,
             virtual_edges: &'a HashSet<Edge>,
@@ -305,9 +187,7 @@ impl LockManagerState {
             } else {
                 format!("\n    ===\n{}", self.edges_debug(None))
             };
-            debug!(
-                "checking for cycle {txid:?} {kind:?} edges: {formatted_virtual_edges}{own_edges}",
-            );
+            debug!("checking for cycle {txid:?} edges: {formatted_virtual_edges}{own_edges}",);
         }
 
         let cycle = (Visitor {
@@ -318,10 +198,8 @@ impl LockManagerState {
         })
         .visit(self.pages.keys().copied().collect());
 
-        // TODO if kind is LockKind::Read and the cycle is only reads, then we should return false,
-        // as read cycles are okay
         if cycle.is_some() {
-            log::info!("would create a cycle: {txid:?} {kind:?} :: {cycle:?}");
+            log::info!("would create a cycle: {txid:?} :: {cycle:?}");
             return true;
         }
 

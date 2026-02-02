@@ -1,6 +1,6 @@
 mod state;
 
-use crate::{storage::in_memory::lock_manager::state::LockRequestKind, sync::RwLock};
+use crate::sync::RwLock;
 use std::ops::{Deref, DerefMut};
 
 use log::debug;
@@ -10,8 +10,8 @@ use crate::{
     storage::{
         PageIndex, StorageError, TransactionId,
         in_memory::{
-            block::{Block, PageGuard, PageGuardMut, PageRef, UninitializedPageGuard},
-            lock_manager::state::{LockKind, LockManagerState},
+            block::{Block, PageGuard, UninitializedPageGuard},
+            lock_manager::state::LockManagerState,
         },
     },
 };
@@ -25,26 +25,6 @@ pub struct ManagedPageGuard<'storage> {
 
 unsafe impl Send for ManagedPageGuard<'_> {}
 
-impl<'storage> ManagedPageGuard<'storage> {
-    pub fn upgrade(mut self) -> Result<ManagedPageGuardMut<'storage>, StorageError> {
-        let Self {
-            ref mut guard,
-            lock_manager,
-            txid,
-        } = self;
-
-        let guard = self
-            .lock_manager
-            .lock_upgrade(txid, guard.take().unwrap())?;
-
-        Ok(ManagedPageGuardMut {
-            guard: Some(guard),
-            lock_manager,
-            txid,
-        })
-    }
-}
-
 impl Drop for ManagedPageGuard<'_> {
     fn drop(&mut self) {
         debug!(
@@ -54,7 +34,18 @@ impl Drop for ManagedPageGuard<'_> {
         );
 
         if let Some(guard) = self.guard.take() {
-            self.lock_manager.unlock_read(self.txid, guard);
+            let index = guard.index();
+
+            debug!("[{:?}] removing read lock {index:?}", self.txid);
+
+            let mut state_guard = self.lock_manager.state.write().unwrap();
+
+            drop(guard);
+
+            let potentially_unlocked_pages = state_guard.remove_page(self.txid, index);
+
+            self.lock_manager
+                .wake_all(potentially_unlocked_pages, self.txid);
         }
     }
 }
@@ -67,39 +58,9 @@ impl Deref for ManagedPageGuard<'_> {
     }
 }
 
-#[derive(Debug)]
-pub struct ManagedPageGuardMut<'storage> {
-    guard: Option<PageGuardMut<'storage>>,
-    lock_manager: &'storage LockManager,
-    txid: TransactionId,
-}
-
-unsafe impl Send for ManagedPageGuardMut<'_> {}
-
-impl Drop for ManagedPageGuardMut<'_> {
-    fn drop(&mut self) {
-        debug!(
-            "[{:?}] dropping mut guard {:?}",
-            self.txid,
-            self.guard.as_ref().map(PageGuardMut::index)
-        );
-
-        self.lock_manager
-            .unlock_write(self.txid, self.guard.take().unwrap());
-    }
-}
-
-impl DerefMut for ManagedPageGuardMut<'_> {
+impl DerefMut for ManagedPageGuard<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.guard.as_mut().unwrap().deref_mut()
-    }
-}
-
-impl Deref for ManagedPageGuardMut<'_> {
-    type Target = Page;
-
-    fn deref(&self) -> &Self::Target {
-        self.guard.as_ref().unwrap().deref()
     }
 }
 
@@ -117,14 +78,15 @@ impl LockManager {
         }
     }
 
-    fn lock_read<'storage>(
+    pub fn lock(
         &self,
         txid: TransactionId,
-        page: PageRef<'storage>,
-    ) -> Result<PageGuard<'storage>, StorageError> {
+        index: PageIndex,
+    ) -> Result<ManagedPageGuard<'_>, StorageError> {
         let mut state_guard = self.state.write().unwrap();
+        let page = self.block.get(index, txid);
 
-        if !state_guard.add_page(txid, page.index(), LockRequestKind::Read) {
+        if !state_guard.add_page(txid, page.index()) {
             return Err(StorageError::Deadlock(page.index()));
         }
 
@@ -136,101 +98,15 @@ impl LockManager {
 
         drop(state_guard);
 
-        Ok(page.get())
-    }
-
-    fn lock_upgrade<'storage>(
-        &self,
-        txid: TransactionId,
-        guard: PageGuard<'storage>,
-    ) -> Result<PageGuardMut<'storage>, StorageError> {
-        let mut state_guard = self.state.write().unwrap();
-
-        if !state_guard.add_page(txid, guard.index(), LockRequestKind::Upgrade) {
-            return Err(StorageError::Deadlock(guard.index()));
-        }
-
-        debug!("[{txid:?}] upgrading lock {:?}", guard.index());
-
-        drop(state_guard);
-
-        Ok(guard.upgrade())
-    }
-
-    pub fn get_read(
-        &self,
-        txid: TransactionId,
-        index: PageIndex,
-    ) -> Result<ManagedPageGuard<'_>, StorageError> {
-        self.lock_read(txid, self.block.get(index, txid))
-            .map(|guard| ManagedPageGuard {
-                guard: Some(guard),
-                lock_manager: self,
-                txid,
-            })
-    }
-
-    pub fn get_write(
-        &self,
-        txid: TransactionId,
-        index: PageIndex,
-    ) -> Result<ManagedPageGuardMut<'_>, StorageError> {
-        self.lock_write(txid, self.block.get(index, txid))
-            .map(|guard| ManagedPageGuardMut {
-                guard: Some(guard),
-                lock_manager: self,
-                txid,
-            })
+        Ok(ManagedPageGuard {
+            guard: Some(page.lock()),
+            lock_manager: self,
+            txid,
+        })
     }
 
     pub fn reserve(&self, txid: TransactionId) -> UninitializedPageGuard<'_> {
         self.block.allocate(txid)
-    }
-
-    fn lock_write<'storage>(
-        &self,
-        txid: TransactionId,
-        page: PageRef<'storage>,
-    ) -> Result<PageGuardMut<'storage>, StorageError> {
-        let mut state_guard = self.state.write().unwrap();
-
-        if !state_guard.add_page(txid, page.index(), LockRequestKind::Write) {
-            return Err(StorageError::Deadlock(page.index()));
-        }
-
-        debug!("[{txid:?}] locking for write {:?}", page.index());
-
-        drop(state_guard);
-
-        Ok(page.get_mut())
-    }
-
-    fn unlock_read(&self, txid: TransactionId, page: PageGuard<'_>) {
-        let index = page.index();
-
-        debug!("[{txid:?}] removing read lock {index:?}");
-
-        let mut state_guard = self.state.write().unwrap();
-
-        drop(page);
-
-        let potentially_unlocked_pages = state_guard.remove_page(txid, index, LockKind::Read);
-
-        self.wake_all(potentially_unlocked_pages, txid);
-    }
-
-    fn unlock_write(&self, txid: TransactionId, page: PageGuardMut<'_>) {
-        let index = page.index();
-
-        debug!("[{txid:?}] removing write lock {index:?}");
-
-        let mut state_guard = self.state.write().unwrap();
-
-        drop(page);
-
-        let potentially_unlocked_pages = state_guard.remove_page(txid, index, LockKind::Write);
-
-        self.wake_all(potentially_unlocked_pages, txid);
     }
 
     fn wake_all(&self, pages: Vec<PageIndex>, txid: TransactionId) {
@@ -239,5 +115,9 @@ impl LockManager {
         for page in pages {
             self.block.get(page, txid).wake();
         }
+    }
+
+    pub(crate) fn debug_locks(&self, page: PageIndex) -> String {
+        self.state.write().unwrap().edges_debug(Some(page))
     }
 }

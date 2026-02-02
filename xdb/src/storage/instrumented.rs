@@ -81,13 +81,13 @@ impl<T: Storage> InstrumentedStorage<T> {
 }
 
 impl<T: Storage> Storage for InstrumentedStorage<T> {
-    type Transaction<'a>
-        = InstrumentedTransaction<'a, T::Transaction<'a>, T>
+    type PageReservation<'a>
+        = T::PageReservation<'a>
     where
         T: 'a;
 
-    type PageReservation<'a>
-        = T::PageReservation<'a>
+    type Transaction<'a>
+        = InstrumentedTransaction<'a, T::Transaction<'a>, T>
     where
         T: 'a;
 
@@ -97,5 +97,9 @@ impl<T: Storage> Storage for InstrumentedStorage<T> {
             self.page_count.clone(),
             PhantomData,
         ))
+    }
+
+    fn debug_locks(&self, page: PageIndex) -> String {
+        self.inner.debug_locks(page)
     }
 }

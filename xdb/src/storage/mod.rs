@@ -103,4 +103,7 @@ pub trait Storage: Send + Sync + Debug {
     fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError>
     where
         Self: Sized;
+
+    // TODO separte `StorageDebug` trait?
+    fn debug_locks(&self, page: PageIndex) -> String;
 }

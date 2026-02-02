@@ -50,4 +50,8 @@ impl Storage for InMemoryStorage {
     fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError> {
         Ok(InMemoryTransaction::new(self))
     }
+
+    fn debug_locks(&self, page: PageIndex) -> String {
+        self.lock_manager.debug_locks(page)
+    }
 }

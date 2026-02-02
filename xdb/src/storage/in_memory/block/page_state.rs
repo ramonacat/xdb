@@ -7,16 +7,6 @@ use std::{marker::PhantomPinned, pin::Pin};
 
 use crate::platform::futex::{Futex, FutexError};
 
-const fn mask32(start_bit: u32, end_bit: u32) -> u32 {
-    assert!(end_bit <= start_bit);
-
-    if start_bit == end_bit {
-        return 1 << start_bit;
-    }
-
-    1 << start_bit | mask32(start_bit - 1, end_bit)
-}
-
 #[derive(Debug, Clone, Copy)]
 #[allow(
     unused,
@@ -48,8 +38,7 @@ impl Debug for PageStateValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PageStateValue")
             .field("is_initialized", &self.is_initialized())
-            .field("readers", &self.readers())
-            .field("has_writer", &self.has_writer())
+            .field("is_locked", &self.is_locked())
             .field("raw", &format!("{:#b}", self.0))
             .finish()
     }
@@ -57,41 +46,22 @@ impl Debug for PageStateValue {
 
 impl PageStateValue {
     const MASK_IS_INITIALIZED: u32 = 1 << 31;
-    const _UNUSED1: u32 = 1 << 30;
-    const _UNUSED2: u32 = 1 << 29;
-    const SHIFT_READER_COUNT: u32 = 12;
-    const MASK_READER_COUNT: u32 = mask32(28, Self::SHIFT_READER_COUNT);
-    const MASK_HAS_WRITER: u32 = 1 << 11;
+    const MASK_IS_LOCKED: u32 = 1 << 30;
 
     const fn is_initialized(self) -> bool {
         self.0 & Self::MASK_IS_INITIALIZED != 0
     }
 
-    const fn readers(self) -> u32 {
-        (self.0 & Self::MASK_READER_COUNT) >> Self::SHIFT_READER_COUNT
+    const fn is_locked(self) -> bool {
+        self.0 & Self::MASK_IS_LOCKED != 0
     }
 
-    const fn with_readers(self, new_count: u32) -> Self {
-        let shifted_new_count = new_count << Self::SHIFT_READER_COUNT;
-        // TODO should we just treat this as any other lock contention?
-        assert!(
-            (shifted_new_count & !Self::MASK_READER_COUNT) == 0,
-            "too many readers"
-        );
-
-        Self((self.0 & !Self::MASK_READER_COUNT) | shifted_new_count)
+    const fn lock(self) -> Self {
+        Self(self.0 | Self::MASK_IS_LOCKED)
     }
 
-    const fn has_writer(self) -> bool {
-        self.0 & Self::MASK_HAS_WRITER != 0
-    }
-
-    const fn with_writer(self) -> Self {
-        Self(self.0 | Self::MASK_HAS_WRITER)
-    }
-
-    const fn without_writer(self) -> Self {
-        Self(self.0 & !Self::MASK_HAS_WRITER)
+    const fn unlock(self) -> Self {
+        Self(self.0 & !Self::MASK_IS_LOCKED)
     }
 }
 
@@ -120,7 +90,7 @@ impl PageState {
         PageStateValue(self.atomic().load(Ordering::Acquire)).is_initialized()
     }
 
-    pub fn lock_write(self: Pin<&Self>, debug_context: DebugContext) {
+    pub fn lock(self: Pin<&Self>, debug_context: DebugContext) {
         debug_assert!(self.is_initialized());
 
         match self
@@ -128,28 +98,24 @@ impl PageState {
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
                 let f = PageStateValue(f);
 
-                if f.readers() > 0 {
+                if f.is_locked() {
                     return None;
                 }
 
-                if f.has_writer() {
-                    return None;
-                }
-
-                Some(f.with_writer().0)
+                Some(f.lock().0)
             }) {
             Ok(previous) => {
                 let previous = PageStateValue(previous);
 
-                debug!("[{debug_context:?}] locked for write, previous {previous:?}");
+                debug!("[{debug_context:?}] locked, previous {previous:?}");
             }
             Err(previous) => {
                 let previous = PageStateValue(previous);
 
-                debug!("[{debug_context:?}] failed to lock for write, previous {previous:?}");
+                debug!("[{debug_context:?}] failed to lock, previous {previous:?}");
 
                 self.wait(previous);
-                self.lock_write(debug_context);
+                self.lock(debug_context);
             }
         }
     }
@@ -160,19 +126,19 @@ impl PageState {
         }
     }
 
-    pub fn unlock_write(self: Pin<&Self>, debug_context: DebugContext) {
+    pub fn unlock(self: Pin<&Self>, debug_context: DebugContext) {
         debug_assert!(self.is_initialized());
 
         match self
             .atomic()
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 let x = PageStateValue(x);
-                Some(x.without_writer().0)
+                Some(x.unlock().0)
             }) {
             Ok(previous) => {
                 let previous = PageStateValue(previous);
 
-                debug!("[{debug_context:?}] write unlocked from {previous:?}");
+                debug!("[{debug_context:?}] unlocked from {previous:?}");
 
                 self.wake(debug_context);
             }
@@ -181,90 +147,7 @@ impl PageState {
     }
 
     pub fn wake(self: Pin<&Self>, debug_context: DebugContext) {
-        // TODO probably should be more optimized as to choosing whether to wake up readers
-        // or writers
-        let awoken = self.futex().wake(u32::MAX);
+        let awoken = self.futex().wake(1);
         debug!("[{debug_context:?}] awoken {awoken} waiters");
-    }
-
-    pub fn lock_read(self: Pin<&Self>, debug_context: DebugContext) {
-        debug_assert!(self.is_initialized());
-
-        let result = self
-            .atomic()
-            .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
-                let x = PageStateValue(x);
-                if x.has_writer() {
-                    return None;
-                }
-
-                Some(x.with_readers(x.readers() + 1).0)
-            });
-
-        match result {
-            Ok(previous) => {
-                let previous = PageStateValue(previous);
-
-                debug!("[{debug_context:?}] read locked from {previous:?}");
-            }
-            Err(previous) => {
-                let previous = PageStateValue(previous);
-
-                debug!("[{debug_context:?}] failed to lock for read from {previous:?}");
-
-                self.wait(previous);
-                self.lock_read(debug_context);
-            }
-        }
-    }
-
-    pub fn unlock_read(self: Pin<&Self>, debug_context: DebugContext) {
-        debug_assert!(self.is_initialized());
-
-        match self
-            .atomic()
-            .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
-                let x = PageStateValue(x);
-
-                if x.has_writer() {
-                    return None;
-                }
-
-                let reader_count = x.readers();
-
-                if reader_count == 0 {
-                    return None;
-                }
-
-                Some(x.with_readers(reader_count - 1).0)
-            }) {
-            Ok(previous) => {
-                let previous = PageStateValue(previous);
-
-                debug!("[{debug_context:?}] reader removed from {previous:?}");
-
-                if previous.readers() == 1 {
-                    self.wake(debug_context);
-                }
-            }
-            Err(previous) => {
-                let previous = PageStateValue(previous);
-
-                panic!(
-                    "[{debug_context:?}] [{previous:?}] unlocking failed because of invalid state"
-                );
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn mask_tests() {
-        assert_eq!(mask32(7, 0), 0b1111_1111);
-        assert_eq!(mask32(15, 8), 0b1111_1111_0000_0000);
     }
 }

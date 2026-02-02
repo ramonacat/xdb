@@ -6,10 +6,11 @@ use crate::{
     platform::allocation::Allocation, storage::in_memory::block::page_state::DebugContext,
 };
 use log::debug;
+use std::ops::DerefMut;
 use std::{
     fmt::{Debug, Display},
     mem::MaybeUninit,
-    ops::{Deref, DerefMut},
+    ops::Deref,
     pin::Pin,
     ptr::NonNull,
     sync::atomic::AtomicU16,
@@ -34,12 +35,8 @@ impl<'block> PageRef<'block> {
         self.index
     }
 
-    pub fn get(&self) -> PageGuard<'block> {
+    pub fn lock(&self) -> PageGuard<'block> {
         unsafe { PageGuard::new(self.page, self.block, self.index, self.txid) }
-    }
-
-    pub fn get_mut(&self) -> PageGuardMut<'block> {
-        unsafe { PageGuardMut::new(self.page, self.block, self.index, self.txid) }
     }
 
     pub(crate) fn wake(&self) {
@@ -66,31 +63,9 @@ impl<'block> PageGuard<'block> {
         txid: TransactionId,
     ) -> Self {
         let housekeeping = unsafe { block.housekeeping_for(index) };
-        housekeeping.lock_read(DebugContext::new(txid, index));
+        housekeeping.lock(DebugContext::new(txid, index));
 
         Self {
-            page,
-            block,
-            index,
-            txid,
-        }
-    }
-
-    pub fn upgrade(self) -> PageGuardMut<'block> {
-        let Self {
-            page,
-            block,
-            index,
-            txid,
-        } = self;
-
-        // it is important that these are done as distinct steps, so that if multiple threads want
-        // to upgrade, then the read locks will be dropped and one of the threads will be able to
-        // lock for writing
-        drop(self);
-        unsafe { block.housekeeping_for(index) }.lock_write(DebugContext::new(txid, index));
-
-        PageGuardMut {
             page,
             block,
             index,
@@ -117,70 +92,16 @@ impl Deref for PageGuard<'_> {
     }
 }
 
-impl Drop for PageGuard<'_> {
-    fn drop(&mut self) {
-        unsafe { self.block.housekeeping_for(self.index) }
-            .unlock_read(DebugContext::new(self.txid, self.index));
-    }
-}
-
-#[derive(Debug)]
-pub struct PageGuardMut<'block> {
-    page: NonNull<Page>,
-    block: &'block Block,
-    index: PageIndex,
-    txid: TransactionId,
-}
-
-unsafe impl Send for PageGuardMut<'_> {}
-
-impl<'block> PageGuardMut<'block> {
-    unsafe fn new(
-        page: NonNull<Page>,
-        block: &'block Block,
-        index: PageIndex,
-        txid: TransactionId,
-    ) -> Self {
-        let housekeeping = unsafe { block.housekeeping_for(index) };
-        housekeeping.lock_write(DebugContext::new(txid, index));
-
-        Self {
-            page,
-            block,
-            index,
-            txid,
-        }
-    }
-
-    pub const fn index(&self) -> PageIndex {
-        self.index
-    }
-}
-
-impl AsMut<Page> for PageGuardMut<'_> {
-    fn as_mut(&mut self) -> &mut Page {
-        unsafe { self.page.as_mut() }
-    }
-}
-
-impl Deref for PageGuardMut<'_> {
-    type Target = Page;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.page.as_ref() }
-    }
-}
-
-impl DerefMut for PageGuardMut<'_> {
+impl DerefMut for PageGuard<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.page.as_mut() }
     }
 }
 
-impl Drop for PageGuardMut<'_> {
+impl Drop for PageGuard<'_> {
     fn drop(&mut self) {
         unsafe { self.block.housekeeping_for(self.index) }
-            .unlock_write(DebugContext::new(self.txid, self.index));
+            .unlock(DebugContext::new(self.txid, self.index));
     }
 }
 
