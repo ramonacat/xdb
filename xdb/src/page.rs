@@ -19,8 +19,8 @@ pub enum PageError {
 struct PageHeader {
     checksum: Checksum,
     _unused1: u32,
-    visible_from: TransactionId,
-    visible_until: TransactionId,
+    visible_from: Option<TransactionId>,
+    visible_until: Option<TransactionId>,
     _unused2: u64,
 }
 
@@ -81,6 +81,22 @@ impl Page {
 
     pub fn data_mut<T: AnyBitPattern + NoUninit>(&mut self) -> &mut T {
         from_bytes_mut(&mut self.data)
+    }
+
+    pub(crate) fn is_visible_in(&self, txid: TransactionId) -> bool {
+        if let Some(from) = self.header.visible_from && from > txid {
+            return false;
+        }
+
+        if let Some(to) = self.header.visible_until && to < txid {
+            return false;
+        }
+
+        true
+    }
+
+    pub(crate) fn set_visible_from(&mut self, txid: TransactionId) {
+        self.header.visible_from = Some(txid);
     }
 }
 

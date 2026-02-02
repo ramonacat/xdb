@@ -2,11 +2,10 @@ pub mod in_memory;
 pub mod instrumented;
 
 use std::{
-    fmt::Debug,
-    sync::atomic::{AtomicU64, Ordering},
+    fmt::Debug, num::NonZeroU64, sync::atomic::{AtomicU64, Ordering}
 };
 
-use bytemuck::{Pod, Zeroable};
+use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
 use thiserror::Error;
 
 use crate::page::Page;
@@ -52,15 +51,19 @@ impl From<PageIndex> for [PageIndex; 1] {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Pod, Zeroable)]
+// TODO does numeric ordering always imply a happens-before relationship?
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct TransactionId(u64);
+pub struct TransactionId(NonZeroU64);
 
-static LATEST_TRANSACTION_ID: AtomicU64 = AtomicU64::new(0);
+unsafe impl PodInOption for TransactionId {}
+unsafe impl ZeroableInOption for TransactionId {}
+
+static LATEST_TRANSACTION_ID: AtomicU64 = AtomicU64::new(1);
 
 impl TransactionId {
     fn next() -> Self {
-        Self(LATEST_TRANSACTION_ID.fetch_add(1, Ordering::Relaxed))
+        Self(NonZeroU64::new(LATEST_TRANSACTION_ID.fetch_add(1, Ordering::Relaxed)).unwrap())
     }
 }
 

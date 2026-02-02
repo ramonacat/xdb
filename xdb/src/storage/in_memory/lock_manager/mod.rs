@@ -78,6 +78,8 @@ impl LockManager {
         }
     }
 
+    // TODO instead of passing txid over and over, should we have some sorta
+    // `TransactionLockManager` that keeps per-transaction state?
     pub fn lock(
         &self,
         txid: TransactionId,
