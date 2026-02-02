@@ -29,14 +29,18 @@ impl PageIndex {
         Self(0)
     }
 
-    #[cfg(test)]
-    pub const fn from_value(value: u64) -> Self {
+    #[must_use]
+    pub(crate) const fn from_value(value: u64) -> Self {
         Self(value)
     }
 
     #[must_use]
     pub(crate) const fn value(self) -> u64 {
         self.0
+    }
+
+    const fn next(self) -> Self {
+        Self(self.0.strict_add(1))
     }
 }
 

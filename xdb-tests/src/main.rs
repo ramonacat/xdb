@@ -57,11 +57,12 @@ struct ServerThread {
     handle: JoinHandle<()>,
 }
 
+// TODO this should stop being neccessary once transaction commits are single-threaded
 fn retry_on_deadlock<T>(
     tree: Arc<Tree<InMemoryStorage, KeyType>>,
     callable: impl Fn(TreeTransaction<InMemoryStorage, KeyType>) -> Result<T, TreeError>,
 ) -> Result<T, TreeError> {
-    for i in 0..32 {
+    for i in 0..10 {
         let transaction = tree.transaction().unwrap();
 
         match callable(transaction) {
@@ -70,13 +71,17 @@ fn retry_on_deadlock<T>(
             error @ Err(_) => return error,
         };
 
-        thread::sleep(Duration::from_millis(2u64.pow(i / 4)));
+        thread::sleep(Duration::from_millis(2u64.pow(i / 10)));
         debug!("retrying: {i}");
     }
 
-    info!("last retry after 13 tries");
+    info!("last retry after 10 tries");
+
+    // TODO don't do that, it's hacky af
+    log::set_max_level(log::LevelFilter::Debug);
 
     let transaction = tree.transaction().unwrap();
+    info!("transaction: {transaction:?}");
 
     callable(transaction)
 }
@@ -114,6 +119,7 @@ fn server_thread(
 
 fn main() {
     env_logger::init();
+    log::set_max_level(log::LevelFilter::Info);
 
     let storage = InMemoryStorage::new();
     let tree = Arc::new(Tree::new(storage).unwrap());

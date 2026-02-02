@@ -17,23 +17,31 @@ pub struct InMemoryTransaction<'storage> {
     version_manager: VersionManagerTransaction<'storage>,
     finalized: bool,
     reserved_pages: HashSet<PageIndex>,
+    storage: &'storage InMemoryStorage,
 }
 
 impl<'storage> InMemoryTransaction<'storage> {
     pub fn new(storage: &'storage InMemoryStorage) -> Self {
         let id = TransactionId::next();
+        storage.running_transactions.lock().unwrap().insert(id);
 
         Self {
             id,
             finalized: false,
             reserved_pages: HashSet::new(),
             version_manager: VersionManagerTransaction::new(id, storage),
+            storage,
         }
     }
 }
 
 impl Drop for InMemoryTransaction<'_> {
     fn drop(&mut self) {
+        self.storage
+            .running_transactions
+            .lock()
+            .unwrap()
+            .remove(&self.id);
         // TODO do an actual rollback
     }
 }

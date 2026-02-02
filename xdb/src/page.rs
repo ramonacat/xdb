@@ -124,6 +124,10 @@ impl Page {
     pub const fn increment_version(&mut self) {
         self.header.version = self.header.version.next();
     }
+
+    pub const fn visible_until(&self) -> Option<TransactionId> {
+        self.header.visible_until
+    }
 }
 
 #[cfg(test)]

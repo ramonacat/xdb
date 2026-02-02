@@ -8,13 +8,13 @@ use crate::{
     },
     thread,
 };
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::HashMap;
 
 use crate::{
     page::Page,
     storage::{
         PageIndex, StorageError, TransactionId,
-        in_memory::block::{Block, PageGuard, UninitializedPageGuard},
+        in_memory::block::{PageGuard, UninitializedPageGuard},
     },
 };
 
@@ -61,40 +61,50 @@ impl<'storage> VersionManagerTransaction<'storage> {
         }
     }
 
+    // TODO avoid passing by value
+    #[allow(clippy::large_types_passed_by_value)]
+    fn allocate_cow_copy(&self, page: Page) -> PageRef<'storage> {
+        if let Some(index) = self.storage.cow_copies_freemap.find_and_unset() {
+            return self
+                .storage
+                .cow_copies
+                .get(PageIndex(index as u64), Some(self.id));
+        }
+
+        self.storage
+            .cow_copies
+            .allocate(Some(self.id))
+            .initialize(page)
+    }
+
     pub(crate) fn read(&mut self, index: PageIndex) -> Result<PageGuard<'storage>, StorageError> {
-        let page = match self.pages.entry(index) {
-            Entry::Occupied(occupied) => occupied.get().cow.lock(),
-            Entry::Vacant(vacant) => {
-                let main = self.storage.lock_manager.block.get(index, self.id);
-                let main_lock = main.lock();
+        if let Some(entry) = self.pages.get(&index) {
+            Ok(entry.cow.lock())
+        } else {
+            let main = self.storage.data.get(index, Some(self.id));
+            let main_lock = main.lock();
 
-                if !main_lock.is_visible_in(self.id) {
-                    return Err(StorageError::Deadlock(index));
-                }
+            if !main_lock.is_visible_in(self.id) {
+                return Err(StorageError::Deadlock(index));
+            }
 
-                // TODO we really need to free up the cow pages once we're done, as allocating for
-                // every read eats the memory up extremely fast
-                let cow = self
-                    .storage
-                    .cow_copies
-                    .allocate(self.id)
-                    .initialize(*main_lock);
+            let cow = self.allocate_cow_copy(*main_lock);
 
-                let inserted = vacant.insert(CowPage {
+            self.pages.insert(
+                index,
+                CowPage {
                     main: MainPageRef::Initialized(main),
                     cow,
                     version: main_lock.version(),
-                });
+                },
+            );
 
-                inserted.cow.lock()
-            }
-        };
-
-        Ok(page)
+            Ok(self.pages.get(&index).unwrap().cow.lock())
+        }
     }
 
     pub(crate) fn reserve(&self) -> UninitializedPageGuard<'storage> {
-        self.storage.lock_manager.block.allocate(self.id)
+        self.storage.data.allocate(Some(self.id))
     }
 
     // TODO can we avoid passing this by value?
@@ -104,7 +114,11 @@ impl<'storage> VersionManagerTransaction<'storage> {
         page_guard: UninitializedPageGuard<'storage>,
         page: Page,
     ) {
-        let cow = self.storage.cow_copies.allocate(self.id).initialize(page);
+        let cow = self
+            .storage
+            .cow_copies
+            .allocate(Some(self.id))
+            .initialize(page);
 
         self.pages.insert(
             page_guard.index(),
@@ -118,13 +132,13 @@ impl<'storage> VersionManagerTransaction<'storage> {
 
     pub(crate) fn delete(&mut self, page: PageIndex) {
         self.pages.entry(page).or_insert_with(|| {
-            let main = self.storage.lock_manager.block.get(page, self.id);
+            let main = self.storage.data.get(page, Some(self.id));
             let main_lock = main.lock();
 
             let cow = self
                 .storage
                 .cow_copies
-                .allocate(self.id)
+                .allocate(Some(self.id))
                 .initialize(*main_lock);
 
             let mut cow_lock = cow.lock();
@@ -141,6 +155,7 @@ impl<'storage> VersionManagerTransaction<'storage> {
         });
     }
 
+    // TODO commits should all happen in a single thread, to avoid deadlocks and races
     pub(crate) fn commit(&mut self) -> Result<(), StorageError> {
         // TODO make the commit consistent in event of a crash:
         //    1. write to a transaction log
@@ -197,17 +212,5 @@ impl<'storage> VersionManagerTransaction<'storage> {
         }
 
         Ok(())
-    }
-}
-
-#[derive(Debug)]
-// TODO just get rid of this lol
-pub struct LockManager {
-    block: Block,
-}
-
-impl LockManager {
-    pub const fn new(block: Block) -> Self {
-        Self { block }
     }
 }

@@ -53,6 +53,7 @@ pub struct Tree<T: Storage, TKey: TreeKey> {
 }
 
 // TODO move to a separate mod
+#[derive(Debug)]
 pub struct TreeTransaction<'storage, TStorage: Storage + 'storage, TKey>
 where
     Self: 'storage,

@@ -6,6 +6,7 @@ use crate::storage::in_memory::block::page_state::PageStateValue;
 use crate::{
     platform::allocation::Allocation, storage::in_memory::block::page_state::DebugContext,
 };
+use bytemuck::Zeroable;
 use log::debug;
 use std::ops::DerefMut;
 use std::{fmt::Debug, mem::MaybeUninit, ops::Deref, pin::Pin, ptr::NonNull};
@@ -23,7 +24,7 @@ pub struct PageRef<'block> {
     page: NonNull<Page>,
     block: &'block Block,
     index: PageIndex,
-    txid: TransactionId,
+    txid: Option<TransactionId>,
 }
 
 unsafe impl Send for PageRef<'_> {}
@@ -49,7 +50,7 @@ pub struct PageGuard<'block> {
     page: NonNull<Page>,
     block: &'block Block,
     index: PageIndex,
-    txid: TransactionId,
+    txid: Option<TransactionId>,
 }
 
 unsafe impl Send for PageGuard<'_> {}
@@ -59,7 +60,7 @@ impl<'block> PageGuard<'block> {
         page: NonNull<Page>,
         block: &'block Block,
         index: PageIndex,
-        txid: TransactionId,
+        txid: Option<TransactionId>,
     ) -> Self {
         let housekeeping = unsafe { block.housekeeping_for(index) };
         housekeeping.lock(DebugContext::new(txid, index));
@@ -76,7 +77,7 @@ impl<'block> PageGuard<'block> {
         page: NonNull<Page>,
         block: &'block Block,
         index: PageIndex,
-        txid: TransactionId,
+        txid: Option<TransactionId>,
     ) -> Result<Self, LockError> {
         let housekeeping = unsafe { block.housekeeping_for(index) };
         housekeeping.lock_nowait(DebugContext::new(txid, index))?;
@@ -122,7 +123,7 @@ pub struct UninitializedPageGuard<'block> {
     block: &'block Block,
     page: NonNull<MaybeUninit<Page>>,
     index: PageIndex,
-    txid: TransactionId,
+    txid: Option<TransactionId>,
 }
 
 unsafe impl Send for UninitializedPageGuard<'_> {}
@@ -132,7 +133,7 @@ impl<'block> UninitializedPageGuard<'block> {
         block: &'block Block,
         page: NonNull<MaybeUninit<Page>>,
         index: PageIndex,
-        txid: TransactionId,
+        txid: Option<TransactionId>,
     ) -> Self {
         Self {
             block,
@@ -170,6 +171,7 @@ pub struct Block {
     housekeeping: Box<dyn Allocation>,
     data: Box<dyn Allocation>,
     latest_page: AtomicU64,
+    latest_allocated_page: AtomicU64,
 }
 
 impl Block {
@@ -187,13 +189,27 @@ impl Block {
             housekeeping,
             data,
             latest_page: AtomicU64::new(0),
+            latest_allocated_page: AtomicU64::new(0),
         }
     }
 
-    pub fn get(&self, index: PageIndex, txid: TransactionId) -> PageRef<'_> {
+    // This will return a value, that is equal or lower than the count of allocated pages.
+    //
+    // TODO rename this, as this is actually an upper bound, and while it's guaranted that the
+    // pages are allocated, it's not guaranteed that those pages are initialized
+    pub fn page_count_lower_bound(&self) -> u64 {
+        self.latest_allocated_page.load(Ordering::Acquire)
+    }
+
+    pub fn get(&self, index: PageIndex, txid: Option<TransactionId>) -> PageRef<'_> {
         debug!("[{}] reading page {index:?}", self.name);
 
-        assert!(index.0 < self.latest_page.load(Ordering::Acquire));
+        let latest_initialized_page = self.latest_allocated_page.load(Ordering::Acquire);
+        assert!(
+            index.0 <= latest_initialized_page,
+            "[{}] [{txid:?}] trying to get page {index:?}, but initialized only upto {latest_initialized_page:?}",
+            self.name
+        );
 
         let housekeeping = unsafe { self.housekeeping_for(index) };
 
@@ -218,11 +234,43 @@ impl Block {
         }
     }
 
-    pub fn allocate(&self, txid: TransactionId) -> UninitializedPageGuard<'_> {
+    pub fn get_or_allocate_zeroed(&'_ self, index: PageIndex) -> PageRef<'_> {
+        while index.0 < self.latest_allocated_page.load(Ordering::Acquire) {
+            let allocated = self.allocate(None).initialize(Page::zeroed());
+
+            if allocated.index == index {
+                return allocated;
+            }
+        }
+
+        debug_assert!(self.latest_allocated_page.load(Ordering::Acquire) >= index.0);
+
+        self.get(index, None)
+    }
+
+    pub fn try_get(&'_ self, index: PageIndex) -> Option<PageRef<'_>> {
+        if index.0 > self.latest_allocated_page.load(Ordering::Acquire) {
+            return None;
+        }
+
+        if !unsafe { self.housekeeping_for(index) }.is_initialized() {
+            return None;
+        }
+
+        // TODO should we fliparound and define self.get in terms of try_get?
+        Some(self.get(index, None))
+    }
+
+    // TODO pass around some sort of DebugContext instead of raw TransactionId, as e.g. bitmaps
+    // don't do transactions
+    pub fn allocate(&self, txid: Option<TransactionId>) -> UninitializedPageGuard<'_> {
         let index = self.latest_page.fetch_add(1, Ordering::Acquire);
 
         let index = PageIndex(index);
         self.allocate_housekeeping(index, txid);
+
+        self.latest_allocated_page
+            .fetch_max(index.0, Ordering::AcqRel);
 
         let page = unsafe {
             self.data
@@ -234,7 +282,11 @@ impl Block {
         UninitializedPageGuard::new(self, page, index, txid)
     }
 
-    fn allocate_housekeeping(&self, index: PageIndex, txid: TransactionId) -> NonNull<PageState> {
+    fn allocate_housekeeping(
+        &self,
+        index: PageIndex,
+        txid: Option<TransactionId>,
+    ) -> NonNull<PageState> {
         debug!("[{}] allocating housekeeping for {index:?}", self.name);
 
         assert!(

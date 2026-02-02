@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use shuttle::{Config, PortfolioRunner, scheduler::PctScheduler, sync::Arc, thread};
+    use shuttle::{Config, PortfolioRunner, scheduler::{DfsScheduler, PctScheduler}, sync::Arc, thread};
     use xdb::{
         bplustree::{
             Tree, TreeError, TreeKey,
@@ -25,7 +25,8 @@ mod tests {
         config.max_steps = shuttle::MaxSteps::ContinueAfter(1_000_000);
         let mut runner = PortfolioRunner::new(true, config);
 
-        runner.add(PctScheduler::new(1000, 100_000));
+        runner.add(PctScheduler::new(100, 100_000));
+        //runner.add(DfsScheduler::new(Some(1000), false));
 
         runner.run(move || {
             let storage = InMemoryStorage::new();

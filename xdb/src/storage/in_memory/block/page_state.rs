@@ -14,12 +14,12 @@ use crate::platform::futex::{Futex, FutexError};
     reason = "the whole point of this struct is to just be for debug printing"
 )]
 pub struct DebugContext {
-    transaction: TransactionId,
+    transaction: Option<TransactionId>,
     page: PageIndex,
 }
 
 impl DebugContext {
-    pub const fn new(transaction: TransactionId, page: PageIndex) -> Self {
+    pub const fn new(transaction: Option<TransactionId>, page: PageIndex) -> Self {
         Self { transaction, page }
     }
 }
