@@ -25,8 +25,8 @@ mod tests {
         config.max_steps = shuttle::MaxSteps::ContinueAfter(1_000_000);
         let mut runner = PortfolioRunner::new(true, config);
 
-        runner.add(PctScheduler::new(100, 100_000));
-        //runner.add(DfsScheduler::new(Some(1000), false));
+        runner.add(PctScheduler::new(1000, 100_000));
+        runner.add(DfsScheduler::new(Some(1000), false));
 
         runner.run(move || {
             let storage = InMemoryStorage::new();

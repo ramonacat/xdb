@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use log::debug;
 use thiserror::Error;
+use tracing::debug;
 
 use crate::{
     bplustree::{

@@ -1,5 +1,7 @@
 // TODO this should really be called VersionManager
 
+use tracing::{info_span, instrument};
+
 use crate::{
     page::{PAGE_DATA_SIZE, PageVersion},
     storage::in_memory::{
@@ -32,10 +34,11 @@ struct CowPage<'storage> {
 }
 
 #[derive(Debug)]
-pub struct VersionManagerTransaction<'storage> {
+pub struct VersionManagedTransaction<'storage> {
     id: TransactionId,
     pages: HashMap<PageIndex, CowPage<'storage>>,
     storage: &'storage InMemoryStorage,
+    span: tracing::Span,
 }
 
 // TODO do we want a timeout here?
@@ -52,36 +55,40 @@ fn retry_contended<T>(callback: impl Fn() -> Result<T, LockError>) -> T {
     }
 }
 
-impl<'storage> VersionManagerTransaction<'storage> {
+impl<'storage> VersionManagedTransaction<'storage> {
     pub fn new(id: TransactionId, storage: &'storage InMemoryStorage) -> Self {
+        let span = info_span!("transaction", id = ?id);
+
         Self {
             id,
             pages: HashMap::new(),
             storage,
+            span,
         }
     }
 
     // TODO avoid passing by value
     #[allow(clippy::large_types_passed_by_value)]
-    fn allocate_cow_copy(&self, page: Page) -> PageRef<'storage> {
+    fn allocate_cow_copy(&self, mut page: Page) -> PageRef<'storage> {
+        page.set_visible_from(self.id);
+
         if let Some(index) = self.storage.cow_copies_freemap.find_and_unset() {
-            return self
-                .storage
-                .cow_copies
-                .get(PageIndex(index as u64), Some(self.id));
+            let recycled_page = self.storage.cow_copies.get(PageIndex(index as u64));
+
+            *recycled_page.lock() = page;
+
+            return recycled_page;
         }
 
-        self.storage
-            .cow_copies
-            .allocate(Some(self.id))
-            .initialize(page)
+        self.storage.cow_copies.allocate().initialize(page)
     }
 
+    #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn read(&mut self, index: PageIndex) -> Result<PageGuard<'storage>, StorageError> {
         if let Some(entry) = self.pages.get(&index) {
             Ok(entry.cow.lock())
         } else {
-            let main = self.storage.data.get(index, Some(self.id));
+            let main = self.storage.data.get(index);
             let main_lock = main.lock();
 
             if !main_lock.is_visible_in(self.id) {
@@ -103,22 +110,20 @@ impl<'storage> VersionManagerTransaction<'storage> {
         }
     }
 
+    #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn reserve(&self) -> UninitializedPageGuard<'storage> {
-        self.storage.data.allocate(Some(self.id))
+        self.storage.data.allocate()
     }
 
     // TODO can we avoid passing this by value?
     #[allow(clippy::large_types_passed_by_value)]
+    #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn insert_reserved(
         &mut self,
         page_guard: UninitializedPageGuard<'storage>,
         page: Page,
     ) {
-        let cow = self
-            .storage
-            .cow_copies
-            .allocate(Some(self.id))
-            .initialize(page);
+        let cow = self.storage.cow_copies.allocate().initialize(page);
 
         self.pages.insert(
             page_guard.index(),
@@ -130,16 +135,13 @@ impl<'storage> VersionManagerTransaction<'storage> {
         );
     }
 
+    #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn delete(&mut self, page: PageIndex) {
         self.pages.entry(page).or_insert_with(|| {
-            let main = self.storage.data.get(page, Some(self.id));
+            let main = self.storage.data.get(page);
             let main_lock = main.lock();
 
-            let cow = self
-                .storage
-                .cow_copies
-                .allocate(Some(self.id))
-                .initialize(*main_lock);
+            let cow = self.storage.cow_copies.allocate().initialize(*main_lock);
 
             let mut cow_lock = cow.lock();
             cow_lock.set_visible_until(self.id);
@@ -155,8 +157,9 @@ impl<'storage> VersionManagerTransaction<'storage> {
         });
     }
 
-    // TODO commits should all happen in a single thread, to avoid deadlocks and races
+    #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn commit(&mut self) -> Result<(), StorageError> {
+        // TODO commits should all happen in a single thread, to avoid deadlocks and races
         // TODO make the commit consistent in event of a crash:
         //    1. write to a transaction log
         //    2. fsync the transaction log
@@ -171,6 +174,7 @@ impl<'storage> VersionManagerTransaction<'storage> {
                         let lock = page_ref.lock_nowait()?;
 
                         if lock.version() != page.version {
+                            // TODO this is not a deadlock, but an optimistic concurrency race
                             return Ok(Err(StorageError::Deadlock(*index)));
                         }
 
@@ -212,5 +216,18 @@ impl<'storage> VersionManagerTransaction<'storage> {
         }
 
         Ok(())
+    }
+
+    #[instrument(skip(self), parent = &self.span)]
+    pub fn rollback(&mut self) {
+        let mut locks = vec![];
+
+        for (_, page) in self.pages.drain() {
+            locks.push(page.cow.lock());
+        }
+
+        for lock in &mut locks {
+            lock.set_visible_until(self.id);
+        }
     }
 }

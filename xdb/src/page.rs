@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use bytemuck::{
     AnyBitPattern, NoUninit, Pod, Zeroable, bytes_of, from_bytes, from_bytes_mut, must_cast,
 };
@@ -36,11 +38,19 @@ struct PageHeader {
 
 const _: () = assert!(size_of::<PageHeader>() == 4 * size_of::<u64>());
 
-#[derive(Debug, Pod, Clone, Copy, Zeroable)]
+#[derive(Pod, Clone, Copy, Zeroable)]
 #[repr(C, align(8))]
 pub struct Page {
     header: PageHeader,
     data: [u8; PAGE_DATA_SIZE.as_bytes()],
+}
+
+impl Debug for Page {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Page")
+            .field("header", &self.header)
+            .finish_non_exhaustive()
+    }
 }
 
 const _: () = assert!(Size::of::<Page>().is_equal(PAGE_SIZE));

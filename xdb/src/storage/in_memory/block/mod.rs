@@ -1,16 +1,13 @@
 mod page_state;
 
+use crate::platform::allocation::Allocation;
 use crate::platform::allocation::uncommitted::UncommittedAllocation;
-use crate::storage::TransactionId;
 use crate::storage::in_memory::block::page_state::PageStateValue;
-use crate::{
-    platform::allocation::Allocation, storage::in_memory::block::page_state::DebugContext,
-};
 use bytemuck::Zeroable;
-use log::debug;
 use std::ops::DerefMut;
 use std::{fmt::Debug, mem::MaybeUninit, ops::Deref, pin::Pin, ptr::NonNull};
 use thiserror::Error;
+use tracing::{debug, info_span, instrument};
 
 use crate::{
     Size,
@@ -24,7 +21,6 @@ pub struct PageRef<'block> {
     page: NonNull<Page>,
     block: &'block Block,
     index: PageIndex,
-    txid: Option<TransactionId>,
 }
 
 unsafe impl Send for PageRef<'_> {}
@@ -37,11 +33,11 @@ pub enum LockError {
 
 impl<'block> PageRef<'block> {
     pub fn lock_nowait(&self) -> Result<PageGuard<'block>, LockError> {
-        unsafe { PageGuard::new_nowait(self.page, self.block, self.index, self.txid) }
+        unsafe { PageGuard::new_nowait(self.page, self.block, self.index) }
     }
 
     pub fn lock(&self) -> PageGuard<'block> {
-        unsafe { PageGuard::new(self.page, self.block, self.index, self.txid) }
+        unsafe { PageGuard::new(self.page, self.block, self.index) }
     }
 }
 
@@ -50,44 +46,27 @@ pub struct PageGuard<'block> {
     page: NonNull<Page>,
     block: &'block Block,
     index: PageIndex,
-    txid: Option<TransactionId>,
 }
 
 unsafe impl Send for PageGuard<'_> {}
 
 impl<'block> PageGuard<'block> {
-    unsafe fn new(
-        page: NonNull<Page>,
-        block: &'block Block,
-        index: PageIndex,
-        txid: Option<TransactionId>,
-    ) -> Self {
+    unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
         let housekeeping = unsafe { block.housekeeping_for(index) };
-        housekeeping.lock(DebugContext::new(txid, index));
+        housekeeping.lock();
 
-        Self {
-            page,
-            block,
-            index,
-            txid,
-        }
+        Self { page, block, index }
     }
 
     unsafe fn new_nowait(
         page: NonNull<Page>,
         block: &'block Block,
         index: PageIndex,
-        txid: Option<TransactionId>,
     ) -> Result<Self, LockError> {
         let housekeeping = unsafe { block.housekeeping_for(index) };
-        housekeeping.lock_nowait(DebugContext::new(txid, index))?;
+        housekeeping.lock_nowait()?;
 
-        Ok(Self {
-            page,
-            block,
-            index,
-            txid,
-        })
+        Ok(Self { page, block, index })
     }
 }
 
@@ -113,8 +92,7 @@ impl DerefMut for PageGuard<'_> {
 
 impl Drop for PageGuard<'_> {
     fn drop(&mut self) {
-        unsafe { self.block.housekeeping_for(self.index) }
-            .unlock(DebugContext::new(self.txid, self.index));
+        unsafe { self.block.housekeeping_for(self.index) }.unlock();
     }
 }
 
@@ -123,24 +101,13 @@ pub struct UninitializedPageGuard<'block> {
     block: &'block Block,
     page: NonNull<MaybeUninit<Page>>,
     index: PageIndex,
-    txid: Option<TransactionId>,
 }
 
 unsafe impl Send for UninitializedPageGuard<'_> {}
 
 impl<'block> UninitializedPageGuard<'block> {
-    const fn new(
-        block: &'block Block,
-        page: NonNull<MaybeUninit<Page>>,
-        index: PageIndex,
-        txid: Option<TransactionId>,
-    ) -> Self {
-        Self {
-            block,
-            page,
-            index,
-            txid,
-        }
+    const fn new(block: &'block Block, page: NonNull<MaybeUninit<Page>>, index: PageIndex) -> Self {
+        Self { block, page, index }
     }
 
     pub const fn index(&self) -> PageIndex {
@@ -159,19 +126,32 @@ impl<'block> UninitializedPageGuard<'block> {
             page: NonNull::new(initialied).unwrap(),
             block: self.block,
             index: self.index,
-            txid: self.txid,
         }
     }
 }
 
-#[derive(Debug)]
-// TODO give the blocks names for use in debugging
 pub struct Block {
     name: String,
     housekeeping: Box<dyn Allocation>,
     data: Box<dyn Allocation>,
     latest_page: AtomicU64,
-    latest_allocated_page: AtomicU64,
+    allocated_page_count_lower_bound: AtomicU64,
+    span: tracing::Span,
+}
+
+impl Debug for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Block")
+            .field("name", &self.name)
+            .field("housekeeping", &self.housekeeping)
+            .field("data", &self.data)
+            .field("latest_page", &self.latest_page)
+            .field(
+                "allocated_page_count_lower_bound",
+                &self.allocated_page_count_lower_bound,
+            )
+            .finish_non_exhaustive()
+    }
 }
 
 impl Block {
@@ -183,13 +163,15 @@ impl Block {
         let housekeeping: Box<dyn Allocation> =
             Box::new(UncommittedAllocation::new(Self::HOUSEKEEPING_BLOCK_SIZE));
         let data: Box<dyn Allocation> = Box::new(UncommittedAllocation::new(Self::SIZE));
+        let span = info_span!("block", name);
 
         Self {
             name,
             housekeeping,
             data,
             latest_page: AtomicU64::new(0),
-            latest_allocated_page: AtomicU64::new(0),
+            allocated_page_count_lower_bound: AtomicU64::new(0),
+            span,
         }
     }
 
@@ -197,26 +179,29 @@ impl Block {
     //
     // TODO rename this, as this is actually an upper bound, and while it's guaranted that the
     // pages are allocated, it's not guaranteed that those pages are initialized
+    #[instrument(skip(self), parent = &self.span)]
     pub fn page_count_lower_bound(&self) -> u64 {
-        self.latest_allocated_page.load(Ordering::Acquire)
+        self.allocated_page_count_lower_bound
+            .load(Ordering::Acquire)
     }
 
-    pub fn get(&self, index: PageIndex, txid: Option<TransactionId>) -> PageRef<'_> {
-        debug!("[{}] reading page {index:?}", self.name);
+    #[instrument(skip(self), parent = &self.span)]
+    pub fn get(&self, index: PageIndex) -> PageRef<'_> {
+        debug!("reading page {index:?}");
 
-        let latest_initialized_page = self.latest_allocated_page.load(Ordering::Acquire);
+        let latest_initialized_page = self
+            .allocated_page_count_lower_bound
+            .load(Ordering::Acquire);
         assert!(
-            index.0 <= latest_initialized_page,
-            "[{}] [{txid:?}] trying to get page {index:?}, but initialized only upto {latest_initialized_page:?}",
-            self.name
+            index.0 < latest_initialized_page,
+            "trying to get page {index:?}, but initialized only upto {latest_initialized_page:?}",
         );
 
         let housekeeping = unsafe { self.housekeeping_for(index) };
 
         assert!(
             housekeeping.is_initialized(),
-            "[{:?}] [{txid:?}] trying to get {index:?}, but housekeeping is not initialized",
-            self.name
+            "trying to get {index:?}, but housekeeping is not initialized"
         );
 
         let page = unsafe {
@@ -230,26 +215,37 @@ impl Block {
             page,
             block: self,
             index,
-            txid,
         }
     }
 
     pub fn get_or_allocate_zeroed(&'_ self, index: PageIndex) -> PageRef<'_> {
-        while index.0 < self.latest_allocated_page.load(Ordering::Acquire) {
-            let allocated = self.allocate(None).initialize(Page::zeroed());
+        while index.0
+            >= self
+                .allocated_page_count_lower_bound
+                .load(Ordering::Acquire)
+        {
+            let allocated = self.allocate().initialize(Page::zeroed());
 
             if allocated.index == index {
                 return allocated;
             }
         }
 
-        debug_assert!(self.latest_allocated_page.load(Ordering::Acquire) >= index.0);
+        debug_assert!(
+            self.allocated_page_count_lower_bound
+                .load(Ordering::Acquire)
+                > index.0
+        );
 
-        self.get(index, None)
+        self.get(index)
     }
 
     pub fn try_get(&'_ self, index: PageIndex) -> Option<PageRef<'_>> {
-        if index.0 > self.latest_allocated_page.load(Ordering::Acquire) {
+        if index.0
+            >= self
+                .allocated_page_count_lower_bound
+                .load(Ordering::Acquire)
+        {
             return None;
         }
 
@@ -258,19 +254,19 @@ impl Block {
         }
 
         // TODO should we fliparound and define self.get in terms of try_get?
-        Some(self.get(index, None))
+        Some(self.get(index))
     }
 
     // TODO pass around some sort of DebugContext instead of raw TransactionId, as e.g. bitmaps
     // don't do transactions
-    pub fn allocate(&self, txid: Option<TransactionId>) -> UninitializedPageGuard<'_> {
-        let index = self.latest_page.fetch_add(1, Ordering::Acquire);
+    pub fn allocate(&self) -> UninitializedPageGuard<'_> {
+        let index = self.latest_page.fetch_add(1, Ordering::AcqRel);
 
         let index = PageIndex(index);
-        self.allocate_housekeeping(index, txid);
+        self.allocate_housekeeping(index);
 
-        self.latest_allocated_page
-            .fetch_max(index.0, Ordering::AcqRel);
+        self.allocated_page_count_lower_bound
+            .fetch_max(index.0 + 1, Ordering::AcqRel);
 
         let page = unsafe {
             self.data
@@ -279,20 +275,15 @@ impl Block {
                 .add(usize::try_from(index.0).unwrap())
         };
 
-        UninitializedPageGuard::new(self, page, index, txid)
+        UninitializedPageGuard::new(self, page, index)
     }
 
-    fn allocate_housekeeping(
-        &self,
-        index: PageIndex,
-        txid: Option<TransactionId>,
-    ) -> NonNull<PageState> {
+    fn allocate_housekeeping(&self, index: PageIndex) -> NonNull<PageState> {
         debug!("[{}] allocating housekeeping for {index:?}", self.name);
 
         assert!(
             index.0 < Self::PAGE_COUNT as u64,
-            "[{:?}] [{txid:?}] [{index:?}] index too high? latest_page: {:?}",
-            self.name,
+            "[{index:?}] index too high? latest_page: {:?}",
             self.latest_page.load(Ordering::Relaxed)
         );
 

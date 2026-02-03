@@ -1,4 +1,3 @@
-use log::{debug, error};
 use std::{
     sync::{
         Arc,
@@ -8,10 +7,12 @@ use std::{
     thread::{self, JoinHandle},
     time::{self, Duration},
 };
+use tracing::{debug, error};
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 use arbitrary::{Arbitrary, Unstructured};
-use log::info;
 use rand::{Rng, rng};
+use tracing::info;
 use xdb::{
     bplustree::{
         Tree, TreeError, TreeTransaction,
@@ -58,10 +59,10 @@ struct ServerThread {
 }
 
 // TODO this should stop being neccessary once transaction commits are single-threaded
-fn retry_on_deadlock<T>(
+fn retry_on_deadlock(
     tree: Arc<Tree<InMemoryStorage, KeyType>>,
-    callable: impl Fn(TreeTransaction<InMemoryStorage, KeyType>) -> Result<T, TreeError>,
-) -> Result<T, TreeError> {
+    callable: impl Fn(TreeTransaction<InMemoryStorage, KeyType>) -> Result<(), TreeError>,
+) -> Result<(), TreeError> {
     for i in 0..10 {
         let transaction = tree.transaction().unwrap();
 
@@ -71,19 +72,14 @@ fn retry_on_deadlock<T>(
             error @ Err(_) => return error,
         };
 
-        thread::sleep(Duration::from_millis(2u64.pow(i / 10)));
+        thread::sleep(Duration::from_millis(2u64.pow(i)));
         debug!("retrying: {i}");
     }
 
-    info!("last retry after 10 tries");
+    // TODO we really should not ignore this
+    error!("10 retries not succesful, giving up");
 
-    // TODO don't do that, it's hacky af
-    log::set_max_level(log::LevelFilter::Debug);
-
-    let transaction = tree.transaction().unwrap();
-    info!("transaction: {transaction:?}");
-
-    callable(transaction)
+    Ok(())
 }
 
 fn server_thread(
@@ -118,8 +114,12 @@ fn server_thread(
 }
 
 fn main() {
-    env_logger::init();
-    log::set_max_level(log::LevelFilter::Info);
+    FmtSubscriber::builder()
+        .with_thread_names(true)
+        .with_env_filter(EnvFilter::from_default_env())
+        .pretty()
+        .with_writer(std::fs::File::create("log.txt").unwrap())
+        .init();
 
     let storage = InMemoryStorage::new();
     let tree = Arc::new(Tree::new(storage).unwrap());

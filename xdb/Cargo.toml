@@ -13,11 +13,13 @@ thiserror = "2.0.17"
 pretty_assertions = "1.4.1"
 libc = "0.2.180"
 shuttle = { git = "https://github.com/awslabs/shuttle.git", branch="main", optional = true }
+# TODO migrate to tracing from log fully
+tracing = { version = "0.1.44", features = ["log"] }
 
 [dev-dependencies]
 criterion = "0.8.1"
-env_logger = "0.11.8"
 tempfile = "3.24.0"
+test-log = "0.2.19"
 
 [features]
 shuttle = ["dep:shuttle"]

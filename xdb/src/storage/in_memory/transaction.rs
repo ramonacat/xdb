@@ -1,12 +1,12 @@
-use log::debug;
 use std::collections::HashSet;
+use tracing::debug;
 
 use crate::{
     page::Page,
     storage::{
         PageIndex, StorageError, Transaction, TransactionId,
         in_memory::{
-            InMemoryPageReservation, InMemoryStorage, lock_manager::VersionManagerTransaction,
+            InMemoryPageReservation, InMemoryStorage, lock_manager::VersionManagedTransaction,
         },
     },
 };
@@ -14,8 +14,7 @@ use crate::{
 #[derive(Debug)]
 pub struct InMemoryTransaction<'storage> {
     id: TransactionId,
-    version_manager: VersionManagerTransaction<'storage>,
-    finalized: bool,
+    version_manager: VersionManagedTransaction<'storage>,
     reserved_pages: HashSet<PageIndex>,
     storage: &'storage InMemoryStorage,
 }
@@ -27,9 +26,8 @@ impl<'storage> InMemoryTransaction<'storage> {
 
         Self {
             id,
-            finalized: false,
             reserved_pages: HashSet::new(),
-            version_manager: VersionManagerTransaction::new(id, storage),
+            version_manager: VersionManagedTransaction::new(id, storage),
             storage,
         }
     }
@@ -131,8 +129,7 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
     fn rollback(mut self) -> Result<(), StorageError> {
         debug!("[{:?}] rolling back transaction", self.id);
 
-        // TODO free all of the cow copies
-        self.finalized = true;
+        self.version_manager.rollback();
 
         Ok(())
     }

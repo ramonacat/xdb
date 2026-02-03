@@ -243,6 +243,7 @@ mod test {
         mem,
         panic::{RefUnwindSafe, UnwindSafe, catch_unwind},
     };
+    use test_log::test;
 
     use crate::{
         bplustree::{
@@ -252,9 +253,9 @@ mod test {
         debug::BigKey,
         storage::in_memory::InMemoryStorage,
     };
-    use log::info;
     use pretty_assertions::assert_eq;
     use tempfile::NamedTempFile;
+    use tracing::info;
 
     use super::*;
 
@@ -453,10 +454,6 @@ mod test {
     fn test_from_data<TKey: TreeKey + UnwindSafe + RefUnwindSafe, const SIZE: usize>(
         data: Vec<TestAction<BigKey<TKey, SIZE>>>,
     ) {
-        if !cfg!(miri) {
-            let _ = env_logger::builder().is_test(true).try_init();
-        }
-
         let storage = InMemoryStorage::new();
         let tree = Arc::new(Mutex::new(Tree::new(storage).unwrap()));
 
@@ -924,10 +921,6 @@ mod test {
 
     #[test]
     fn simple_delete() {
-        if !cfg!(miri) {
-            let _ = env_logger::Builder::new().is_test(true).try_init();
-        }
-
         let storage = InMemoryStorage::new();
         let tree = Tree::new(storage).unwrap();
         let mut transaction = tree.transaction().unwrap();

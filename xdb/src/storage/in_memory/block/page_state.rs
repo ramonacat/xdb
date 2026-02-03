@@ -1,28 +1,11 @@
-use log::debug;
+use tracing::debug;
 
 use crate::storage::in_memory::block::LockError;
-use crate::storage::{PageIndex, TransactionId};
 use crate::sync::atomic::{AtomicU32, Ordering};
 use std::fmt::Debug;
 use std::{marker::PhantomPinned, pin::Pin};
 
 use crate::platform::futex::{Futex, FutexError};
-
-#[derive(Debug, Clone, Copy)]
-#[allow(
-    unused,
-    reason = "the whole point of this struct is to just be for debug printing"
-)]
-pub struct DebugContext {
-    transaction: Option<TransactionId>,
-    page: PageIndex,
-}
-
-impl DebugContext {
-    pub const fn new(transaction: Option<TransactionId>, page: PageIndex) -> Self {
-        Self { transaction, page }
-    }
-}
 
 #[derive(Debug)]
 #[repr(transparent)]
@@ -91,7 +74,7 @@ impl PageState {
         PageStateValue(self.atomic().load(Ordering::Acquire)).is_initialized()
     }
 
-    pub fn lock_nowait(self: Pin<&Self>, debug_context: DebugContext) -> Result<(), LockError> {
+    pub fn lock_nowait(self: Pin<&Self>) -> Result<(), LockError> {
         debug_assert!(self.is_initialized());
 
         match self
@@ -108,27 +91,27 @@ impl PageState {
             Ok(previous) => {
                 let previous = PageStateValue(previous);
 
-                debug!("[{debug_context:?}] locked, previous {previous:?}");
+                debug!("locked, previous {previous:?}");
 
                 Ok(())
             }
             Err(previous) => {
                 let previous = PageStateValue(previous);
 
-                debug!("[{debug_context:?}] failed to lock, previous {previous:?}");
+                debug!("failed to lock, previous {previous:?}");
 
                 Err(LockError::Contended(previous))
             }
         }
     }
 
-    pub fn lock(self: Pin<&Self>, debug_context: DebugContext) {
-        match self.lock_nowait(debug_context) {
+    pub fn lock(self: Pin<&Self>) {
+        match self.lock_nowait() {
             Ok(()) => {}
             Err(LockError::Contended(previous)) => {
                 self.wait(previous);
 
-                self.lock(debug_context);
+                self.lock();
             }
         }
     }
@@ -140,7 +123,7 @@ impl PageState {
         }
     }
 
-    pub fn unlock(self: Pin<&Self>, debug_context: DebugContext) {
+    pub fn unlock(self: Pin<&Self>) {
         debug_assert!(self.is_initialized());
 
         match self
@@ -152,16 +135,16 @@ impl PageState {
             Ok(previous) => {
                 let previous = PageStateValue(previous);
 
-                debug!("[{debug_context:?}] unlocked from {previous:?}");
+                debug!("unlocked from {previous:?}");
 
-                self.wake(debug_context);
+                self.wake();
             }
             Err(_) => todo!(),
         }
     }
 
-    pub fn wake(self: Pin<&Self>, debug_context: DebugContext) {
+    pub fn wake(self: Pin<&Self>) {
         let awoken = self.futex().wake(1);
-        debug!("[{debug_context:?}] awoken {awoken} waiters");
+        debug!("awoken {awoken} waiters");
     }
 }

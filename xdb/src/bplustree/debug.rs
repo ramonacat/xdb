@@ -1,6 +1,6 @@
-use log::debug;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
+use tracing::debug;
 
 use crate::{
     bplustree::{
