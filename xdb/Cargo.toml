@@ -8,13 +8,11 @@ arbitrary = { version = "1.4.2", features = ["derive"] }
 bitflags = { version = "2.10.0", features = ["bytemuck"] }
 bytemuck = { version = "1.24.0", features = ["derive", "latest_stable_rust", "min_const_generics", "must_cast"] }
 crc32c = "0.6.8"
-log = "0.4.29"
 thiserror = "2.0.17"
 pretty_assertions = "1.4.1"
 libc = "0.2.180"
 shuttle = { git = "https://github.com/awslabs/shuttle.git", branch="main", optional = true }
-# TODO migrate to tracing from log fully
-tracing = { version = "0.1.44", features = ["log"] }
+tracing = { version = "0.1.44" }
 
 [dev-dependencies]
 criterion = "0.8.1"

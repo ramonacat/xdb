@@ -114,6 +114,7 @@ fn server_thread(
 }
 
 fn main() {
+    // TODO setup an integration with tracy
     FmtSubscriber::builder()
         .with_thread_names(true)
         .with_env_filter(EnvFilter::from_default_env())

@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dev-dependencies]
-log = "0.4.29"
 pretty_assertions = "1.4.1"
 shuttle = { git = "https://github.com/awslabs/shuttle.git", branch="main" }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 xdb = {path = "../xdb/", features = ["shuttle"]}
 
 [dependencies]
-env_logger = "0.11.8"

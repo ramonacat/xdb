@@ -2,6 +2,7 @@
 mod tests {
     use pretty_assertions::assert_eq;
     use shuttle::{Config, PortfolioRunner, scheduler::{DfsScheduler, PctScheduler}, sync::Arc, thread};
+    use tracing_subscriber::{EnvFilter, FmtSubscriber};
     use xdb::{
         bplustree::{
             Tree, TreeError, TreeKey,
@@ -21,6 +22,11 @@ mod tests {
         thread2: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) -> TThread2 + Sync + Send + Clone + 'static,
         verify: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) + Send + Sync + Clone + 'static,
     ) {
+        FmtSubscriber::builder()
+            .with_thread_names(true)
+            .with_env_filter(EnvFilter::from_default_env())
+            .pretty()
+            .init();
         let mut config = Config::new();
         config.max_steps = shuttle::MaxSteps::ContinueAfter(1_000_000);
         let mut runner = PortfolioRunner::new(true, config);
