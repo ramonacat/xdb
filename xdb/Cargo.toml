@@ -12,7 +12,8 @@ thiserror = "2.0.17"
 pretty_assertions = "1.4.1"
 libc = "0.2.180"
 shuttle = { git = "https://github.com/awslabs/shuttle.git", branch="main", optional = true }
-tracing = { version = "0.1.44" }
+tracing = { version = "0.1.44", features = ["max_level_warn"] }
+test-log = { version = "0.2.19", features = ["trace"] }
 
 [dev-dependencies]
 criterion = "0.8.1"

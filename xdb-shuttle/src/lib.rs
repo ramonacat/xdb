@@ -1,7 +1,12 @@
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use shuttle::{Config, PortfolioRunner, scheduler::{DfsScheduler, PctScheduler}, sync::Arc, thread};
+    use shuttle::{
+        Config, PortfolioRunner,
+        scheduler::{DfsScheduler, PctScheduler},
+        sync::Arc,
+        thread,
+    };
     use tracing_subscriber::{EnvFilter, FmtSubscriber};
     use xdb::{
         bplustree::{

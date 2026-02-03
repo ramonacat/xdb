@@ -66,10 +66,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     TreeTransaction<'storage, TStorage, TKey>
 {
     fn get_root(&mut self) -> Result<AnyNodeId, TreeError> {
-        Ok(AnyNodeId::new(self.read_header(|x| {
-            let root = x.root;
-            root
-        })?))
+        Ok(AnyNodeId::new(self.read_header(|x| x.root)?))
     }
 
     fn read_header<TReturn>(
@@ -81,9 +78,10 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         Ok(self.transaction.read(PageIndex::zero(), |[page]| {
             let data: &TreeHeader = page.data();
 
-            if data.root == PageIndex::zeroed() {
-                panic!("root is zero! txid: {txid:?} Header: {page:?}");
-            };
+            assert!(
+                data.root != PageIndex::zeroed(),
+                "root is zero! txid: {txid:?} Header: {page:?}"
+            );
             read(data)
         })?)
     }

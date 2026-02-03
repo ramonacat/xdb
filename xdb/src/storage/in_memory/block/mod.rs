@@ -17,6 +17,12 @@ use crate::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+#[derive(Debug, Error)]
+pub enum LockError {
+    #[error("contended")]
+    Contended(PageStateValue),
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct PageRef<'block> {
     page: NonNull<Page>,
@@ -26,13 +32,15 @@ pub struct PageRef<'block> {
 
 unsafe impl Send for PageRef<'_> {}
 
-#[derive(Debug, Error)]
-pub enum LockError {
-    #[error("contended")]
-    Contended(PageStateValue),
-}
-
 impl<'block> PageRef<'block> {
+    pub(super) const unsafe fn new(
+        page: NonNull<Page>,
+        block: &'block Block,
+        index: PageIndex,
+    ) -> Self {
+        Self { page, block, index }
+    }
+
     pub fn lock_nowait(&self) -> Result<PageGuard<'block>, LockError> {
         unsafe { PageGuard::new_nowait(self.page, self.block, self.index) }
     }
@@ -41,8 +49,12 @@ impl<'block> PageRef<'block> {
         unsafe { PageGuard::new(self.page, self.block, self.index) }
     }
 
-    pub fn index(&self) -> PageIndex {
+    pub const fn index(&self) -> PageIndex {
         self.index
+    }
+
+    pub(super) const fn as_ptr(&self) -> NonNull<Page> {
+        self.page
     }
 }
 
@@ -112,7 +124,11 @@ pub struct UninitializedPageGuard<'block> {
 unsafe impl Send for UninitializedPageGuard<'_> {}
 
 impl<'block> UninitializedPageGuard<'block> {
-    const fn new(block: &'block Block, page: NonNull<MaybeUninit<Page>>, index: PageIndex) -> Self {
+    pub(super) const unsafe fn new(
+        block: &'block Block,
+        page: NonNull<MaybeUninit<Page>>,
+        index: PageIndex,
+    ) -> Self {
         Self { block, page, index }
     }
 
@@ -128,15 +144,19 @@ impl<'block> UninitializedPageGuard<'block> {
         // we're taking a mutable reference, so we must lock so that there is only one, even if
         // there are multiple UninitializedPageGuards
         housekeeping.lock();
-        let initialized_page = unsafe { self.page.as_mut().write(page) };
+        let initialized_page = NonNull::from_mut(unsafe { self.page.as_mut().write(page) });
         housekeeping.mark_initialized();
         housekeeping.unlock();
 
         PageRef {
-            page: NonNull::from_mut(initialized_page),
+            page: initialized_page,
             block: self.block,
             index: self.index,
         }
+    }
+
+    pub(super) const fn as_ptr(&self) -> NonNull<MaybeUninit<Page>> {
+        self.page
     }
 }
 
@@ -165,7 +185,11 @@ impl Debug for Block {
 }
 
 impl Block {
-    const SIZE: Size = Size::GiB(4);
+    const SIZE: Size = if cfg!(miri) {
+        Size::MiB(8)
+    } else {
+        Size::GiB(4)
+    };
     const PAGE_COUNT: usize = Self::SIZE.divide(PAGE_SIZE);
     const HOUSEKEEPING_BLOCK_SIZE: Size = Size::of::<PageState>().multiply(Self::PAGE_COUNT);
 
@@ -273,42 +297,12 @@ impl Block {
                 .add(usize::try_from(index.0).unwrap())
         };
 
-        assert!(page.cast() < unsafe { self.data.base_address().byte_add(Self::SIZE.as_bytes()) });
-        assert!(page.cast() >= self.data.base_address());
-
-        Ok(UninitializedPageGuard::new(self, page, index))
-    }
-
-    #[instrument(skip(self), parent = &self.span)]
-    pub fn get_uninitialized(&'_ self, index: PageIndex) -> UninitializedPageGuard<'_> {
-        let latest_allocated_page = self.allocated_page_count.load(Ordering::Acquire);
-        assert!(
-            index.0 < latest_allocated_page,
-            "trying to get page {index:?}, but allocated only upto {latest_allocated_page:?}",
-        );
-
-        let housekeeping = unsafe { self.housekeeping_for(index) };
-
         debug_assert!(
-            !housekeeping.is_initialized(),
-            "trying to get_uninitialized {index:?}, but housekeeping is initialized"
+            page.cast() < unsafe { self.data.base_address().byte_add(Self::SIZE.as_bytes()) }
         );
+        debug_assert!(page.cast() >= self.data.base_address());
 
-        let page = unsafe {
-            self.data
-                .base_address()
-                .cast()
-                .add(usize::try_from(index.0).unwrap())
-        };
-
-        assert!(page.cast() < unsafe { self.data.base_address().byte_add(Self::SIZE.as_bytes()) });
-        assert!(page.cast() >= self.data.base_address());
-
-        UninitializedPageGuard {
-            block: self,
-            page,
-            index,
-        }
+        Ok(unsafe { UninitializedPageGuard::new(self, page, index) })
     }
 
     fn allocate_housekeeping(&self, index: PageIndex) -> Result<NonNull<PageState>, StorageError> {

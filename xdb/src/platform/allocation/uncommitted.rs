@@ -27,7 +27,6 @@ impl Drop for UncommittedAllocation {
 
 impl UncommittedAllocation {
     pub fn new(size: Size) -> Self {
-        let size = if cfg!(miri) { Size::MiB(8) } else { size };
         assert!(unsafe {
             usize::try_from(libc::sysconf(_SC_PAGE_SIZE)).unwrap() == PAGE_SIZE.as_bytes()
         });

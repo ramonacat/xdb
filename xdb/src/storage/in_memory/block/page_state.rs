@@ -117,8 +117,8 @@ impl PageState {
                     self.wait(previous);
 
                     // TODO do we want to keep this in non-debug builds?
-                    if std::time::Instant::now() - start > Duration::from_millis(100) {
-                        // TODO enable in debug: panic!("lock held exceedingly long");
+                    if start.elapsed() > Duration::from_millis(100) {
+                        //panic!("lock held exceedingly long");
                     }
                 }
             }

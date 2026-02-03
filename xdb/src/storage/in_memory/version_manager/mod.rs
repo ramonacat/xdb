@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
+use std::mem::MaybeUninit;
+use std::ptr::NonNull;
 
-use crate::page::PageVersion;
+use crate::page::{Page, PageVersion};
 use crate::storage::in_memory::Bitmap;
 use crate::storage::in_memory::block::{Block, PageRef, UninitializedPageGuard};
 use crate::storage::in_memory::version_manager::committer::Committer;
@@ -25,43 +27,57 @@ struct CowPage<'storage> {
     cow: PageRef<'storage>,
     version: PageVersion,
 }
+
 impl CowPage<'_> {
-    fn to_id(self) -> CowPageId {
-        CowPageId {
+    const fn into_raw(self) -> RawCowPage {
+        RawCowPage {
             main: match self.main {
-                MainPageRef::Initialized(r) => MainPageId::Initialized(r.index()),
-                MainPageRef::Uninitialized(r) => MainPageId::Uninitialized(r.index()),
+                MainPageRef::Initialized(r) => RawMainPage::Initialized(r.as_ptr(), r.index()),
+                MainPageRef::Uninitialized(r) => RawMainPage::Uninitialized(r.as_ptr(), r.index()),
             },
-            cow: self.cow.index(),
+            cow: (self.cow.as_ptr(), self.cow.index()),
             version: self.version,
         }
     }
 }
 
 #[derive(Debug)]
-enum MainPageId {
-    Initialized(PageIndex),
-    Uninitialized(PageIndex),
+enum RawMainPage {
+    Initialized(NonNull<Page>, PageIndex),
+    Uninitialized(NonNull<MaybeUninit<Page>>, PageIndex),
 }
 
+unsafe impl Send for RawMainPage {}
+
 #[derive(Debug)]
-struct CowPageId {
-    main: MainPageId,
-    cow: PageIndex,
+// TODO this is an awful hack, can we find a better way to work with the lifetime issues
+// between threads?
+struct RawCowPage {
+    main: RawMainPage,
+    cow: (NonNull<Page>, PageIndex),
     version: PageVersion,
 }
-impl CowPageId {
-    fn to_ref<'block>(self, block: &'block Block, cow_pages: &'block Block) -> CowPage<'block> {
+
+unsafe impl Send for RawCowPage {}
+
+impl RawCowPage {
+    const unsafe fn reconstruct<'block>(
+        self,
+        block: &'block Block,
+        cow_pages: &'block Block,
+    ) -> CowPage<'block> {
         let main = match self.main {
-            MainPageId::Initialized(page_index) => MainPageRef::Initialized(block.get(page_index)),
-            MainPageId::Uninitialized(page_index) => {
-                MainPageRef::Uninitialized(block.get_uninitialized(page_index))
+            RawMainPage::Initialized(page, index) => {
+                MainPageRef::Initialized(unsafe { PageRef::new(page, block, index) })
             }
+            RawMainPage::Uninitialized(page, index) => MainPageRef::Uninitialized(unsafe {
+                UninitializedPageGuard::new(block, page, index)
+            }),
         };
 
         CowPage {
             main,
-            cow: cow_pages.get(self.cow),
+            cow: unsafe { PageRef::new(self.cow.0, cow_pages, self.cow.1) },
             version: self.version,
         }
     }

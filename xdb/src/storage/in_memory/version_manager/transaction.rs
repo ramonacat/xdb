@@ -1,5 +1,6 @@
 use std::{collections::HashMap, thread};
 
+use bytemuck::Zeroable;
 use tracing::{info_span, instrument};
 
 use crate::{
@@ -45,13 +46,24 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     fn get_recycled_cow_page(&self) -> Option<PageRef<'storage>> {
-        if let Some(index) = self.version_manager.cow_pages_freemap.find_and_unset() {
-            let recycled_page = self.version_manager.cow_pages.get(PageIndex(index as u64));
+        // TODO we need a better API for this - we must stop vacuum from marking the page as unused
+        // again before we have a chance to reuse it, potentially resulting in multiple threads
+        // getting the same page
+        // TODO freezing for every page we're getting is expensive AF, we should probably keep a
+        // thousand pages or something, and only freeze once that store is empty
+        let lock = self.version_manager.vacuum.freeze();
 
-            Some(recycled_page)
-        } else {
-            None
-        }
+        self.version_manager
+            .cow_pages_freemap
+            .find_and_unset()
+            .map(|index| {
+                let recycled_page = self.version_manager.cow_pages.get(PageIndex(index as u64));
+                *recycled_page.lock() = Page::zeroed();
+
+                drop(lock);
+
+                recycled_page
+            })
     }
 
     // TODO avoid passing by value
@@ -192,7 +204,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         }
     }
 
-    pub(crate) fn id(&self) -> TransactionId {
+    pub const fn id(&self) -> TransactionId {
         self.id
     }
 }
