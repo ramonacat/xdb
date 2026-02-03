@@ -1,23 +1,17 @@
-// TODO this should really be called VersionManager
+use std::collections::HashMap;
 
 use tracing::{info_span, instrument};
 
 use crate::{
-    page::{PAGE_DATA_SIZE, PageVersion},
-    storage::in_memory::{
-        InMemoryStorage,
-        block::{LockError, PageRef},
-    },
-    thread,
-};
-use std::collections::HashMap;
-
-use crate::{
-    page::Page,
+    page::{PAGE_DATA_SIZE, Page, PageVersion},
     storage::{
         PageIndex, StorageError, TransactionId,
-        in_memory::block::{PageGuard, UninitializedPageGuard},
+        in_memory::{
+            block::{LockError, PageGuard, PageRef, UninitializedPageGuard},
+            version_manager::VersionManager,
+        },
     },
+    thread,
 };
 
 #[derive(Debug)]
@@ -37,8 +31,19 @@ struct CowPage<'storage> {
 pub struct VersionManagedTransaction<'storage> {
     id: TransactionId,
     pages: HashMap<PageIndex, CowPage<'storage>>,
-    storage: &'storage InMemoryStorage,
+    version_manager: &'storage VersionManager,
     span: tracing::Span,
+}
+
+impl Drop for VersionManagedTransaction<'_> {
+    fn drop(&mut self) {
+        self.version_manager
+            .running_transactions
+            .lock()
+            .unwrap()
+            .remove(&self.id);
+        // TODO do a rollback?
+    }
 }
 
 // TODO do we want a timeout here?
@@ -56,31 +61,29 @@ fn retry_contended<T>(callback: impl Fn() -> Result<T, LockError>) -> T {
 }
 
 impl<'storage> VersionManagedTransaction<'storage> {
-    pub fn new(id: TransactionId, storage: &'storage InMemoryStorage) -> Self {
+    pub fn new(id: TransactionId, version_manager: &'storage VersionManager) -> Self {
         let span = info_span!("transaction", id = ?id);
 
         Self {
             id,
             pages: HashMap::new(),
-            storage,
+            version_manager,
             span,
         }
     }
 
     // TODO avoid passing by value
     #[allow(clippy::large_types_passed_by_value)]
-    fn allocate_cow_copy(&self, mut page: Page) -> PageRef<'storage> {
-        page.set_visible_from(self.id);
-
-        if let Some(index) = self.storage.cow_copies_freemap.find_and_unset() {
-            let recycled_page = self.storage.cow_copies.get(PageIndex(index as u64));
+    fn allocate_cow_copy(&self, page: Page) -> PageRef<'storage> {
+        if let Some(index) = self.version_manager.cow_pages_freemap.find_and_unset() {
+            let recycled_page = self.version_manager.cow_pages.get(PageIndex(index as u64));
 
             *recycled_page.lock() = page;
 
             return recycled_page;
         }
 
-        self.storage.cow_copies.allocate().initialize(page)
+        self.version_manager.cow_pages.allocate().initialize(page)
     }
 
     #[instrument(skip(self), parent = &self.span)]
@@ -88,7 +91,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         if let Some(entry) = self.pages.get(&index) {
             Ok(entry.cow.lock())
         } else {
-            let main = self.storage.data.get(index);
+            let main = self.version_manager.data.get(index);
             let main_lock = main.lock();
 
             if !main_lock.is_visible_in(self.id) {
@@ -112,7 +115,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
     #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn reserve(&self) -> UninitializedPageGuard<'storage> {
-        self.storage.data.allocate()
+        self.version_manager.data.allocate()
     }
 
     // TODO can we avoid passing this by value?
@@ -123,7 +126,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         page_guard: UninitializedPageGuard<'storage>,
         page: Page,
     ) {
-        let cow = self.storage.cow_copies.allocate().initialize(page);
+        let cow = self.allocate_cow_copy(page);
 
         self.pages.insert(
             page_guard.index(),
@@ -137,24 +140,31 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
     #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn delete(&mut self, page: PageIndex) {
-        self.pages.entry(page).or_insert_with(|| {
-            let main = self.storage.data.get(page);
-            let main_lock = main.lock();
+        // TODO this is incorrect, we need to do different things depending on what the state of
+        // the page is!
+        if self.pages.contains_key(&page) {
+            return;
+        }
 
-            let cow = self.storage.cow_copies.allocate().initialize(*main_lock);
+        let main = self.version_manager.data.get(page);
+        let main_lock = main.lock();
 
-            let mut cow_lock = cow.lock();
-            cow_lock.set_visible_until(self.id);
-            // TODO do we really care about zeroing, or do we just need to improve change
-            // detection in the lock manager to consider header-only changes?
-            *cow_lock.data_mut::<[u8; PAGE_DATA_SIZE.as_bytes()]>() = [0; _];
+        let cow = self.allocate_cow_copy(*main_lock);
 
+        let mut cow_lock = cow.lock();
+        cow_lock.set_visible_until(self.id);
+        // TODO do we really care about zeroing, or do we just need to improve change
+        // detection in the lock manager to consider header-only changes?
+        *cow_lock.data_mut::<[u8; PAGE_DATA_SIZE.as_bytes()]>() = [0; _];
+
+        self.pages.insert(
+            page,
             CowPage {
                 main: MainPageRef::Initialized(main),
                 cow,
                 version: main_lock.version(),
-            }
-        });
+            },
+        );
     }
 
     #[instrument(skip(self), parent = &self.span)]

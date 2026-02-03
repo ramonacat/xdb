@@ -3,12 +3,13 @@ use std::{collections::BTreeSet, sync::atomic::AtomicBool, time::Duration};
 use tracing::debug;
 
 use crate::{
-    storage::{PageIndex, TransactionId},
+    storage::{
+        PageIndex, TransactionId,
+        in_memory::{Bitmap, block::Block},
+    },
     sync::{Arc, Mutex, atomic::Ordering},
     thread::{self, JoinHandle},
 };
-
-use super::{Bitmap, block::Block};
 
 #[derive(Debug)]
 pub struct Vacuum {

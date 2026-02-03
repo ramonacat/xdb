@@ -1,46 +1,24 @@
-use std::collections::HashSet;
-use tracing::debug;
-
 use crate::{
     page::Page,
     storage::{
-        PageIndex, StorageError, Transaction, TransactionId,
+        PageIndex, StorageError, Transaction,
         in_memory::{
-            InMemoryPageReservation, InMemoryStorage, lock_manager::VersionManagedTransaction,
+            InMemoryPageReservation, InMemoryStorage,
+            version_manager::transaction::VersionManagedTransaction,
         },
     },
 };
 
 #[derive(Debug)]
 pub struct InMemoryTransaction<'storage> {
-    id: TransactionId,
     version_manager: VersionManagedTransaction<'storage>,
-    reserved_pages: HashSet<PageIndex>,
-    storage: &'storage InMemoryStorage,
 }
 
 impl<'storage> InMemoryTransaction<'storage> {
     pub fn new(storage: &'storage InMemoryStorage) -> Self {
-        let id = TransactionId::next();
-        storage.running_transactions.lock().unwrap().insert(id);
-
         Self {
-            id,
-            reserved_pages: HashSet::new(),
-            version_manager: VersionManagedTransaction::new(id, storage),
-            storage,
+            version_manager: storage.version_manager.start_transaction(),
         }
-    }
-}
-
-impl Drop for InMemoryTransaction<'_> {
-    fn drop(&mut self) {
-        self.storage
-            .running_transactions
-            .lock()
-            .unwrap()
-            .remove(&self.id);
-        // TODO do an actual rollback
     }
 }
 
@@ -84,7 +62,6 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
 
     fn reserve(&mut self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
         let page_guard = self.version_manager.reserve();
-        self.reserved_pages.insert(page_guard.index());
 
         Ok(InMemoryPageReservation { page_guard })
     }
@@ -96,7 +73,6 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
     ) -> Result<(), StorageError> {
         let InMemoryPageReservation { page_guard } = reservation;
 
-        self.reserved_pages.remove(&page_guard.index());
         self.version_manager.insert_reserved(page_guard, page);
 
         Ok(())
@@ -117,18 +93,12 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
     }
 
     fn commit(mut self) -> Result<(), StorageError> {
-        debug!("[{:?}] committing transaction", self.id);
-
         self.version_manager.commit()?;
-
-        debug!("[{:?}] commit succesful", self.id);
 
         Ok(())
     }
 
     fn rollback(mut self) -> Result<(), StorageError> {
-        debug!("[{:?}] rolling back transaction", self.id);
-
         self.version_manager.rollback();
 
         Ok(())
