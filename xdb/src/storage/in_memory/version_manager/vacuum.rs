@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, sync::atomic::AtomicBool, time::Duration};
+use std::{collections::BTreeSet, sync::atomic::AtomicBool};
 
 use tracing::debug;
 
@@ -31,13 +31,11 @@ impl Vacuum {
                 .name("vacuum".into())
                 .spawn(move || {
                     while running.load(Ordering::Relaxed) {
-                        let Ok(running_transactions) = running_transactions.try_lock() else {
-                            continue;
-                        };
+                        let running_transactions = running_transactions.lock().unwrap();
                         let Some(min_txid) = running_transactions.first().copied() else {
                             // TODO we need a smarter way of scheduling vacuum (based on usage of the
                             // block)
-                            thread::sleep(Duration::from_millis(10));
+                            thread::yield_now();
                             continue;
                         };
                         drop(running_transactions);
@@ -51,7 +49,7 @@ impl Vacuum {
                                 && let Some(visible_until) = page.visible_until()
                                 && visible_until < min_txid
                             {
-                                cow_copies_freemap.set(index.0);
+                                cow_copies_freemap.set(index.0).unwrap();
                                 returned += 1;
                             }
 

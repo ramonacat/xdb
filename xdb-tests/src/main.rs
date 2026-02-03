@@ -71,8 +71,8 @@ fn retry_on_deadlock(
             Err(TreeError::StorageError(StorageError::Deadlock(_))) => {}
             error @ Err(_) => return error,
         };
+        thread::sleep(Duration::from_millis(1));
 
-        thread::sleep(Duration::from_millis(2u64.pow(i)));
         debug!("retrying: {i}");
     }
 

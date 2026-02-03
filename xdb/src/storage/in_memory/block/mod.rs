@@ -2,6 +2,7 @@ mod page_state;
 
 use crate::platform::allocation::Allocation;
 use crate::platform::allocation::uncommitted::UncommittedAllocation;
+use crate::storage::StorageError;
 use crate::storage::in_memory::block::page_state::PageStateValue;
 use bytemuck::Zeroable;
 use std::ops::DerefMut;
@@ -38,6 +39,10 @@ impl<'block> PageRef<'block> {
 
     pub fn lock(&self) -> PageGuard<'block> {
         unsafe { PageGuard::new(self.page, self.block, self.index) }
+    }
+
+    pub fn index(&self) -> PageIndex {
+        self.index
     }
 }
 
@@ -97,6 +102,7 @@ impl Drop for PageGuard<'_> {
 }
 
 #[derive(Debug)]
+// TODO rename -> UninitializedPageRef
 pub struct UninitializedPageGuard<'block> {
     block: &'block Block,
     page: NonNull<MaybeUninit<Page>>,
@@ -117,13 +123,17 @@ impl<'block> UninitializedPageGuard<'block> {
     #[allow(clippy::large_types_passed_by_value)] // TODO create an API that allows us to avoid
     // this
     pub fn initialize(mut self, page: Page) -> PageRef<'block> {
-        let initialied = unsafe { &raw mut *self.page.as_mut().write(page) };
-
         let housekeeping = unsafe { self.block.housekeeping_for(self.index) };
+
+        // we're taking a mutable reference, so we must lock so that there is only one, even if
+        // there are multiple UninitializedPageGuards
+        housekeeping.lock();
+        let initialized_page = unsafe { self.page.as_mut().write(page) };
         housekeeping.mark_initialized();
+        housekeeping.unlock();
 
         PageRef {
-            page: NonNull::new(initialied).unwrap(),
+            page: NonNull::from_mut(initialized_page),
             block: self.block,
             index: self.index,
         }
@@ -135,7 +145,7 @@ pub struct Block {
     housekeeping: Box<dyn Allocation>,
     data: Box<dyn Allocation>,
     latest_page: AtomicU64,
-    allocated_page_count_lower_bound: AtomicU64,
+    allocated_page_count: AtomicU64,
     span: tracing::Span,
 }
 
@@ -148,7 +158,7 @@ impl Debug for Block {
             .field("latest_page", &self.latest_page)
             .field(
                 "allocated_page_count_lower_bound",
-                &self.allocated_page_count_lower_bound,
+                &self.allocated_page_count,
             )
             .finish_non_exhaustive()
     }
@@ -163,14 +173,14 @@ impl Block {
         let housekeeping: Box<dyn Allocation> =
             Box::new(UncommittedAllocation::new(Self::HOUSEKEEPING_BLOCK_SIZE));
         let data: Box<dyn Allocation> = Box::new(UncommittedAllocation::new(Self::SIZE));
-        let span = info_span!("block", name);
+        let span = info_span!("block", name, base=?data.base_address(), housekeeping=?housekeeping.base_address());
 
         Self {
             name,
             housekeeping,
             data,
             latest_page: AtomicU64::new(0),
-            allocated_page_count_lower_bound: AtomicU64::new(0),
+            allocated_page_count: AtomicU64::new(0),
             span,
         }
     }
@@ -181,17 +191,12 @@ impl Block {
     // pages are allocated, it's not guaranteed that those pages are initialized
     #[instrument(skip(self), parent = &self.span)]
     pub fn page_count_lower_bound(&self) -> u64 {
-        self.allocated_page_count_lower_bound
-            .load(Ordering::Acquire)
+        self.allocated_page_count.load(Ordering::Acquire)
     }
 
     #[instrument(skip(self), parent = &self.span)]
     pub fn get(&self, index: PageIndex) -> PageRef<'_> {
-        debug!("reading page {index:?}");
-
-        let latest_initialized_page = self
-            .allocated_page_count_lower_bound
-            .load(Ordering::Acquire);
+        let latest_initialized_page = self.allocated_page_count.load(Ordering::Acquire);
         assert!(
             index.0 < latest_initialized_page,
             "trying to get page {index:?}, but initialized only upto {latest_initialized_page:?}",
@@ -201,7 +206,8 @@ impl Block {
 
         assert!(
             housekeeping.is_initialized(),
-            "trying to get {index:?}, but housekeeping is not initialized"
+            "[{}] trying to get {index:?}, but housekeeping is not initialized",
+            self.name
         );
 
         let page = unsafe {
@@ -211,6 +217,9 @@ impl Block {
                 .add(usize::try_from(index.0).unwrap())
         };
 
+        assert!(page.cast() < unsafe { self.data.base_address().byte_add(Self::SIZE.as_bytes()) });
+        assert!(page.cast() >= self.data.base_address());
+
         PageRef {
             page,
             block: self,
@@ -218,34 +227,24 @@ impl Block {
         }
     }
 
-    pub fn get_or_allocate_zeroed(&'_ self, index: PageIndex) -> PageRef<'_> {
-        while index.0
-            >= self
-                .allocated_page_count_lower_bound
-                .load(Ordering::Acquire)
-        {
-            let allocated = self.allocate().initialize(Page::zeroed());
+    #[instrument(skip(self), parent = &self.span)]
+    pub fn get_or_allocate_zeroed(&'_ self, index: PageIndex) -> Result<PageRef<'_>, StorageError> {
+        while index.0 >= self.allocated_page_count.load(Ordering::Acquire) {
+            let allocated = self.allocate()?.initialize(Page::zeroed());
 
             if allocated.index == index {
-                return allocated;
+                return Ok(allocated);
             }
         }
 
-        debug_assert!(
-            self.allocated_page_count_lower_bound
-                .load(Ordering::Acquire)
-                > index.0
-        );
+        debug_assert!(self.allocated_page_count.load(Ordering::Acquire) > index.0);
 
-        self.get(index)
+        Ok(self.get(index))
     }
 
+    #[instrument(skip(self), parent = &self.span)]
     pub fn try_get(&'_ self, index: PageIndex) -> Option<PageRef<'_>> {
-        if index.0
-            >= self
-                .allocated_page_count_lower_bound
-                .load(Ordering::Acquire)
-        {
+        if index.0 >= self.allocated_page_count.load(Ordering::Acquire) {
             return None;
         }
 
@@ -257,15 +256,14 @@ impl Block {
         Some(self.get(index))
     }
 
-    // TODO pass around some sort of DebugContext instead of raw TransactionId, as e.g. bitmaps
-    // don't do transactions
-    pub fn allocate(&self) -> UninitializedPageGuard<'_> {
+    #[instrument(skip(self), parent = &self.span)]
+    pub fn allocate(&self) -> Result<UninitializedPageGuard<'_>, StorageError> {
         let index = self.latest_page.fetch_add(1, Ordering::AcqRel);
 
         let index = PageIndex(index);
-        self.allocate_housekeeping(index);
+        self.allocate_housekeeping(index)?;
 
-        self.allocated_page_count_lower_bound
+        self.allocated_page_count
             .fetch_max(index.0 + 1, Ordering::AcqRel);
 
         let page = unsafe {
@@ -275,17 +273,50 @@ impl Block {
                 .add(usize::try_from(index.0).unwrap())
         };
 
-        UninitializedPageGuard::new(self, page, index)
+        assert!(page.cast() < unsafe { self.data.base_address().byte_add(Self::SIZE.as_bytes()) });
+        assert!(page.cast() >= self.data.base_address());
+
+        Ok(UninitializedPageGuard::new(self, page, index))
     }
 
-    fn allocate_housekeeping(&self, index: PageIndex) -> NonNull<PageState> {
+    #[instrument(skip(self), parent = &self.span)]
+    pub fn get_uninitialized(&'_ self, index: PageIndex) -> UninitializedPageGuard<'_> {
+        let latest_allocated_page = self.allocated_page_count.load(Ordering::Acquire);
+        assert!(
+            index.0 < latest_allocated_page,
+            "trying to get page {index:?}, but allocated only upto {latest_allocated_page:?}",
+        );
+
+        let housekeeping = unsafe { self.housekeeping_for(index) };
+
+        debug_assert!(
+            !housekeeping.is_initialized(),
+            "trying to get_uninitialized {index:?}, but housekeeping is initialized"
+        );
+
+        let page = unsafe {
+            self.data
+                .base_address()
+                .cast()
+                .add(usize::try_from(index.0).unwrap())
+        };
+
+        assert!(page.cast() < unsafe { self.data.base_address().byte_add(Self::SIZE.as_bytes()) });
+        assert!(page.cast() >= self.data.base_address());
+
+        UninitializedPageGuard {
+            block: self,
+            page,
+            index,
+        }
+    }
+
+    fn allocate_housekeeping(&self, index: PageIndex) -> Result<NonNull<PageState>, StorageError> {
         debug!("[{}] allocating housekeeping for {index:?}", self.name);
 
-        assert!(
-            index.0 < Self::PAGE_COUNT as u64,
-            "[{index:?}] index too high? latest_page: {:?}",
-            self.latest_page.load(Ordering::Relaxed)
-        );
+        if index.0 >= Self::PAGE_COUNT as u64 {
+            return Err(StorageError::OutOfSpace);
+        }
 
         // TODO this way we do the mprotect multiple times, it doesn't really matter, but might
         // make sense to only do that when index%PAGE_SIZE == 0??? (though then we have to
@@ -317,7 +348,17 @@ impl Block {
             page_state.write(PageState::new());
         };
 
-        page_state
+        assert!(
+            page_state.cast()
+                < unsafe {
+                    self.housekeeping
+                        .base_address()
+                        .byte_add(Self::HOUSEKEEPING_BLOCK_SIZE.as_bytes())
+                }
+        );
+        assert!(page_state.cast() >= self.housekeeping.base_address());
+
+        Ok(page_state)
     }
 
     unsafe fn housekeeping_for(&self, index: PageIndex) -> Pin<&PageState> {
@@ -329,6 +370,16 @@ impl Block {
                 .cast()
                 .add(usize::try_from(index.0).unwrap())
         };
+
+        assert!(
+            address.cast()
+                < unsafe {
+                    self.housekeeping
+                        .base_address()
+                        .byte_add(Self::HOUSEKEEPING_BLOCK_SIZE.as_bytes())
+                }
+        );
+        assert!(address.cast() >= self.housekeeping.base_address());
 
         unsafe { Pin::new_unchecked(address.as_ref()) }
     }

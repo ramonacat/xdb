@@ -3,12 +3,14 @@ use tracing::debug;
 use crate::storage::in_memory::block::LockError;
 use crate::sync::atomic::{AtomicU32, Ordering};
 use std::fmt::Debug;
+use std::time::Duration;
 use std::{marker::PhantomPinned, pin::Pin};
 
 use crate::platform::futex::{Futex, FutexError};
 
 #[derive(Debug)]
 #[repr(transparent)]
+// TODO log warnings when a lock is held for a long time!
 pub struct PageState(Futex, PhantomPinned);
 
 #[cfg(not(feature = "shuttle"))]
@@ -75,8 +77,6 @@ impl PageState {
     }
 
     pub fn lock_nowait(self: Pin<&Self>) -> Result<(), LockError> {
-        debug_assert!(self.is_initialized());
-
         match self
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
@@ -106,17 +106,25 @@ impl PageState {
     }
 
     pub fn lock(self: Pin<&Self>) {
-        match self.lock_nowait() {
-            Ok(()) => {}
-            Err(LockError::Contended(previous)) => {
-                self.wait(previous);
+        let start = std::time::Instant::now();
 
-                self.lock();
+        loop {
+            match self.lock_nowait() {
+                Ok(()) => {
+                    return;
+                }
+                Err(LockError::Contended(previous)) => {
+                    self.wait(previous);
+
+                    // TODO do we want to keep this in non-debug builds?
+                    if std::time::Instant::now() - start > Duration::from_millis(100) {
+                        // TODO enable in debug: panic!("lock held exceedingly long");
+                    }
+                }
             }
         }
     }
-    // TODO we should wait on locks when we're sure there will be no deadlock
-    #[allow(unused)]
+
     fn wait(self: Pin<&Self>, previous: PageStateValue) {
         match self.futex().wait(previous.0) {
             Ok(()) | Err(FutexError::Race) => {}
@@ -130,6 +138,9 @@ impl PageState {
             .atomic()
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 let x = PageStateValue(x);
+
+                assert!(x.is_locked());
+
                 Some(x.unlock().0)
             }) {
             Ok(previous) => {

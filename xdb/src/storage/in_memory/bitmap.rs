@@ -1,6 +1,6 @@
 use crate::{
     page::PAGE_DATA_SIZE,
-    storage::{PageIndex, in_memory::block::Block},
+    storage::{PageIndex, StorageError, in_memory::block::Block},
 };
 
 #[derive(Debug)]
@@ -37,13 +37,15 @@ impl Bitmap {
         }
     }
 
-    pub fn set(&self, index: u64) {
+    pub fn set(&self, index: u64) -> Result<(), StorageError> {
         let bit_location = BitLocation::new(index);
-        let page = self.block.get_or_allocate_zeroed(bit_location.page);
+        let page = self.block.get_or_allocate_zeroed(bit_location.page)?;
 
         let mut lock = page.lock();
         lock.data_mut::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
             [usize::try_from(bit_location.byte_in_page).unwrap()] |= 1 << bit_location.bit_in_byte;
+
+        Ok(())
     }
 
     /// This will find **A** bit and flip it, atomically.
@@ -102,19 +104,19 @@ mod test {
     fn bitmap() {
         let bitmap = Bitmap::new("test".into());
 
-        bitmap.set(12);
+        bitmap.set(12).unwrap();
 
         assert_eq!(find_and_unset_retries(&bitmap), Some(12));
         assert_eq!(find_and_unset_retries(&bitmap), None);
 
-        bitmap.set(10_000);
+        bitmap.set(10_000).unwrap();
 
         assert_eq!(find_and_unset_retries(&bitmap), Some(10_000));
         assert_eq!(find_and_unset_retries(&bitmap), None);
 
-        bitmap.set(1);
-        bitmap.set(10_000);
-        bitmap.set(3);
+        bitmap.set(1).unwrap();
+        bitmap.set(10_000).unwrap();
+        bitmap.set(3).unwrap();
 
         let a = find_and_unset_retries(&bitmap).unwrap();
         let b = find_and_unset_retries(&bitmap).unwrap();

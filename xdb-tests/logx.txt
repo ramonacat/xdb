@@ -1,0 +1,1902 @@
+  [2m2026-02-03T18:08:03.253367Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(0)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m main
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.253421Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(1)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m main
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.253448Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(0)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m main
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.253523Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(1)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m main
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.253600Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(1)
+
+  [2m2026-02-03T18:08:03.253610Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(1)
+
+  [2m2026-02-03T18:08:03.253615Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34minitializing new page PageIndex(1)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:113 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(1)
+
+  [2m2026-02-03T18:08:03.253628Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34minitializing new page PageIndex(0)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:113 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(1)
+
+  [2m2026-02-03T18:08:03.253637Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(1)
+
+  [2m2026-02-03T18:08:03.255318Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(2)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.255408Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(3)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.255417Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(4)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-01
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.255523Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(6)
+
+  [2m2026-02-03T18:08:03.255532Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(6)
+
+  [2m2026-02-03T18:08:03.255537Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(6)
+
+  [2m2026-02-03T18:08:03.255594Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(12975) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.255602Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(5)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.255612Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(18727) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.255614Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(6)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-01
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.255654Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(2)
+
+  [2m2026-02-03T18:08:03.255662Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(901) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.255887Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(7)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.255954Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(54429) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-02
+
+  [2m2026-02-03T18:08:03.255957Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(2)
+
+  [2m2026-02-03T18:08:03.255989Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(2), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(2)
+
+  [2m2026-02-03T18:08:03.256001Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(2)
+
+  [2m2026-02-03T18:08:03.256008Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was modified, incrementing version[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:92 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(2)
+
+  [2m2026-02-03T18:08:03.256038Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) updated to: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(2)), visible_until: None, version: PageVersion(1) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:99 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(2)
+
+  [2m2026-02-03T18:08:03.256049Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(2)
+
+  [2m2026-02-03T18:08:03.256091Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(8)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-01
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.256137Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies freemap] allocating housekeeping for PageIndex(0)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m vacuum
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies freemap", [1mbase[0m: 0x7ceb3ea00000, [1mhousekeeping[0m: 0x7cec3ea00000
+
+  [2m2026-02-03T18:08:03.256160Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(9)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-03
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.256181Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(10)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-01
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.256227Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(26601) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.256237Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(40248) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.256245Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(11)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-03
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.256247Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(4152) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.256260Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(65335) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.256261Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(12)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.256270Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(6774) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.256271Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(51526) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-03
+
+  [2m2026-02-03T18:08:03.256294Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(29190) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.256318Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(13)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.256336Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(23351) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-05
+
+  [2m2026-02-03T18:08:03.256344Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(8)
+
+  [2m2026-02-03T18:08:03.256354Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(8)
+
+  [2m2026-02-03T18:08:03.256359Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(8), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(8)
+
+  [2m2026-02-03T18:08:03.256367Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(8)
+
+  [2m2026-02-03T18:08:03.256372Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was modified, incrementing version[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:92 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(8)
+
+  [2m2026-02-03T18:08:03.256377Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) updated to: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(8)), visible_until: None, version: PageVersion(2) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:99 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(8)
+
+  [2m2026-02-03T18:08:03.256394Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(8)
+
+  [2m2026-02-03T18:08:03.256423Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(9)
+
+  [2m2026-02-03T18:08:03.256581Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(14)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.257555Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 0[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-05
+
+  [2m2026-02-03T18:08:03.258572Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(16)
+
+  [2m2026-02-03T18:08:03.258584Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(16)
+
+  [2m2026-02-03T18:08:03.258590Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(16)
+
+  [2m2026-02-03T18:08:03.259692Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(37166) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-04
+
+  [2m2026-02-03T18:08:03.259715Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(2)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.259720Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(22)
+
+  [2m2026-02-03T18:08:03.259734Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(22)
+
+  [2m2026-02-03T18:08:03.259748Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(3)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.259772Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(22)
+
+  [2m2026-02-03T18:08:03.259806Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(32296) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-10
+
+  [2m2026-02-03T18:08:03.259811Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(13)
+
+  [2m2026-02-03T18:08:03.259813Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(15)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.259824Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(35021) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-10
+
+  [2m2026-02-03T18:08:03.259835Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(16)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.259850Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(17)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.259868Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(28592) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-04
+
+  [2m2026-02-03T18:08:03.259883Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(13195) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-04
+
+  [2m2026-02-03T18:08:03.259904Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(7639) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.259916Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(38391) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.259934Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(23351) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-05
+
+  [2m2026-02-03T18:08:03.260029Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(18)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-03
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260029Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(475) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-06
+
+  [2m2026-02-03T18:08:03.260061Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(34530) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-03
+
+  [2m2026-02-03T18:08:03.260073Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(19)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-09
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260079Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(20)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260123Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(53988) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-02
+
+  [2m2026-02-03T18:08:03.260141Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(21)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-09
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260173Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(13)
+
+  [2m2026-02-03T18:08:03.260178Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(12198) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-09
+
+  [2m2026-02-03T18:08:03.260187Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(5), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(13)
+
+  [2m2026-02-03T18:08:03.260205Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(13)
+
+  [2m2026-02-03T18:08:03.260211Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was modified, incrementing version[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:92 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(13)
+
+  [2m2026-02-03T18:08:03.260216Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) updated to: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(13)), visible_until: None, version: PageVersion(1) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:99 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(13)
+
+  [2m2026-02-03T18:08:03.260221Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(13)
+
+  [2m2026-02-03T18:08:03.260249Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(23)
+
+  [2m2026-02-03T18:08:03.260257Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(23)
+
+  [2m2026-02-03T18:08:03.260261Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(23)
+
+  [2m2026-02-03T18:08:03.260291Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(25)
+
+  [2m2026-02-03T18:08:03.260300Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(25)
+
+  [2m2026-02-03T18:08:03.260305Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(25)
+
+  [2m2026-02-03T18:08:03.260328Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(22)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260355Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(12)
+
+  [2m2026-02-03T18:08:03.260391Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(23)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260394Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(15)
+
+  [2m2026-02-03T18:08:03.260394Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(24)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260451Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(65237) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-08
+
+  [2m2026-02-03T18:08:03.260504Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(17)
+
+  [2m2026-02-03T18:08:03.260585Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(45162) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-12
+
+  [2m2026-02-03T18:08:03.260599Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(46408) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-12
+
+  [2m2026-02-03T18:08:03.260623Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(24)
+
+  [2m2026-02-03T18:08:03.260656Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(28)
+
+  [2m2026-02-03T18:08:03.260665Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(25)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260675Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(28)
+
+  [2m2026-02-03T18:08:03.260681Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(28)
+
+  [2m2026-02-03T18:08:03.260715Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(26)
+
+  [2m2026-02-03T18:08:03.260722Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(26)
+
+  [2m2026-02-03T18:08:03.260727Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(26)
+
+  [2m2026-02-03T18:08:03.260727Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(53974) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.260732Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(22), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(26)
+
+  [2m2026-02-03T18:08:03.260740Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(26)
+
+  [2m2026-02-03T18:08:03.260754Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(26)
+
+  [2m2026-02-03T18:08:03.260807Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(26)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-01
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260883Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(27)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-01
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260904Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(28)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260925Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(45358) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.260945Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(51580) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.260957Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(54268) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.260963Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(29)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.260988Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(46601) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.260998Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(35)
+
+  [2m2026-02-03T18:08:03.261002Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(21506) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.261002Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(61277) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.261008Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(35)
+
+  [2m2026-02-03T18:08:03.261028Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(35)
+
+  [2m2026-02-03T18:08:03.261055Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(37)
+
+  [2m2026-02-03T18:08:03.261062Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(37)
+
+  [2m2026-02-03T18:08:03.261067Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(37)
+
+  [2m2026-02-03T18:08:03.261085Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(30)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.261094Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(32)
+
+  [2m2026-02-03T18:08:03.261119Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(32)
+
+  [2m2026-02-03T18:08:03.261127Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was modified, incrementing version[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:92 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(32)
+
+  [2m2026-02-03T18:08:03.261132Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) updated to: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(32)), visible_until: None, version: PageVersion(2) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:99 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(32)
+
+  [2m2026-02-03T18:08:03.261151Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(28), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(32)
+
+  [2m2026-02-03T18:08:03.261156Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(32)
+
+  [2m2026-02-03T18:08:03.261161Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(32)
+
+  [2m2026-02-03T18:08:03.261204Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(30)
+
+  [2m2026-02-03T18:08:03.261218Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(31)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.261302Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(58752) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-12
+
+  [2m2026-02-03T18:08:03.261326Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(40)
+
+  [2m2026-02-03T18:08:03.261335Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(40)
+
+  [2m2026-02-03T18:08:03.261341Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(40)
+
+  [2m2026-02-03T18:08:03.261422Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(41)
+
+  [2m2026-02-03T18:08:03.261440Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(41)
+
+  [2m2026-02-03T18:08:03.261455Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(32)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.261470Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(41)
+
+  [2m2026-02-03T18:08:03.261501Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 0[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-10
+
+  [2m2026-02-03T18:08:03.261528Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(34)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.261528Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(33)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-10
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.261555Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(45)
+
+  [2m2026-02-03T18:08:03.261566Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(45)
+
+  [2m2026-02-03T18:08:03.261571Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(45)
+
+  [2m2026-02-03T18:08:03.261620Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(35)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.261704Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(36)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.261726Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 0[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-06
+
+  [2m2026-02-03T18:08:03.261762Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(37)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-06
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.261765Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 0[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-09
+
+  [2m2026-02-03T18:08:03.261830Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(38)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-09
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.261991Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(39)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.262430Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 0[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.262457Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(40)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-01
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.262541Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(41)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-11
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.262811Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(42)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.262990Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 1[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-05
+
+  [2m2026-02-03T18:08:03.263013Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(43)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263062Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(20232) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.263081Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(44)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263102Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(58)
+
+  [2m2026-02-03T18:08:03.263111Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(58)
+
+  [2m2026-02-03T18:08:03.263116Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(58)
+
+  [2m2026-02-03T18:08:03.263160Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(23351) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-05
+
+  [2m2026-02-03T18:08:03.263161Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(42)
+
+  [2m2026-02-03T18:08:03.263181Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(45)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263235Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(11773) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-12
+
+  [2m2026-02-03T18:08:03.263247Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(36308) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-12
+
+  [2m2026-02-03T18:08:03.263254Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(46)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263330Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(47)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-06
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263427Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(475) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-06
+
+  [2m2026-02-03T18:08:03.263446Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(48)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-09
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263503Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(12198) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-09
+
+  [2m2026-02-03T18:08:03.263519Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(49)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263606Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(50)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-01
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263665Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(45358) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.263685Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(51)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-11
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263693Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(51580) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.263717Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(54268) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.263755Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(4146) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-11
+
+  [2m2026-02-03T18:08:03.263765Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(4)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-01
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.263769Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(16273) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-11
+
+  [2m2026-02-03T18:08:03.263770Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(52)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263784Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(4)) at key BigKey(51580)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-01
+
+  [2m2026-02-03T18:08:03.263800Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(53)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-01
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263853Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(31166) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-02
+
+  [2m2026-02-03T18:08:03.263872Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(54)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-10
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.263942Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(32296) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-10
+
+  [2m2026-02-03T18:08:03.263945Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(42)
+
+  [2m2026-02-03T18:08:03.263955Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(35021) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-10
+
+  [2m2026-02-03T18:08:03.263956Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(32), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(42)
+
+  [2m2026-02-03T18:08:03.263974Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(42)
+
+  [2m2026-02-03T18:08:03.264002Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(42)
+
+  [2m2026-02-03T18:08:03.264011Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(42)
+
+  [2m2026-02-03T18:08:03.264059Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(57)
+
+  [2m2026-02-03T18:08:03.264062Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(55)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.264152Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(56)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.264208Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(35257) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-04
+
+  [2m2026-02-03T18:08:03.264216Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(57)
+
+  [2m2026-02-03T18:08:03.264226Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(7454) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-04
+
+  [2m2026-02-03T18:08:03.264229Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(43), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(57)
+
+  [2m2026-02-03T18:08:03.264243Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(57)
+
+  [2m2026-02-03T18:08:03.264253Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(57)
+
+  [2m2026-02-03T18:08:03.264259Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(57)
+
+  [2m2026-02-03T18:08:03.264294Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(59)
+
+  [2m2026-02-03T18:08:03.264320Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(59)
+
+  [2m2026-02-03T18:08:03.264327Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(59)
+
+  [2m2026-02-03T18:08:03.264357Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(43)
+
+  [2m2026-02-03T18:08:03.264364Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(43)
+
+  [2m2026-02-03T18:08:03.264369Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(43)
+
+  [2m2026-02-03T18:08:03.264387Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(35), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(43)
+
+  [2m2026-02-03T18:08:03.264393Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(43)
+
+  [2m2026-02-03T18:08:03.264397Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(43)
+
+  [2m2026-02-03T18:08:03.264427Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(50)
+
+  [2m2026-02-03T18:08:03.264434Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(50)
+
+  [2m2026-02-03T18:08:03.264439Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(50)
+
+  [2m2026-02-03T18:08:03.264444Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(36), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(50)
+
+  [2m2026-02-03T18:08:03.264449Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(50)
+
+  [2m2026-02-03T18:08:03.264462Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(50)
+
+  [2m2026-02-03T18:08:03.264498Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(51)
+
+  [2m2026-02-03T18:08:03.264506Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(51)
+
+  [2m2026-02-03T18:08:03.264512Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(37), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(51)
+
+  [2m2026-02-03T18:08:03.264524Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(51)
+
+  [2m2026-02-03T18:08:03.264532Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was modified, incrementing version[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:92 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(51)
+
+  [2m2026-02-03T18:08:03.264536Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) updated to: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(51)), visible_until: None, version: PageVersion(3) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:99 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(51)
+
+  [2m2026-02-03T18:08:03.264542Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(51)
+
+  [2m2026-02-03T18:08:03.264575Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(52)
+
+  [2m2026-02-03T18:08:03.264592Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(57)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-06
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.264656Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(58)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-06
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.264712Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(32959) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-06
+
+  [2m2026-02-03T18:08:03.264764Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(55)
+
+  [2m2026-02-03T18:08:03.264806Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(44)
+
+  [2m2026-02-03T18:08:03.264825Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(60)
+
+  [2m2026-02-03T18:08:03.264850Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(59)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-06
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.264856Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(61)
+
+  [2m2026-02-03T18:08:03.264946Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(61)
+
+  [2m2026-02-03T18:08:03.264953Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(61)
+
+  [2m2026-02-03T18:08:03.264985Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(60)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-06
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.265015Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(60948) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-06
+
+  [2m2026-02-03T18:08:03.265015Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(62)
+
+  [2m2026-02-03T18:08:03.265025Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(43858) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-06
+
+  [2m2026-02-03T18:08:03.265025Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(62)
+
+  [2m2026-02-03T18:08:03.265032Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(62)
+
+  [2m2026-02-03T18:08:03.265048Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(61)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.265147Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(62)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.265161Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(63)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-07
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.265189Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(20529) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.265238Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(64)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-07
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.265272Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(65)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.265280Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(68)
+
+  [2m2026-02-03T18:08:03.265290Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(68)
+
+  [2m2026-02-03T18:08:03.265295Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(68)
+
+  [2m2026-02-03T18:08:03.265308Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(44364) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-07
+
+  [2m2026-02-03T18:08:03.265322Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(66)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.265359Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(67)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.265379Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(2412) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-08
+
+  [2m2026-02-03T18:08:03.265439Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(68)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.265454Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(69)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.265493Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(59800) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.265572Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(69)
+
+  [2m2026-02-03T18:08:03.265629Z[0m [32m INFO[0m [1;32mxdb_tests[0m[32m: [32mthreads started up, going to sleep[0m
+    [2;3mat[0m xdb-tests/src/main.rs:171 [2;3mon[0m main
+
+  [2m2026-02-03T18:08:03.265861Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 1[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-09
+
+  [2m2026-02-03T18:08:03.265924Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 0[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-11
+
+  [2m2026-02-03T18:08:03.265931Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 0[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-04
+
+  [2m2026-02-03T18:08:03.266149Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 1[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-10
+
+  [2m2026-02-03T18:08:03.275684Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(70)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.275699Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(71)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.275773Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(72)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-07
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.279752Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(56125) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-02
+
+  [2m2026-02-03T18:08:03.279771Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(73)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.279830Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34minserted BigKey(57042) into LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:213 [2;3mon[0m server-08
+
+  [2m2026-02-03T18:08:03.279846Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(74)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-07
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.279901Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(69)
+
+  [2m2026-02-03T18:08:03.279910Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(67), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(69)
+
+  [2m2026-02-03T18:08:03.279918Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(69)
+
+  [2m2026-02-03T18:08:03.279923Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was modified, incrementing version[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:92 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(69)
+
+  [2m2026-02-03T18:08:03.279927Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) updated to: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(69)), visible_until: None, version: PageVersion(4) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:99 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(69)
+
+  [2m2026-02-03T18:08:03.279933Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(69)
+
+  [2m2026-02-03T18:08:03.279979Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(75)
+
+  [2m2026-02-03T18:08:03.279981Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(75)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-09
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.279986Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(75)
+
+  [2m2026-02-03T18:08:03.280002Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(75)
+
+  [2m2026-02-03T18:08:03.280026Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(77)
+
+  [2m2026-02-03T18:08:03.280033Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(77)
+
+  [2m2026-02-03T18:08:03.280038Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(77)
+
+  [2m2026-02-03T18:08:03.280046Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(76)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-09
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.280065Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(78)
+
+  [2m2026-02-03T18:08:03.280063Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(77)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-11
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.280080Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(5)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-09
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.280089Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(78)
+
+  [2m2026-02-03T18:08:03.280109Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(78)
+
+  [2m2026-02-03T18:08:03.280127Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(5)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-09
+
+  [2m2026-02-03T18:08:03.280136Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(83)
+
+  [2m2026-02-03T18:08:03.280157Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(83)
+
+  [2m2026-02-03T18:08:03.280161Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(83)
+
+  [2m2026-02-03T18:08:03.280160Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(78)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-11
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.280163Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(79)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-09
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.280175Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(80)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.280200Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(71)
+
+  [2m2026-02-03T18:08:03.280270Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(81)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-10
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.280350Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(82)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-15
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.280422Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(83)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.280507Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(84)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-14
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.280609Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(85)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-13
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.280683Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(86)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-06
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.281813Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(87)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.284991Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(4146) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-11
+
+  [2m2026-02-03T18:08:03.285009Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(16273) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-11
+
+  [2m2026-02-03T18:08:03.285040Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(73)
+
+  [2m2026-02-03T18:08:03.285040Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(88)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285115Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(35257) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-04
+
+  [2m2026-02-03T18:08:03.285132Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(89)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-10
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285151Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(6)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.285185Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(6)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-04
+
+  [2m2026-02-03T18:08:03.285189Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(32296) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-10
+
+  [2m2026-02-03T18:08:03.285196Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(90)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-04
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285202Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(35021) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-10
+
+  [2m2026-02-03T18:08:03.285208Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(91)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-15
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285309Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(92)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285378Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(93)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-14
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285449Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(51804) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-14
+
+  [2m2026-02-03T18:08:03.285470Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(94)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-13
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285546Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(34700) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-13
+
+  [2m2026-02-03T18:08:03.285564Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(95)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-06
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285625Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(7)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-06
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.285638Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(96)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285655Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(7)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-06
+
+  [2m2026-02-03T18:08:03.285676Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(97)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-06
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285723Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(29772) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-02
+
+  [2m2026-02-03T18:08:03.285749Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(8)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.285755Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(90)
+
+  [2m2026-02-03T18:08:03.285770Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(90)
+
+  [2m2026-02-03T18:08:03.285776Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(90)
+
+  [2m2026-02-03T18:08:03.285781Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(8)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-02
+
+  [2m2026-02-03T18:08:03.285795Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(98)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-02
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285806Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(80)
+
+  [2m2026-02-03T18:08:03.285814Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(80)
+
+  [2m2026-02-03T18:08:03.285820Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(77), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(80)
+
+  [2m2026-02-03T18:08:03.285828Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(80)
+
+  [2m2026-02-03T18:08:03.285844Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(80)
+
+  [2m2026-02-03T18:08:03.285849Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(80)
+
+  [2m2026-02-03T18:08:03.285897Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(82)
+
+  [2m2026-02-03T18:08:03.285904Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(99)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.285978Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(100)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.286026Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(6557) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-05
+
+  [2m2026-02-03T18:08:03.286038Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(82)
+
+  [2m2026-02-03T18:08:03.286069Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(81), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(82)
+
+  [2m2026-02-03T18:08:03.286081Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(82)
+
+  [2m2026-02-03T18:08:03.286088Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(82)
+
+  [2m2026-02-03T18:08:03.286105Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(82)
+
+  [2m2026-02-03T18:08:03.286138Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(85)
+
+  [2m2026-02-03T18:08:03.286147Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(85)
+
+  [2m2026-02-03T18:08:03.286152Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(83), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(85)
+
+  [2m2026-02-03T18:08:03.286160Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(85)
+
+  [2m2026-02-03T18:08:03.286160Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 0[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-08
+
+  [2m2026-02-03T18:08:03.286167Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(85)
+
+  [2m2026-02-03T18:08:03.286175Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(85)
+
+  [2m2026-02-03T18:08:03.286262Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(101)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.286274Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(88)
+
+  [2m2026-02-03T18:08:03.286296Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(88)
+
+  [2m2026-02-03T18:08:03.286302Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(88)
+
+  [2m2026-02-03T18:08:03.286308Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(85), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(88)
+
+  [2m2026-02-03T18:08:03.286337Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(88)
+
+  [2m2026-02-03T18:08:03.286347Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(88)
+
+  [2m2026-02-03T18:08:03.286413Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(102)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.286415Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(95)
+
+  [2m2026-02-03T18:08:03.286428Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(95)
+
+  [2m2026-02-03T18:08:03.286434Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(95)
+
+  [2m2026-02-03T18:08:03.286448Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(9)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.286470Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(9)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-08
+
+  [2m2026-02-03T18:08:03.286483Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(103)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-08
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.286502Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(104)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-15
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.286545Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(105)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-15
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.286570Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(43161) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-15
+
+  [2m2026-02-03T18:08:03.286591Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(10)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-15
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.286626Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(10)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-15
+
+  [2m2026-02-03T18:08:03.286637Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(106)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-15
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.286850Z[0m [34mDEBUG[0m [1;34mxdb_tests[0m[34m: [34mretrying: 0[0m
+    [2;3mat[0m xdb-tests/src/main.rs:76 [2;3mon[0m server-07
+
+  [2m2026-02-03T18:08:03.286880Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(107)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-07
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.286923Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(108)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-07
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.287008Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(98)
+
+  [2m2026-02-03T18:08:03.287019Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 2 locks for 2 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(98)
+
+  [2m2026-02-03T18:08:03.287024Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(1) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(98)
+
+  [2m2026-02-03T18:08:03.287030Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mtouching page zero. cow index: PageIndex(107), index: PageIndex(0), page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }, cow page: Page { header: PageHeader { checksum: Checksum(0), _unused1: 0, visible_from: Some(TransactionId(1)), visible_until: None, version: PageVersion(0) }, .. }[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:84 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(98)
+
+  [2m2026-02-03T18:08:03.287038Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mpage PageIndex(0) was not modified, leaving as is[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:101 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(98)
+
+  [2m2026-02-03T18:08:03.287043Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(98)
+
+  [2m2026-02-03T18:08:03.287093Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(109)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.287151Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(110)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.287189Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(11)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.287225Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(11)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-12
+
+  [2m2026-02-03T18:08:03.287236Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(111)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-12
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.287376Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(112)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-10
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.287440Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(113)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-10
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.288055Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(114)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.288129Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(115)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.288190Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(12)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.288239Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(12)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-05
+
+  [2m2026-02-03T18:08:03.288255Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(116)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-05
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.288995Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(102)
+
+  [2m2026-02-03T18:08:03.289005Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(102)
+
+  [2m2026-02-03T18:08:03.289010Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(102)
+
+  [2m2026-02-03T18:08:03.289066Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(117)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-11
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.289128Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(118)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-11
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.289197Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(13)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-11
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.289254Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(13)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-11
+
+  [2m2026-02-03T18:08:03.289265Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(119)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-11
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.291198Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(104)
+
+  [2m2026-02-03T18:08:03.291207Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(104)
+
+  [2m2026-02-03T18:08:03.291212Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(104)
+
+  [2m2026-02-03T18:08:03.291266Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(120)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.291318Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(121)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.291324Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(122)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-07
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.291383Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(123)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-07
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.291424Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(14)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-07
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.291439Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(14)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-07
+
+  [2m2026-02-03T18:08:03.291458Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(124)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-07
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.291694Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(125)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-13
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.291783Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(126)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-13
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.291822Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(8700) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-13
+
+  [2m2026-02-03T18:08:03.291831Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(54091) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-13
+
+  [2m2026-02-03T18:08:03.292452Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(108)
+
+  [2m2026-02-03T18:08:03.292463Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(108)
+
+  [2m2026-02-03T18:08:03.292469Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(108)
+
+  [2m2026-02-03T18:08:03.292532Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(127)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-14
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.292552Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mstarting commit[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:49 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(109)
+
+  [2m2026-02-03T18:08:03.292559Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcollcted 0 locks for 0 pages[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:71 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(109)
+
+  [2m2026-02-03T18:08:03.292575Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::version_manager::committer[0m[34m: [34mcommit succesful[0m
+    [2;3mat[0m xdb/src/storage/in_memory/version_manager/committer.rs:120 [2;3mon[0m comitter
+    [2;3min[0m xdb::storage::in_memory::version_manager::committer::[1mdo_commit[0m [2;3mwith[0m [1mid[0m: TransactionId(109)
+
+  [2m2026-02-03T18:08:03.292604Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(128)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-14
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.292624Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(129)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.292685Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(15)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-14
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.292700Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(130)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.292764Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(15)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-14
+
+  [2m2026-02-03T18:08:03.292780Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(131)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-14
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.294471Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(132)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-13
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.294504Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(133)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-13
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.294539Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(64725) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-13
+
+  [2m2026-02-03T18:08:03.294559Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(16)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-13
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.294631Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(16)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-13
+
+  [2m2026-02-03T18:08:03.294643Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(134)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-13
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.294647Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(135)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-10
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.294682Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(136)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-10
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.294776Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(17)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-10
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.294871Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(17)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-10
+
+  [2m2026-02-03T18:08:03.294885Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(137)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-10
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.296935Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(138)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.297058Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(139)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+
+  [2m2026-02-03T18:08:03.297155Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(38967) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.297164Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::delete[0m[34m: [34mdeleted BigKey(41508) from LeafNodeId(PageIndex(1))[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/delete.rs:210 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.297185Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[main block] allocating housekeeping for PageIndex(18)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "main block", [1mbase[0m: 0x7cea3e600000, [1mhousekeeping[0m: 0x7ceb3e600000
+
+  [2m2026-02-03T18:08:03.297260Z[0m [34mDEBUG[0m [1;34mxdb::bplustree::algorithms::insert[0m[34m: [34msplit LeafNodeId(PageIndex(1)) into LeafNodeId(PageIndex(18)) at key BigKey(21506)[0m
+    [2;3mat[0m xdb/src/bplustree/algorithms/insert.rs:169 [2;3mon[0m server-00
+
+  [2m2026-02-03T18:08:03.297273Z[0m [34mDEBUG[0m [1;34mxdb::storage::in_memory::block[0m[34m: [34m[cow copies] allocating housekeeping for PageIndex(140)[0m
+    [2;3mat[0m xdb/src/storage/in_memory/block/mod.rs:316 [2;3mon[0m server-00
+    [2;3min[0m xdb::storage::in_memory::block::[1mallocate[0m
+    [2;3min[0m xdb::storage::in_memory::block::[1mblock[0m [2;3mwith[0m [1mname[0m: "cow copies", [1mbase[0m: 0x7cec3ee00000, [1mhousekeeping[0m: 0x7ced3ee00000
+

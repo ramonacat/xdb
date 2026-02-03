@@ -16,11 +16,14 @@ pub enum StorageError {
     #[error("Would deadlock when locking {0:?}")]
     // TODO this should also have a transaction ID
     Deadlock(PageIndex),
+
+    #[error("out of space")]
+    OutOfSpace,
 }
 
 #[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-// TODO should the index have some sort of storage id?
+// TODO the index should have some sort of storage id
 pub struct PageIndex(u64);
 
 impl PageIndex {
@@ -74,6 +77,7 @@ impl TransactionId {
 pub trait Transaction<'storage>: Send + Debug {
     type Storage: Storage + 'storage;
 
+    fn id(&self) -> TransactionId;
     fn read<T, const N: usize>(
         &mut self,
         indices: impl Into<[PageIndex; N]>,

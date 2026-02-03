@@ -105,13 +105,13 @@ impl Page {
 
     pub fn is_visible_in(&self, txid: TransactionId) -> bool {
         if let Some(from) = self.header.visible_from
-            && from > txid
+            && from >= txid
         {
             return false;
         }
 
         if let Some(to) = self.header.visible_until
-            && to < txid
+            && to <= txid
         {
             return false;
         }

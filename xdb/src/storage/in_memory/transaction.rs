@@ -25,6 +25,10 @@ impl<'storage> InMemoryTransaction<'storage> {
 impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
     type Storage = InMemoryStorage;
 
+    fn id(&self) -> crate::storage::TransactionId {
+        self.version_manager.id()
+    }
+
     fn read<T, const N: usize>(
         &mut self,
         indices: impl Into<[PageIndex; N]>,
@@ -61,7 +65,7 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
     }
 
     fn reserve(&mut self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
-        let page_guard = self.version_manager.reserve();
+        let page_guard = self.version_manager.reserve()?;
 
         Ok(InMemoryPageReservation { page_guard })
     }
@@ -73,21 +77,21 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
     ) -> Result<(), StorageError> {
         let InMemoryPageReservation { page_guard } = reservation;
 
-        self.version_manager.insert_reserved(page_guard, page);
+        self.version_manager.insert_reserved(page_guard, page)?;
 
         Ok(())
     }
 
     fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
-        let reserved = self.version_manager.reserve();
+        let reserved = self.version_manager.reserve()?;
         let index = reserved.index();
-        self.version_manager.insert_reserved(reserved, page);
+        self.version_manager.insert_reserved(reserved, page)?;
 
         Ok(index)
     }
 
     fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
-        self.version_manager.delete(page);
+        self.version_manager.delete(page)?;
 
         Ok(())
     }

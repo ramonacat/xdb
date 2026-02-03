@@ -66,6 +66,10 @@ impl<'a, TTx: Transaction<'a, Storage = TStorage>, TStorage: Storage> Transactio
     fn rollback(self) -> Result<(), StorageError> {
         self.0.rollback()
     }
+
+    fn id(&self) -> super::TransactionId {
+        self.0.id()
+    }
 }
 
 // TODO generalize this so more metrics can be extracted (transactions per second, total

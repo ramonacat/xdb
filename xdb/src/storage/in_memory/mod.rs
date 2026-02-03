@@ -51,7 +51,7 @@ impl InMemoryStorage {
 
         Self {
             version_manager: VersionManager::new(
-                Block::new("main block".into()),
+                Arc::new(Block::new("main block".into())),
                 running_transactions,
                 cow_copies,
                 cow_copies_freemap,
