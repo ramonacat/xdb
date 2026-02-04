@@ -93,7 +93,14 @@ pub struct VersionManager {
     running_transactions: Arc<Mutex<BTreeSet<TransactionId>>>,
     cow_pages: Arc<Block>,
     cow_pages_freemap: Arc<Bitmap>,
+    // TODO instead of a mutex, we should probably have per-thread queues or something
+    // TODO give it a better name, it is not really a queue
+    // TODO sending raw pointers kinda sucks, we probably should just do PageIndices?
+    recycled_page_queue: Mutex<Vec<(NonNull<Page>, PageIndex)>>,
 }
+
+unsafe impl Send for VersionManager {}
+unsafe impl Sync for VersionManager {}
 
 impl VersionManager {
     pub fn new(
@@ -113,6 +120,7 @@ impl VersionManager {
             running_transactions,
             cow_pages,
             cow_pages_freemap,
+            recycled_page_queue: Mutex::new(Vec::new()),
         }
     }
 

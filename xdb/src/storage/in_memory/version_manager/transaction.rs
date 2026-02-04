@@ -1,7 +1,11 @@
-use std::{collections::HashMap, thread};
+use std::{
+    collections::HashMap,
+    thread,
+    time::{Duration, Instant},
+};
 
 use bytemuck::Zeroable;
-use tracing::{info_span, instrument};
+use tracing::{debug, info_span, instrument, warn};
 
 use crate::{
     page::Page,
@@ -46,24 +50,49 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     fn get_recycled_cow_page(&self) -> Option<PageRef<'storage>> {
+        // don't bother with all this if there aren't many allocated pages (TODO figure out if this
+        // number makes sense)
+        if self.version_manager.cow_pages.page_count_lower_bound() < 50000 {
+            debug!("not recycling cow pages, too few were allocated");
+            return None;
+        }
+
+        let mut recycled_page_queue = self.version_manager.recycled_page_queue.lock().unwrap();
+
+        if let Some(page) = recycled_page_queue.pop() {
+            debug!(
+                "got a page from recycled_page_queue (length: {})",
+                recycled_page_queue.len()
+            );
+            return Some(unsafe { PageRef::new(page.0, &self.version_manager.cow_pages, page.1) });
+        }
+
         // TODO we need a better API for this - we must stop vacuum from marking the page as unused
         // again before we have a chance to reuse it, potentially resulting in multiple threads
         // getting the same page
-        // TODO freezing for every page we're getting is expensive AF, we should probably keep a
-        // thousand pages or something, and only freeze once that store is empty
         let lock = self.version_manager.vacuum.freeze();
 
-        self.version_manager
-            .cow_pages_freemap
-            .find_and_unset()
-            .map(|index| {
-                let recycled_page = self.version_manager.cow_pages.get(PageIndex(index as u64));
-                *recycled_page.lock() = Page::zeroed();
+        for _ in 0..10000 {
+            if let Some(free_page) = self
+                .version_manager
+                .cow_pages_freemap
+                .find_and_unset()
+                .map(|index| self.version_manager.cow_pages.get(PageIndex(index as u64)))
+            {
+                *free_page.lock() = Page::zeroed();
+                recycled_page_queue.push((free_page.as_ptr(), free_page.index()));
+            } else {
+                break;
+            }
+        }
 
-                drop(lock);
+        drop(lock);
 
-                recycled_page
-            })
+        debug!("recycled {} pages", recycled_page_queue.len());
+
+        recycled_page_queue
+            .pop()
+            .map(|page| unsafe { PageRef::new(page.0, &self.version_manager.cow_pages, page.1) })
     }
 
     // TODO avoid passing by value
@@ -82,12 +111,18 @@ impl<'storage> VersionManagedTransaction<'storage> {
             Err(StorageError::OutOfSpace) => {
                 // TODO we should have some mechanism to use to ask vacuum to wake us up when pages
                 // are available
+                let start = Instant::now();
                 loop {
                     if let Some(page) = self.get_recycled_cow_page() {
                         return Ok(page);
                     }
 
                     thread::yield_now();
+
+                    let waited = start.elapsed();
+                    if waited > Duration::from_millis(100) {
+                        warn!("waited {waited:?} for a free cow page");
+                    }
                 }
             }
             Err(e) => Err(e),

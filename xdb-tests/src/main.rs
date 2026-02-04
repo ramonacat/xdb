@@ -2,7 +2,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Receiver, SyncSender},
     },
     thread::{self, JoinHandle},
     time::{self, Duration},
@@ -54,7 +54,7 @@ struct TransactionCommands {
 
 struct ServerThread {
     id: usize,
-    tx: Sender<TransactionCommands>,
+    tx: SyncSender<TransactionCommands>,
     handle: JoinHandle<()>,
 }
 
@@ -113,6 +113,8 @@ fn server_thread(
     }
 }
 
+// Add a separate "mod X" testing mode, where every thread operates only on keys that are
+// (n%THREAD_COUNT)+thread_id, and verifies that it does not see anything from other threads.
 fn main() {
     FmtSubscriber::builder()
         .with_thread_names(true)
@@ -126,7 +128,7 @@ fn main() {
 
     let server_threads: Vec<_> = (0..THREAD_COUNT)
         .map(|id| {
-            let (tx, rx) = mpsc::channel();
+            let (tx, rx) = mpsc::sync_channel(128);
             let tree = tree.clone();
 
             let handle = thread::Builder::new()
@@ -160,6 +162,8 @@ fn main() {
                     thread.tx.send(command).unwrap();
                 }
 
+                drop(thread.tx);
+
                 thread.handle.join().unwrap();
             })
             .unwrap();
@@ -171,7 +175,7 @@ fn main() {
 
     // TODO change this to a longer time, once we can handle running out of memory without
     // panicking
-    let run_length = Duration::from_secs(5);
+    let run_length = Duration::from_secs(60);
     let start = time::Instant::now();
 
     'outer: while time::Instant::now() - start < run_length {

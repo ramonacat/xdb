@@ -107,6 +107,7 @@ fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<()
                     debug!("page {index:?} was not modified, leaving as is");
                     // TODO we should set visible_until for the modified copy so vacuum can clean
                     // it up!
+                    modfied_copy.set_visible_until(id);
                 }
             }
             MainPageRef::Uninitialized(guard) => {

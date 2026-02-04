@@ -1,4 +1,4 @@
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::storage::in_memory::block::LockError;
 use crate::sync::atomic::{AtomicU32, Ordering};
@@ -118,7 +118,7 @@ impl PageState {
 
                     // TODO do we want to keep this in non-debug builds?
                     if start.elapsed() > Duration::from_millis(100) {
-                        //panic!("lock held exceedingly long");
+                        warn!("lock held exceedingly long");
                     }
                 }
             }

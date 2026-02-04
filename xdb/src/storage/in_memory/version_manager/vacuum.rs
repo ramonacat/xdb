@@ -51,35 +51,36 @@ impl VacuumThread {
                 Ok(()) | Err(FutexError::Race) => {}
             }
         }
+
+        debug!("exiting freeze_if_needed");
     }
 
     pub fn run(&self) {
         while self.running.load(Ordering::Relaxed) {
             self.freeze_if_needed();
 
+            debug!("requesting running transactions");
+
             let running_transactions = self.running_transactions.lock().unwrap();
             let Some(min_txid) = running_transactions.first().copied() else {
+                drop(running_transactions);
                 // TODO we need a smarter way of scheduling vacuum (based on usage of the
                 // block)
-                thread::sleep(Duration::from_millis(10));
+                thread::sleep(Duration::from_secs(10));
                 continue;
             };
             drop(running_transactions);
+
+            debug!("min txid: {min_txid:?}");
 
             let mut index = PageIndex::from_value(1);
 
             let mut i = 0u64;
             let mut freed_count = 0u64;
 
-            while let Some(page) = self.cow_copies.try_get(index) {
-                if let Ok(page) = page.lock_nowait()
-                    && let Some(visible_until) = page.visible_until()
-                    && visible_until < min_txid
-                {
-                    self.cow_copies_freemap.set(index.0).unwrap();
-                    freed_count += 1;
-                }
-
+            let pages_to_check = self.cow_copies.page_count_lower_bound();
+            debug!("vacuum will iterate over {pages_to_check} pages");
+            while i < pages_to_check {
                 // TODO this is another scheduling issue, if there's a lot of pages,
                 // vacuum can spend a lot of time in this loop, preventing freezes and
                 // preventing exit when done
@@ -89,18 +90,32 @@ impl VacuumThread {
                     self.freeze_if_needed();
 
                     if !self.running.load(Ordering::Relaxed) {
+                        debug!("exit requested");
                         break;
                     }
-
-                    break;
                 }
 
                 i += 1;
+
+                let Some(page) = self.cow_copies.try_get(index) else {
+                    continue;
+                };
+
+                if let Ok(page) = page.lock_nowait()
+                    && let Some(visible_until) = page.visible_until()
+                    && visible_until < min_txid
+                {
+                    self.cow_copies_freemap.set(index.0).unwrap();
+                    freed_count += 1;
+                }
+
                 index = index.next();
             }
 
             debug!("vacuum scan finished, {freed_count}/{i} pages marked as free");
         }
+
+        debug!("exiting vacuum thread...");
     }
 }
 
@@ -151,6 +166,7 @@ impl Vacuum {
     }
 
     pub(crate) fn freeze(&'_ self) -> VacuumFreeze<'_> {
+        debug!("requesting vacuum freeze");
         self.freeze_requests
             .as_ref()
             .atomic()
@@ -158,6 +174,7 @@ impl Vacuum {
         self.freeze_requests.as_ref().wake(u32::MAX);
 
         let is_currently_frozen = self.is_currently_frozen.as_ref();
+        debug!("not currently frozen, waiting...");
 
         loop {
             if is_currently_frozen.atomic().load(Ordering::Acquire) == 1 {
@@ -168,6 +185,8 @@ impl Vacuum {
                 Ok(()) | Err(FutexError::Race) => {}
             }
         }
+
+        debug!("freeze succesfuly started");
 
         VacuumFreeze { vacuum: self }
     }
@@ -181,13 +200,16 @@ impl Drop for VacuumFreeze<'_> {
     fn drop(&mut self) {
         let freeze_requests = self.vacuum.freeze_requests.as_ref();
 
-        freeze_requests.atomic().fetch_sub(1, Ordering::AcqRel);
+        let before = freeze_requests.atomic().fetch_sub(1, Ordering::AcqRel);
         freeze_requests.wake(u32::MAX);
+
+        debug!("freeze request dropped, from {before}");
     }
 }
 
 impl Drop for Vacuum {
     fn drop(&mut self) {
+        debug!("dropping vacuum...");
         self.running.store(false, Ordering::Relaxed);
 
         let handle = self.handle.take();
