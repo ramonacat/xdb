@@ -251,6 +251,7 @@ mod test {
         mem,
         panic::{RefUnwindSafe, UnwindSafe, catch_unwind},
     };
+    #[cfg(not(miri))]
     use test_log::test;
 
     use crate::{

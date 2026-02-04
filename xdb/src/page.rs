@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use bytemuck::{
     AnyBitPattern, NoUninit, Pod, Zeroable, bytes_of, from_bytes, from_bytes_mut, must_cast,
@@ -23,6 +23,12 @@ pub struct PageVersion(u64);
 impl PageVersion {
     const fn next(self) -> Self {
         Self(self.0 + 1)
+    }
+}
+
+impl Display for PageVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "v{}", self.0)
     }
 }
 

@@ -6,9 +6,10 @@ use crate::storage::StorageError;
 use crate::storage::in_memory::block::page_state::PageStateValue;
 use bytemuck::Zeroable;
 use std::ops::DerefMut;
+use std::time::{Duration, Instant};
 use std::{fmt::Debug, mem::MaybeUninit, ops::Deref, pin::Pin, ptr::NonNull};
 use thiserror::Error;
-use tracing::{debug, info_span, instrument};
+use tracing::{Span, debug, debug_span, info_span, instrument, warn};
 
 use crate::{
     Size,
@@ -41,10 +42,12 @@ impl<'block> PageRef<'block> {
         Self { page, block, index }
     }
 
+    #[instrument(skip(self), fields(index = ?self.index, block = self.block.name))]
     pub fn lock_nowait(&self) -> Result<PageGuard<'block>, LockError> {
         unsafe { PageGuard::new_nowait(self.page, self.block, self.index) }
     }
 
+    #[instrument(skip(self), fields(index = ?self.index, block = self.block.name))]
     pub fn lock(&self) -> PageGuard<'block> {
         unsafe { PageGuard::new(self.page, self.block, self.index) }
     }
@@ -63,16 +66,27 @@ pub struct PageGuard<'block> {
     page: NonNull<Page>,
     block: &'block Block,
     index: PageIndex,
+    taken: Instant,
+    span: Span,
 }
 
 unsafe impl Send for PageGuard<'_> {}
 
 impl<'block> PageGuard<'block> {
     unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
-        let housekeeping = unsafe { block.housekeeping_for(index) };
-        housekeeping.lock();
+        let span = info_span!("page guard", block = block.name, ?index);
+        span.in_scope(|| {
+            let housekeeping = unsafe { block.housekeeping_for(index) };
+            housekeeping.lock();
+        });
 
-        Self { page, block, index }
+        Self {
+            page,
+            block,
+            index,
+            taken: Instant::now(),
+            span,
+        }
     }
 
     unsafe fn new_nowait(
@@ -80,10 +94,21 @@ impl<'block> PageGuard<'block> {
         block: &'block Block,
         index: PageIndex,
     ) -> Result<Self, LockError> {
-        let housekeeping = unsafe { block.housekeeping_for(index) };
-        housekeeping.lock_nowait()?;
+        let span = debug_span!("page guard", block = block.name, ?index);
+        span.in_scope(|| {
+            let housekeeping = unsafe { block.housekeeping_for(index) };
+            housekeeping.lock_nowait()?;
 
-        Ok(Self { page, block, index })
+            Ok(())
+        })?;
+
+        Ok(Self {
+            page,
+            block,
+            index,
+            taken: Instant::now(),
+            span,
+        })
     }
 }
 
@@ -108,7 +133,14 @@ impl DerefMut for PageGuard<'_> {
 }
 
 impl Drop for PageGuard<'_> {
+    #[instrument(skip(self), fields(index = ?self.index, block = self.block.name), follows_from = [&self.span])]
     fn drop(&mut self) {
+        let elapsed = self.taken.elapsed();
+
+        if elapsed > Duration::from_millis(100) {
+            warn!("lock held for too long: {elapsed:?}");
+        }
+
         unsafe { self.block.housekeeping_for(self.index) }.unlock();
     }
 }

@@ -1,8 +1,9 @@
-use tracing::{debug, instrument};
+use tracing::{debug, info_span, instrument};
 
 use crate::page::PAGE_DATA_SIZE;
 use crate::storage::in_memory::block::Block;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::pin::Pin;
 
 use crate::platform::futex::{Futex, FutexError};
@@ -38,6 +39,49 @@ impl CommitRequest {
     }
 }
 
+impl Display for CommitRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "commit request: {:?} ({} {}) [",
+            self.id,
+            if self.is_done.as_ref().atomic().load(Ordering::Relaxed) == 1 {
+                "done"
+            } else {
+                "not done "
+            },
+            self.response.lock().map_or_else(
+                |_| "[poisoned!]".to_string(),
+                |x| x
+                    .as_ref()
+                    .map_or_else(|| "[none]".to_string(), |y| format!("{y:?}"))
+            ),
+        )?;
+        for page in self.pages.values() {
+            write!(
+                f,
+                "(main: {}, cow: {:?}, verstion: {})",
+                match page.main {
+                    crate::storage::in_memory::version_manager::RawMainPage::Initialized(
+                        _,
+                        index,
+                    ) => format!("init({})", index.value()),
+                    crate::storage::in_memory::version_manager::RawMainPage::Uninitialized(
+                        _,
+                        index,
+                    ) => format!("uninit({})", index.value()),
+                },
+                page.cow.1.value(),
+                page.version
+            )?;
+        }
+
+        write!(f, "]")?;
+
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct Committer {
     #[allow(unused)]
@@ -45,7 +89,7 @@ pub struct Committer {
     tx: Sender<CommitRequest>,
 }
 
-#[instrument(skip(pages), level=tracing::Level::DEBUG)]
+#[instrument(skip(pages))]
 fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<(), StorageError> {
     debug!("starting commit");
 
@@ -105,8 +149,6 @@ fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<()
                     debug!("page {index:?} updated to: {:?}", &**lock);
                 } else {
                     debug!("page {index:?} was not modified, leaving as is");
-                    // TODO we should set visible_until for the modified copy so vacuum can clean
-                    // it up!
                     modfied_copy.set_visible_until(id);
                 }
             }
@@ -134,19 +176,21 @@ impl Committer {
         let (tx, rx) = mpsc::channel::<CommitRequest>();
         let handle = {
             thread::Builder::new()
-                .name("comitter".into())
+                .name("committer".into())
                 .spawn(move || {
                     while let Ok(mut request) = rx.recv() {
-                        let commit_result = do_commit(
-                            request.id,
-                            request
-                                .take_pages()
-                                .into_iter()
-                                .map(|(k, v)| (k, unsafe { v.reconstruct(&block, &cow_pages) }))
-                                .collect(),
-                        );
+                        info_span!("transaction commit", %request).in_scope(|| {
+                            let commit_result = do_commit(
+                                request.id,
+                                request
+                                    .take_pages()
+                                    .into_iter()
+                                    .map(|(k, v)| (k, unsafe { v.reconstruct(&block, &cow_pages) }))
+                                    .collect(),
+                            );
 
-                        request.respond(commit_result);
+                            request.respond(commit_result);
+                        });
                     }
                 })
                 .unwrap()

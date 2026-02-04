@@ -117,8 +117,9 @@ impl PageState {
                     self.wait(previous);
 
                     // TODO do we want to keep this in non-debug builds?
-                    if start.elapsed() > Duration::from_millis(100) {
-                        warn!("lock held exceedingly long");
+                    let lock_duration = start.elapsed();
+                    if lock_duration > Duration::from_millis(100) {
+                        warn!("lock waited for too long: {lock_duration:?}");
                     }
                 }
             }
