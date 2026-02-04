@@ -225,7 +225,7 @@ impl Debug for Block {
 
 impl Block {
     const SIZE: Size = if cfg!(miri) {
-        Size::MiB(8)
+        Size::MiB(128)
     } else {
         Size::GiB(4)
     };

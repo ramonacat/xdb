@@ -46,6 +46,7 @@ impl<'a> Arbitrary<'a> for Value {
 }
 
 #[derive(Debug, Arbitrary)]
+// TODO add a `Sleep` command, it would allow us to stress-test locking code
 enum Command {
     Insert(KeyType, Value),
     Delete(KeyType),
@@ -76,6 +77,8 @@ struct TransactionCommands {
 }
 
 impl TransactionCommands {
+    // TODO allow providing probabilities for each type of command (so we can e.g. create a read
+    // heavy test)
     fn new_random<TRng: Rng>(rng: &mut TRng) -> Self {
         let mut buffer = [0u8; 1024];
         rng.fill(&mut buffer);
@@ -139,17 +142,20 @@ struct Cli {
     test: TestName,
 }
 
-// TODO Add a separate "mod X" testing mode, where every thread operates only on keys that are
-// (n%THREAD_COUNT)+thread_id, and verifies that it does not see anything from other threads.
+// TODO Add a separate "mod X" testing mode, where every thread operates (in a single, long
+// transaction) only on keys that are (n%THREAD_COUNT)+thread_id, and verifies that it does not
+// see anything from other threads.
 fn main() {
     // TODO create a script for running a docker container with jaeger and make it possible to send
     // telemetry there
-    FmtSubscriber::builder()
-        .with_thread_names(true)
-        .with_env_filter(EnvFilter::from_default_env())
-        .pretty()
-        .with_writer(std::fs::File::create("log.txt").unwrap())
-        .init();
+    if !cfg!(miri) {
+        FmtSubscriber::builder()
+            .with_thread_names(true)
+            .with_env_filter(EnvFilter::from_default_env())
+            .pretty()
+            .with_writer(std::fs::File::create("log.txt").unwrap())
+            .init();
+    }
 
     let cli = Cli::parse();
 
