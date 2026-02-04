@@ -7,6 +7,6 @@ edition = "2024"
 xdb = {path="../xdb/"}
 arbitrary = { version = "1.4.2", features = ["derive"] }
 rand = "0.9.2"
-tracing = { version = "0.1.44", features = ["max_level_debug"] }
+tracing = { version = "0.1.44", features = ["max_level_warn"] }
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 clap = { version = "4.5.57", features = ["derive"] }

@@ -1,26 +1,85 @@
+use bytemuck::{Pod, Zeroable};
+
 use crate::{
+    Size,
     page::PAGE_DATA_SIZE,
     storage::{PageIndex, StorageError, in_memory::block::Block},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Zeroable, Pod, Clone, Copy)]
+#[repr(C)]
+struct BitmapPage {
+    count: u16,
+    _unused1: u16,
+    _unused2: u32,
+
+    data: BitmapData,
+}
+
+const BITMAP_DATA_SIZE: Size = PAGE_DATA_SIZE.subtract(Size::of::<u16>());
+const _: () = assert!(Size::of::<BitmapPage>().is_equal(PAGE_DATA_SIZE));
+
+type BitmapEntry = u64;
+type BitmapData = [BitmapEntry; BITMAP_DATA_SIZE.divide(Size::of::<BitmapEntry>())];
+
+impl BitmapPage {
+    fn set(&mut self, bit_location: BitLocation) {
+        self.count += 1;
+
+        self.data[usize::try_from(bit_location.item_in_page).unwrap()] |=
+            1 << bit_location.bit_in_item;
+    }
+
+    fn find_and_unset(&mut self, count: usize) -> Vec<usize> {
+        debug_assert!(self.count > 0);
+
+        let mut result = vec![];
+
+        for (i, item) in self.data.iter_mut().enumerate() {
+            if self.count == 0 || count == result.len() {
+                break;
+            }
+
+            while *item != 0 {
+                let bit_index = item.trailing_zeros();
+
+                *item &= !(1 << bit_index);
+
+                self.count -= 1;
+
+                result.push(
+                    (i * usize::try_from(BitmapEntry::BITS).unwrap())
+                        + (usize::try_from(bit_index).unwrap()),
+                );
+
+                if result.len() == count {
+                    break;
+                }
+            }
+        }
+
+        result
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 struct BitLocation {
     page: PageIndex,
-    byte_in_page: u64,
-    bit_in_byte: u8,
+    item_in_page: u32,
+    bit_in_item: u8,
 }
 
 impl BitLocation {
     fn new(index: u64) -> Self {
-        let bits_per_page = 8 * u64::try_from(PAGE_DATA_SIZE.as_bytes()).unwrap();
+        let bits_per_page = (Size::of::<BitmapData>().as_bytes() * 8) as u64;
 
         let page = PageIndex::from_value(index / bits_per_page);
-        let bit_in_page = index % bits_per_page;
+        let bit_in_page = u32::try_from(index % bits_per_page).unwrap();
 
         Self {
             page,
-            byte_in_page: bit_in_page / 8,
-            bit_in_byte: (bit_in_page % 8) as u8,
+            item_in_page: bit_in_page / BitmapEntry::BITS,
+            bit_in_item: (bit_in_page % BitmapEntry::BITS) as u8,
         }
     }
 }
@@ -42,62 +101,65 @@ impl Bitmap {
         let page = self.block.get_or_allocate_zeroed(bit_location.page)?;
 
         let mut lock = page.lock();
-        lock.data_mut::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
-            [usize::try_from(bit_location.byte_in_page).unwrap()] |= 1 << bit_location.bit_in_byte;
+        lock.data_mut::<BitmapPage>().set(bit_location);
 
         Ok(())
     }
 
-    /// This will find **A** bit and flip it, atomically.
+    /// This will find at most count bits and flip each of them atomically.
     /// The bit will not neccesairly be the first bit (as for example there could be a race
     /// condition while looking for it). It might not find any bits, even if some values are set.
     /// This is very much best-effort, in terms of accuracy of finding a bit.
-    pub fn find_and_unset(&self) -> Option<usize> {
+    pub fn find_and_unset(&self, count: usize) -> Vec<usize> {
+        let mut result = vec![];
+
         for page_index in 0..=self.block.page_count_lower_bound() {
+            if result.len() == count {
+                break;
+            }
+
             let Some(page_ref) = self.block.try_get(PageIndex::from_value(page_index)) else {
                 continue;
             };
+
             let Ok(mut page) = page_ref.lock_nowait() else {
                 continue;
             };
 
-            for (i, byte) in page
-                .data_mut::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
-                .iter_mut()
-                .enumerate()
-            {
-                if *byte != 0 {
-                    let bit_index = byte.trailing_zeros();
+            let data = page.data_mut::<BitmapPage>();
+            if data.count == 0 {
+                continue;
+            }
 
-                    *byte &= !(1 << bit_index);
+            let page_bit_offset =
+                usize::try_from(page_index).unwrap() * Size::of::<BitmapData>().as_bytes() * 8;
 
-                    return Some(
-                        (usize::try_from(page_index).unwrap() * PAGE_DATA_SIZE.as_bytes() * 8)
-                            + (i * 8)
-                            + (usize::try_from(bit_index).unwrap()),
-                    );
-                }
+            for in_page_bit_index in data.find_and_unset(count - result.len()) {
+                result.push(page_bit_offset + in_page_bit_index);
             }
         }
 
-        None
+        result
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::storage::in_memory::Bitmap;
+    use super::*;
 
-    fn find_and_unset_retries(bitmap: &Bitmap) -> Option<usize> {
+    use std::collections::HashSet;
+
+    fn find_and_unset_retries(bitmap: &Bitmap, count: usize) -> Vec<usize> {
+        let mut result = HashSet::new();
         for _ in 0..10 {
-            if let Some(x) = bitmap.find_and_unset() {
-                return Some(x);
+            for x in bitmap.find_and_unset(count) {
+                result.insert(x);
             }
 
             crate::thread::yield_now();
         }
 
-        return None;
+        result.into_iter().collect()
     }
 
     #[test]
@@ -106,25 +168,36 @@ mod test {
 
         bitmap.set(12).unwrap();
 
-        assert_eq!(find_and_unset_retries(&bitmap), Some(12));
-        assert_eq!(find_and_unset_retries(&bitmap), None);
+        assert_eq!(find_and_unset_retries(&bitmap, 10), vec![12]);
+        assert_eq!(find_and_unset_retries(&bitmap, 10), vec![]);
 
-        bitmap.set(10_000).unwrap();
+        bitmap.set(50_000).unwrap();
 
-        assert_eq!(find_and_unset_retries(&bitmap), Some(10_000));
-        assert_eq!(find_and_unset_retries(&bitmap), None);
+        assert_eq!(find_and_unset_retries(&bitmap, 10), vec![50_000]);
 
         bitmap.set(1).unwrap();
-        bitmap.set(10_000).unwrap();
+        bitmap.set(50_000).unwrap();
         bitmap.set(3).unwrap();
 
-        let a = find_and_unset_retries(&bitmap).unwrap();
-        let b = find_and_unset_retries(&bitmap).unwrap();
-        let c = find_and_unset_retries(&bitmap).unwrap();
+        let mut found = find_and_unset_retries(&bitmap, 10);
+        found.sort();
 
-        let mut all = vec![a, b, c];
-        all.sort();
+        assert_eq!(found, vec![1, 3, 50_000]);
+    }
 
-        assert_eq!(&all, &[1, 3, 10_000]);
+    #[test]
+    fn bitmap_respects_count() {
+        let bitmap = Bitmap::new("test".into());
+
+        for i in 25_000..50_000 {
+            bitmap.set(i).unwrap();
+        }
+
+        let found = bitmap.find_and_unset(100);
+        assert!(
+            found.len() <= 100,
+            "requested 100 items, found: {}",
+            found.len()
+        );
     }
 }

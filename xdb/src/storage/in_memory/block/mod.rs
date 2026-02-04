@@ -6,6 +6,7 @@ use crate::storage::StorageError;
 use crate::storage::in_memory::block::page_state::PageStateValue;
 use bytemuck::Zeroable;
 use std::ops::DerefMut;
+#[cfg(debug_assertions)]
 use std::time::{Duration, Instant};
 use std::{fmt::Debug, mem::MaybeUninit, ops::Deref, pin::Pin, ptr::NonNull};
 use thiserror::Error;
@@ -66,6 +67,7 @@ pub struct PageGuard<'block> {
     page: NonNull<Page>,
     block: &'block Block,
     index: PageIndex,
+    #[cfg(debug_assertions)]
     taken: Instant,
     span: Span,
 }
@@ -84,6 +86,7 @@ impl<'block> PageGuard<'block> {
             page,
             block,
             index,
+            #[cfg(debug_assertions)]
             taken: Instant::now(),
             span,
         }
@@ -106,6 +109,7 @@ impl<'block> PageGuard<'block> {
             page,
             block,
             index,
+            #[cfg(debug_assertions)]
             taken: Instant::now(),
             span,
         })
@@ -135,10 +139,13 @@ impl DerefMut for PageGuard<'_> {
 impl Drop for PageGuard<'_> {
     #[instrument(skip(self), fields(index = ?self.index, block = self.block.name), follows_from = [&self.span])]
     fn drop(&mut self) {
-        let elapsed = self.taken.elapsed();
+        #[cfg(debug_assertions)]
+        {
+            let elapsed = self.taken.elapsed();
 
-        if elapsed > Duration::from_millis(100) {
-            warn!("lock held for too long: {elapsed:?}");
+            if elapsed > Duration::from_millis(100) {
+                warn!("lock held for too long: {elapsed:?}");
+            }
         }
 
         unsafe { self.block.housekeeping_for(self.index) }.unlock();

@@ -72,18 +72,15 @@ impl<'storage> VersionManagedTransaction<'storage> {
         // getting the same page
         let lock = self.version_manager.vacuum.freeze();
 
-        for _ in 0..10000 {
-            if let Some(free_page) = self
-                .version_manager
-                .cow_pages_freemap
-                .find_and_unset()
-                .map(|index| self.version_manager.cow_pages.get(PageIndex(index as u64)))
-            {
-                *free_page.lock() = Page::zeroed();
-                recycled_page_queue.push((free_page.as_ptr(), free_page.index()));
-            } else {
-                break;
-            }
+        for free_page in self
+            .version_manager
+            .cow_pages_freemap
+            .find_and_unset(10000)
+            .into_iter()
+            .map(|index| self.version_manager.cow_pages.get(PageIndex(index as u64)))
+        {
+            *free_page.lock() = Page::zeroed();
+            recycled_page_queue.push((free_page.as_ptr(), free_page.index()));
         }
 
         drop(lock);
@@ -96,7 +93,8 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     // TODO avoid passing by value
-    // TODO this should block and wait for vacuum if there are no pages available
+    // TODO we lose a lot of performance by always creating a cow page, we should do this only
+    // when there's an actual write
     #[allow(clippy::large_types_passed_by_value)]
     fn allocate_cow_copy(&self, page: Page) -> Result<PageRef<'storage>, StorageError> {
         if let Some(recycled) = self.get_recycled_cow_page() {

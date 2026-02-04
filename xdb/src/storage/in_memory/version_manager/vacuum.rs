@@ -24,10 +24,14 @@ struct VacuumThread {
     cow_copies_freemap: Arc<Bitmap>,
 }
 
-impl VacuumThread {
-    fn freeze_if_needed(&self) {
-        debug!("checking freeze requests");
+#[must_use]
+enum FreezeResult {
+    Continue,
+    Exit,
+}
 
+impl VacuumThread {
+    fn freeze_if_needed(&self) -> FreezeResult {
         let freeze_requests = self.freeze_requests.as_ref();
         let is_currently_frozen = self.is_currently_frozen.as_ref();
 
@@ -46,18 +50,30 @@ impl VacuumThread {
             is_currently_frozen.atomic().store(1, Ordering::Release);
             let unfreezed = is_currently_frozen.wake(u32::MAX);
 
+            if !self.running.load(Ordering::Acquire) {
+                debug!("{requests} waiting, {unfreezed} unfreezed, exit requested, stopping");
+                return FreezeResult::Exit;
+            }
+
             debug!("waiting for {requests} freeze requests ({unfreezed} threads unfreezed)");
             match freeze_requests.wait(requests) {
                 Ok(()) | Err(FutexError::Race) => {}
             }
         }
 
-        debug!("exiting freeze_if_needed");
+        if self.running.load(Ordering::Acquire) {
+            FreezeResult::Continue
+        } else {
+            FreezeResult::Exit
+        }
     }
 
     pub fn run(&self) {
         while self.running.load(Ordering::Relaxed) {
-            self.freeze_if_needed();
+            match self.freeze_if_needed() {
+                FreezeResult::Continue => {}
+                FreezeResult::Exit => break,
+            }
 
             debug!("requesting running transactions");
 
@@ -66,7 +82,11 @@ impl VacuumThread {
                 drop(running_transactions);
                 // TODO we need a smarter way of scheduling vacuum (based on usage of the
                 // block)
-                thread::sleep(Duration::from_secs(10));
+                if cfg!(any(fuzzing, test)) {
+                    thread::yield_now();
+                } else {
+                    thread::sleep(Duration::from_secs(10));
+                }
                 continue;
             };
             drop(running_transactions);
@@ -87,11 +107,9 @@ impl VacuumThread {
                 if i.is_multiple_of(10000) {
                     debug!("vacuum checking for freezes and exit requests");
 
-                    self.freeze_if_needed();
-
-                    if !self.running.load(Ordering::Relaxed) {
-                        debug!("exit requested");
-                        break;
+                    match self.freeze_if_needed() {
+                        FreezeResult::Continue => {}
+                        FreezeResult::Exit => break,
                     }
                 }
 
@@ -211,6 +229,7 @@ impl Drop for Vacuum {
     fn drop(&mut self) {
         debug!("dropping vacuum...");
         self.running.store(false, Ordering::Relaxed);
+        self.freeze_requests.as_ref().wake(u32::MAX);
 
         let handle = self.handle.take();
 
