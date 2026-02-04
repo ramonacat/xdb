@@ -20,8 +20,8 @@ struct VacuumThread {
     freeze_requests: Pin<Arc<Futex>>,
     is_currently_frozen: Pin<Arc<Futex>>,
     running_transactions: Arc<Mutex<BTreeSet<TransactionId>>>,
-    cow_copies: Arc<Block>,
-    cow_copies_freemap: Arc<Bitmap>,
+    data: Arc<Block>,
+    freemap: Arc<Bitmap>,
 }
 
 #[must_use]
@@ -98,7 +98,7 @@ impl VacuumThread {
             let mut i = 0u64;
             let mut freed_count = 0u64;
 
-            let pages_to_check = self.cow_copies.page_count_lower_bound();
+            let pages_to_check = self.data.page_count_lower_bound();
             debug!("vacuum will iterate over {pages_to_check} pages");
             while i < pages_to_check {
                 // TODO this is another scheduling issue, if there's a lot of pages,
@@ -115,7 +115,7 @@ impl VacuumThread {
 
                 i += 1;
 
-                let Some(page) = self.cow_copies.try_get(index) else {
+                let Some(page) = self.data.try_get(index) else {
                     continue;
                 };
 
@@ -123,7 +123,7 @@ impl VacuumThread {
                     && let Some(visible_until) = page.visible_until()
                     && visible_until < min_txid
                 {
-                    self.cow_copies_freemap.set(index.0).unwrap();
+                    self.freemap.set(index.0).unwrap();
                     freed_count += 1;
                 }
 
@@ -148,8 +148,8 @@ pub struct Vacuum {
 impl Vacuum {
     pub fn start(
         running_transactions: Arc<Mutex<BTreeSet<TransactionId>>>,
-        cow_copies: Arc<Block>,
-        cow_copies_freemap: Arc<Bitmap>,
+        data: Arc<Block>,
+        freemap: Arc<Bitmap>,
     ) -> Self {
         let running = Arc::new(AtomicBool::new(true));
         let freeze_requests = Arc::pin(Futex::new(0));
@@ -168,8 +168,8 @@ impl Vacuum {
                         freeze_requests,
                         is_currently_frozen,
                         running_transactions,
-                        cow_copies,
-                        cow_copies_freemap,
+                        data,
+                        freemap,
                     };
                     runner.run();
                 })

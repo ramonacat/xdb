@@ -46,15 +46,13 @@ impl InMemoryStorage {
     // multiple storages?
     pub fn new() -> Self {
         let running_transactions = Arc::new(Mutex::new(BTreeSet::new()));
-        let cow_copies = Arc::new(Block::new("cow copies".into()));
-        let cow_copies_freemap = Arc::new(Bitmap::new("cow copies freemap".into()));
+        let freemap = Arc::new(Bitmap::new("freemap".into()));
 
         Self {
             version_manager: VersionManager::new(
                 Arc::new(Block::new("main block".into())),
                 running_transactions,
-                cow_copies,
-                cow_copies_freemap,
+                freemap,
             ),
         }
     }

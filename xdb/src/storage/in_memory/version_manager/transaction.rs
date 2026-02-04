@@ -16,6 +16,7 @@ use crate::{
             version_manager::{CowPage, MainPageRef, VersionManager},
         },
     },
+    sync::Mutex,
 };
 
 #[derive(Debug)]
@@ -24,6 +25,7 @@ pub struct VersionManagedTransaction<'storage> {
     pages: HashMap<PageIndex, CowPage<'storage>>,
     version_manager: &'storage VersionManager,
     span: tracing::Span,
+    last_free_page_scan: Mutex<Option<Instant>>,
 }
 
 impl Drop for VersionManagedTransaction<'_> {
@@ -46,14 +48,17 @@ impl<'storage> VersionManagedTransaction<'storage> {
             pages: HashMap::new(),
             version_manager,
             span,
+            last_free_page_scan: Mutex::new(None),
         }
     }
 
-    fn get_recycled_cow_page(&self) -> Option<PageRef<'storage>> {
+    // TODO all page allocations should go through this
+    fn get_recycled_page(&self) -> Option<PageRef<'storage>> {
         // don't bother with all this if there aren't many allocated pages (TODO figure out if this
         // number makes sense)
-        if self.version_manager.cow_pages.page_count_lower_bound() < 50000 {
-            debug!("not recycling cow pages, too few were allocated");
+        if self.version_manager.data.page_count_lower_bound() < 50000 {
+            debug!("not recycling pages, too few were allocated");
+
             return None;
         }
 
@@ -64,7 +69,20 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 "got a page from recycled_page_queue (length: {})",
                 recycled_page_queue.len()
             );
-            return Some(unsafe { PageRef::new(page.0, &self.version_manager.cow_pages, page.1) });
+            return Some(unsafe { PageRef::new(page.0, &self.version_manager.data, page.1) });
+        }
+
+        let since_last_free_page_scan = self
+            .last_free_page_scan
+            .lock()
+            .unwrap()
+            .map_or(Duration::MAX, |x| x.elapsed());
+        if since_last_free_page_scan < Duration::from_secs(10) {
+            debug!(
+                "only {since_last_free_page_scan:?} elapsed since last free page scan, skipping"
+            );
+
+            return None;
         }
 
         // TODO we need a better API for this - we must stop vacuum from marking the page as unused
@@ -74,22 +92,23 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
         for free_page in self
             .version_manager
-            .cow_pages_freemap
+            .freemap
             .find_and_unset(10000)
             .into_iter()
-            .map(|index| self.version_manager.cow_pages.get(PageIndex(index as u64)))
+            .map(|index| self.version_manager.data.get(PageIndex(index as u64)))
         {
             *free_page.lock() = Page::zeroed();
             recycled_page_queue.push((free_page.as_ptr(), free_page.index()));
         }
 
         drop(lock);
+        *self.last_free_page_scan.lock().unwrap() = Some(Instant::now());
 
         debug!("recycled {} pages", recycled_page_queue.len());
 
         recycled_page_queue
             .pop()
-            .map(|page| unsafe { PageRef::new(page.0, &self.version_manager.cow_pages, page.1) })
+            .map(|page| unsafe { PageRef::new(page.0, &self.version_manager.data, page.1) })
     }
 
     // TODO avoid passing by value
@@ -97,13 +116,13 @@ impl<'storage> VersionManagedTransaction<'storage> {
     // when there's an actual write
     #[allow(clippy::large_types_passed_by_value)]
     fn allocate_cow_copy(&self, page: Page) -> Result<PageRef<'storage>, StorageError> {
-        if let Some(recycled) = self.get_recycled_cow_page() {
+        if let Some(recycled) = self.get_recycled_page() {
             *recycled.lock() = page;
 
             return Ok(recycled);
         }
 
-        let allocation_result = self.version_manager.cow_pages.allocate();
+        let allocation_result = self.version_manager.data.allocate();
         match allocation_result {
             Ok(guard) => Ok(guard.initialize(page)),
             Err(StorageError::OutOfSpace) => {
@@ -111,7 +130,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 // are available
                 let start = Instant::now();
                 loop {
-                    if let Some(page) = self.get_recycled_cow_page() {
+                    if let Some(page) = self.get_recycled_page() {
                         return Ok(page);
                     }
 
@@ -211,13 +230,10 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
     #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn commit(&mut self) -> Result<(), StorageError> {
-        // TODO commits should all happen in a single thread, to avoid deadlocks and races
         // TODO make the commit consistent in event of a crash:
         //    1. write to a transaction log
         //    2. fsync the transaction log
         //    3. fsync the modified pages
-        // TODO cleanup the cow_pages, once they're copied to the main storage
-        //
         self.version_manager
             .committer
             .request(self.id, self.pages.drain().collect())

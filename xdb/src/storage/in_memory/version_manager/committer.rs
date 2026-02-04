@@ -57,23 +57,28 @@ impl Display for CommitRequest {
                     .map_or_else(|| "[none]".to_string(), |y| format!("{y:?}"))
             ),
         )?;
-        for page in self.pages.values() {
-            write!(
-                f,
-                "(main: {}, cow: {:?}, verstion: {})",
-                match page.main {
-                    crate::storage::in_memory::version_manager::RawMainPage::Initialized(
-                        _,
-                        index,
-                    ) => format!("init({})", index.value()),
-                    crate::storage::in_memory::version_manager::RawMainPage::Uninitialized(
-                        _,
-                        index,
-                    ) => format!("uninit({})", index.value()),
-                },
-                page.cow.1.value(),
-                page.version
-            )?;
+
+        if self.pages.len() < 100 {
+            for page in self.pages.values() {
+                write!(
+                    f,
+                    "(main: {}, cow: {:?}, verstion: {})",
+                    match page.main {
+                        crate::storage::in_memory::version_manager::RawMainPage::Initialized(
+                            _,
+                            index,
+                        ) => format!("init({})", index.value()),
+                        crate::storage::in_memory::version_manager::RawMainPage::Uninitialized(
+                            _,
+                            index,
+                        ) => format!("uninit({})", index.value()),
+                    },
+                    page.cow.1.value(),
+                    page.version
+                )?;
+            }
+        } else {
+            write!(f, "{} pages", self.pages.len()).unwrap();
         }
 
         write!(f, "]")?;
@@ -172,7 +177,7 @@ fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<()
 }
 
 impl Committer {
-    pub(crate) fn new(block: Arc<Block>, cow_pages: Arc<Block>) -> Self {
+    pub(crate) fn new(block: Arc<Block>) -> Self {
         let (tx, rx) = mpsc::channel::<CommitRequest>();
         let handle = {
             thread::Builder::new()
@@ -185,7 +190,7 @@ impl Committer {
                                 request
                                     .take_pages()
                                     .into_iter()
-                                    .map(|(k, v)| (k, unsafe { v.reconstruct(&block, &cow_pages) }))
+                                    .map(|(k, v)| (k, unsafe { v.reconstruct(&block) }))
                                     .collect(),
                             );
 

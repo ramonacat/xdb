@@ -61,11 +61,7 @@ struct RawCowPage {
 unsafe impl Send for RawCowPage {}
 
 impl RawCowPage {
-    const unsafe fn reconstruct<'block>(
-        self,
-        block: &'block Block,
-        cow_pages: &'block Block,
-    ) -> CowPage<'block> {
+    const unsafe fn reconstruct(self, block: &'_ Block) -> CowPage<'_> {
         let main = match self.main {
             RawMainPage::Initialized(page, index) => {
                 MainPageRef::Initialized(unsafe { PageRef::new(page, block, index) })
@@ -77,7 +73,7 @@ impl RawCowPage {
 
         CowPage {
             main,
-            cow: unsafe { PageRef::new(self.cow.0, cow_pages, self.cow.1) },
+            cow: unsafe { PageRef::new(self.cow.0, block, self.cow.1) },
             version: self.version,
         }
     }
@@ -85,14 +81,13 @@ impl RawCowPage {
 
 #[derive(Debug)]
 pub struct VersionManager {
-    // TODO this block should be one with the cow_pages
     data: Arc<Block>,
+    // TODO rename -> freemap
+    freemap: Arc<Bitmap>,
     #[allow(unused)]
     vacuum: Vacuum,
     committer: Committer,
     running_transactions: Arc<Mutex<BTreeSet<TransactionId>>>,
-    cow_pages: Arc<Block>,
-    cow_pages_freemap: Arc<Bitmap>,
     // TODO instead of a mutex, we should probably have per-thread queues or something
     // TODO give it a better name, it is not really a queue
     // TODO sending raw pointers kinda sucks, we probably should just do PageIndices?
@@ -106,20 +101,14 @@ impl VersionManager {
     pub fn new(
         data: Arc<Block>,
         running_transactions: Arc<Mutex<BTreeSet<TransactionId>>>,
-        cow_pages: Arc<Block>,
-        cow_pages_freemap: Arc<Bitmap>,
+        freemap: Arc<Bitmap>,
     ) -> Self {
         Self {
-            vacuum: Vacuum::start(
-                running_transactions.clone(),
-                cow_pages.clone(),
-                cow_pages_freemap.clone(),
-            ),
-            committer: Committer::new(data.clone(), cow_pages.clone()),
+            vacuum: Vacuum::start(running_transactions.clone(), data.clone(), freemap.clone()),
+            committer: Committer::new(data.clone()),
             data,
             running_transactions,
-            cow_pages,
-            cow_pages_freemap,
+            freemap,
             recycled_page_queue: Mutex::new(Vec::new()),
         }
     }
