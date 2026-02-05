@@ -6,12 +6,18 @@ cargo test
 cargo clippy
 cargo fmt --check
 cargo +nightly miri nextest run
+
 pushd xdb-shuttle
 # it is important that the tests are ran with nextest, as it runs each test in a separate process, and without that we will run into trouble with static atomics when running shuttle
 # TODO figure out why shuttle keeps crashing...
 #cargo nextest run --release
 cargo clippy
 cargo fmt --check
+popd
+
+pushd xdb-tests
+cargo run --release multi-threaded-random
+cargo run --release single-threaded-random
 popd
 
 # TODO run xdb-tests here, once its stable enough

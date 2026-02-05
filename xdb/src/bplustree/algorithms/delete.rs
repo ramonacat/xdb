@@ -148,6 +148,7 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
                 return Ok(());
             }
             Err(MergeError::NotEnoughCapacity) => {}
+            // TODO this happens occasionaly in tests, figure out why and fix!
             Err(MergeError::NotSiblings) => todo!(), // this should probably just panic?
             Err(MergeError::Tree(err)) => return Err(err),
         }

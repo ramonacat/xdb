@@ -28,10 +28,12 @@ impl VacuumThread {
     // TODO log a warning if a freeze is taking too long
     pub fn run(&self) {
         loop {
-            match self.scheduler.block_if_needed() {
+            match self.scheduler.block_if_unscheduled() {
                 scheduler::RequestedState::Exit => break,
                 scheduler::RequestedState::Run => {}
             }
+
+            self.scheduler.start_full_run();
 
             debug!("requesting running transactions");
 
@@ -55,6 +57,7 @@ impl VacuumThread {
 
             let mut i = 0u64;
             let mut freed_count = 0u64;
+            let mut checked_count = 0u64;
 
             let pages_to_check = self.data.page_count_lower_bound();
             debug!("vacuum will iterate over {pages_to_check} pages");
@@ -65,30 +68,40 @@ impl VacuumThread {
                 if i.is_multiple_of(10000) {
                     debug!("vacuum checking for freezes and exit requests");
 
-                    match self.scheduler.block_if_needed() {
+                    match self.scheduler.block_if_frozen() {
                         scheduler::RequestedState::Exit => break,
                         scheduler::RequestedState::Run => {}
                     }
                 }
 
+                index = index.next();
                 i += 1;
 
                 let Some(page) = self.data.try_get(index) else {
                     continue;
                 };
 
-                if let Ok(page) = page.lock_nowait()
-                    && let Some(visible_until) = page.visible_until()
-                    && visible_until < min_txid
-                {
-                    self.freemap.set(index.0).unwrap();
-                    freed_count += 1;
-                }
+                if let Ok(page_guard) = page.lock_nowait() {
+                    checked_count += 1;
 
-                index = index.next();
+                    if let Some(visible_until) = page_guard.visible_until()
+                        && visible_until < min_txid
+                    {
+                        drop(page_guard); // ensure the lock is dropped before we uninitialize it
+                        unsafe {
+                            page.reset();
+                        }
+
+                        self.freemap.set(index.0).unwrap();
+                        freed_count += 1;
+                    }
+                }
             }
 
-            debug!("vacuum scan finished, {freed_count}/{i} pages marked as free");
+            debug!(
+                "vacuum scan finished, freed/checked/scanned/total {freed_count}/{checked_count}/{i}/{}",
+                self.data.page_count_lower_bound()
+            );
         }
 
         debug!("exiting vacuum thread...");

@@ -7,7 +7,7 @@ use std::{
 use tracing::{debug, instrument};
 
 use crate::{
-    platform::futex::{Futex, FutexError},
+    platform::futex::Futex,
     sync::{Mutex, atomic::Ordering},
 };
 
@@ -29,6 +29,7 @@ impl Drop for FreezeGuard<'_> {
 }
 
 #[derive(Clone, Copy)]
+// TODO generalize this pattern? this is the same thing that PageState/PageStateValue does
 struct SchedulerStateValue(u32);
 
 impl Debug for SchedulerStateValue {
@@ -110,7 +111,7 @@ impl SchedulerState {
                 Some(v.request_unfreeze().0)
             }) {
             Ok(_) => {
-                self.0.as_ref().wake(u32::MAX);
+                self.0.as_ref().wake_all();
             }
             Err(_) => todo!(),
         }
@@ -135,13 +136,9 @@ impl SchedulerState {
                 debug!("unfreezed from {previous:?}");
 
                 while previous.is_running() {
-                    self.0.as_ref().wake(u32::MAX);
+                    self.0.as_ref().wake_all();
 
-                    match self.0.as_ref().wait(previous.0, None) {
-                        // TODO ::Race is practically equivalent with Ok(()) for all purposes,
-                        // Futex should just not return an error
-                        Ok(()) | Err(FutexError::Race) => {}
-                    }
+                    self.0.as_ref().wait(previous.0, None);
 
                     previous =
                         SchedulerStateValue(self.0.as_ref().atomic().load(Ordering::Acquire));
@@ -151,14 +148,10 @@ impl SchedulerState {
         }
     }
 
-    fn wait(
-        &self,
-        current_state: SchedulerStateValue,
-        timeout: Option<Duration>,
-    ) -> Result<(), FutexError> {
+    fn wait(&self, current_state: SchedulerStateValue, timeout: Option<Duration>) {
         debug!("waiting to change state from {current_state:?}");
 
-        self.0.as_ref().wait(current_state.0, timeout)
+        self.0.as_ref().wait(current_state.0, timeout);
     }
 
     fn request_exit(&self) {
@@ -172,7 +165,7 @@ impl SchedulerState {
                 Some(x.request_exit().0)
             }) {
             Ok(_) => {
-                self.0.as_ref().wake(u32::MAX);
+                self.0.as_ref().wake_all();
             }
             Err(_) => todo!(),
         }
@@ -189,7 +182,7 @@ impl SchedulerState {
                 Some(x.set_running(is_running).0)
             }) {
             Ok(_) => {
-                self.0.as_ref().wake(u32::MAX);
+                self.0.as_ref().wake_all();
             }
             Err(_) => todo!(),
         }
@@ -203,7 +196,7 @@ pub(super) struct Scheduler {
 }
 
 impl Scheduler {
-    const PAUSE_LENGTH: Duration = Duration::from_secs(30);
+    const PAUSE_LENGTH: Duration = Duration::from_secs(10);
 
     pub fn new() -> Self {
         Self {
@@ -212,33 +205,56 @@ impl Scheduler {
         }
     }
 
-    pub(super) fn block_if_needed(&self) -> RequestedState {
+    pub(super) fn block_if_unscheduled(&self) -> RequestedState {
+        match self.block_if_frozen() {
+            RequestedState::Exit => return RequestedState::Exit,
+            RequestedState::Run => {}
+        }
+
+        loop {
+            let elapsed_since_last_run = self
+                .last_finished_at
+                .lock()
+                .unwrap()
+                .map_or(Duration::MAX, |x| x.elapsed());
+
+            let current_state = self.state.current();
+
+            if current_state.is_exit_requested() {
+                return RequestedState::Exit;
+            } else if current_state.is_freeze_requested() {
+                self.set_running(false);
+
+                self.state.wait(current_state, None);
+            } else if elapsed_since_last_run < Self::PAUSE_LENGTH {
+                debug!("{elapsed_since_last_run:?} since last run, waiting");
+
+                let timeout = self
+                    .last_finished_at
+                    .lock()
+                    .unwrap()
+                    .map_or(Self::PAUSE_LENGTH, |x| {
+                        Self::PAUSE_LENGTH.saturating_sub(x.elapsed())
+                    });
+                self.state.wait(current_state, Some(timeout));
+            } else {
+                self.set_running(true);
+                return RequestedState::Run;
+            }
+        }
+    }
+
+    pub(super) fn block_if_frozen(&self) -> RequestedState {
         loop {
             let current_state = self.state.current();
 
             if current_state.is_exit_requested() {
                 return RequestedState::Exit;
-            } else if current_state.is_freeze_requested()
-                // TODO make the pause duration configurable
-                // TODO support for forced requests (when we need to block on vacuum to free pages for
-                // allocation)
-                || self.last_finished_at.lock().unwrap().map_or(Duration::MAX, |x| x.elapsed()) >= Self::PAUSE_LENGTH
-            {
-                if current_state.is_running() {
-                    self.state.set_running(false);
-                }
-
-                match self.state.wait(
-                    current_state,
-                    self.last_finished_at
-                        .lock()
-                        .unwrap()
-                        .map(|x| Self::PAUSE_LENGTH.saturating_sub(x.elapsed())),
-                ) {
-                    Ok(()) | Err(FutexError::Race) => {}
-                }
+            } else if current_state.is_freeze_requested() {
+                self.set_running(false);
+                self.state.wait(current_state, None);
             } else {
-                // TODO should this be managed externally?
+                // TODO should this be managed in the vacuum thread itself?
                 self.set_running(true);
                 return RequestedState::Run;
             }
@@ -256,7 +272,11 @@ impl Scheduler {
         self.state.request_exit();
     }
 
-    pub(super) fn set_running(&self, value: bool) {
+    pub fn start_full_run(&self) {
+        *self.last_finished_at.lock().unwrap() = Some(Instant::now());
+    }
+
+    fn set_running(&self, value: bool) {
         self.state.set_running(value);
     }
 }

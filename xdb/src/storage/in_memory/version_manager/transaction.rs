@@ -4,7 +4,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bytemuck::Zeroable;
 use tracing::{debug, info_span, instrument, warn};
 
 use crate::{
@@ -12,7 +11,7 @@ use crate::{
     storage::{
         PageIndex, StorageError, TransactionId,
         in_memory::{
-            block::{PageGuard, PageRef, UninitializedPageGuard},
+            block::{PageGuard, UninitializedPageGuard},
             version_manager::{CowPage, MainPageRef, VersionManager},
         },
     },
@@ -53,7 +52,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     // TODO all page allocations should go through this
-    fn get_recycled_page(&self) -> Option<PageRef<'storage>> {
+    fn get_recycled_page(&self) -> Option<UninitializedPageGuard<'storage>> {
         // don't bother with all this if there aren't many allocated pages (TODO figure out if this
         // number makes sense)
         if self.version_manager.data.page_count_lower_bound() < 50000 {
@@ -69,7 +68,9 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 "got a page from recycled_page_queue (length: {})",
                 recycled_page_queue.len()
             );
-            return Some(unsafe { PageRef::new(page.0, &self.version_manager.data, page.1) });
+            return Some(unsafe {
+                UninitializedPageGuard::new(&self.version_manager.data, page.0, page.1)
+            });
         }
 
         let since_last_free_page_scan = self
@@ -77,6 +78,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
             .lock()
             .unwrap()
             .map_or(Duration::MAX, |x| x.elapsed());
+
         if since_last_free_page_scan < Duration::from_secs(10) {
             debug!(
                 "only {since_last_free_page_scan:?} elapsed since last free page scan, skipping"
@@ -95,9 +97,12 @@ impl<'storage> VersionManagedTransaction<'storage> {
             .freemap
             .find_and_unset(10000)
             .into_iter()
-            .map(|index| self.version_manager.data.get(PageIndex(index as u64)))
+            .map(|index| unsafe {
+                self.version_manager
+                    .data
+                    .get_uninitialized(PageIndex(index as u64))
+            })
         {
-            *free_page.lock() = Page::zeroed();
             recycled_page_queue.push((free_page.as_ptr(), free_page.index()));
         }
 
@@ -106,25 +111,24 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
         debug!("recycled {} pages", recycled_page_queue.len());
 
-        recycled_page_queue
-            .pop()
-            .map(|page| unsafe { PageRef::new(page.0, &self.version_manager.data, page.1) })
+        recycled_page_queue.pop().map(|page| unsafe {
+            UninitializedPageGuard::new(&self.version_manager.data, page.0, page.1)
+        })
     }
 
     // TODO avoid passing by value
     // TODO we lose a lot of performance by always creating a cow page, we should do this only
     // when there's an actual write
+    // TODO rename -> recycle_or_allocate
     #[allow(clippy::large_types_passed_by_value)]
-    fn allocate_cow_copy(&self, page: Page) -> Result<PageRef<'storage>, StorageError> {
+    fn allocate_cow_copy(&self) -> Result<UninitializedPageGuard<'storage>, StorageError> {
         if let Some(recycled) = self.get_recycled_page() {
-            *recycled.lock() = page;
-
             return Ok(recycled);
         }
 
         let allocation_result = self.version_manager.data.allocate();
         match allocation_result {
-            Ok(guard) => Ok(guard.initialize(page)),
+            Ok(guard) => Ok(guard),
             Err(StorageError::OutOfSpace) => {
                 // TODO we should have some mechanism to use to ask vacuum to wake us up when pages
                 // are available
@@ -159,7 +163,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 return Err(StorageError::Deadlock(index));
             }
 
-            let cow = self.allocate_cow_copy(*main_lock)?;
+            let cow = self.allocate_cow_copy()?.initialize(*main_lock);
 
             self.pages.insert(
                 index,
@@ -176,7 +180,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
     #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn reserve(&self) -> Result<UninitializedPageGuard<'storage>, StorageError> {
-        self.version_manager.data.allocate()
+        self.allocate_cow_copy()
     }
 
     // TODO can we avoid passing this by value?
@@ -187,7 +191,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         page_guard: UninitializedPageGuard<'storage>,
         page: Page,
     ) -> Result<(), StorageError> {
-        let cow = self.allocate_cow_copy(page)?;
+        let cow = self.allocate_cow_copy()?.initialize(page);
 
         self.pages.insert(
             page_guard.index(),
@@ -212,7 +216,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         let main = self.version_manager.data.get(page);
         let main_lock = main.lock();
 
-        let cow = self.allocate_cow_copy(*main_lock)?;
+        let cow = self.allocate_cow_copy()?.initialize(*main_lock);
 
         cow.lock().set_visible_until(self.id);
 

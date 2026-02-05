@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use std::time::Duration;
 use std::{marker::PhantomPinned, pin::Pin};
 
-use crate::platform::futex::{Futex, FutexError};
+use crate::platform::futex::Futex;
 
 #[derive(Debug)]
 #[repr(transparent)]
@@ -49,6 +49,10 @@ impl PageStateValue {
     const fn unlock(self) -> Self {
         Self(self.0 & !Self::MASK_IS_LOCKED)
     }
+
+    const fn mark_uninitialized(self) -> Self {
+        Self(self.0 & !Self::MASK_IS_INITIALIZED)
+    }
 }
 
 impl PageState {
@@ -69,13 +73,29 @@ impl PageState {
             .atomic()
             .fetch_or(PageStateValue::MASK_IS_INITIALIZED, Ordering::Release);
 
-        assert!(!PageStateValue(previous_state).is_initialized());
+        debug_assert!(!PageStateValue(previous_state).is_initialized());
+    }
+
+    pub fn mark_uninitialized(self: Pin<&Self>) {
+        match self
+            .atomic()
+            .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
+                let x = PageStateValue(x);
+
+                assert!(!x.is_locked());
+
+                Some(x.mark_uninitialized().0)
+            }) {
+            Ok(_) => {}
+            Err(_) => todo!(),
+        }
     }
 
     pub fn is_initialized(self: Pin<&Self>) -> bool {
         PageStateValue(self.atomic().load(Ordering::Acquire)).is_initialized()
     }
 
+    // TODO rename -> try_lock, change result to bool
     pub fn lock_nowait(self: Pin<&Self>) -> Result<(), LockError> {
         match self
             .atomic()
@@ -127,9 +147,7 @@ impl PageState {
     }
 
     fn wait(self: Pin<&Self>, previous: PageStateValue) {
-        match self.futex().wait(previous.0, None) {
-            Ok(()) | Err(FutexError::Race) => {}
-        }
+        self.futex().wait(previous.0, None);
     }
 
     pub fn unlock(self: Pin<&Self>) {
@@ -155,8 +173,9 @@ impl PageState {
         }
     }
 
+    // TODO rename -> wake_one?
     pub fn wake(self: Pin<&Self>) {
-        let awoken = self.futex().wake(1);
-        debug!("awoken {awoken} waiters");
+        let awoken = self.futex().wake_one();
+        debug!("awoken a waiter? {awoken} ");
     }
 }

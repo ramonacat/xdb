@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::pin::Pin;
 
-use crate::platform::futex::{Futex, FutexError};
+use crate::platform::futex::Futex;
 use crate::storage::in_memory::version_manager::{CowPage, MainPageRef, RawCowPage};
 use crate::storage::{PageIndex, StorageError, TransactionId};
 use crate::{
@@ -31,7 +31,7 @@ impl CommitRequest {
         *self.response.lock().unwrap() = Some(response);
 
         self.is_done.as_ref().atomic().store(1, Ordering::Release);
-        self.is_done.as_ref().wake(1);
+        self.is_done.as_ref().wake_one();
     }
 
     fn take_pages(&mut self) -> HashMap<PageIndex, RawCowPage> {
@@ -223,9 +223,7 @@ impl Committer {
             })
             .unwrap();
 
-        match is_done.as_ref().wait(0, None) {
-            Ok(()) | Err(FutexError::Race) => {}
-        }
+        is_done.as_ref().wait(0, None);
 
         response.lock().unwrap().as_ref().unwrap().clone()
     }

@@ -94,7 +94,7 @@ pub struct VersionManager {
     // perhaps?)
     // TODO give it a better name, it is not really a queue
     // TODO sending raw pointers kinda sucks, we probably should just do PageIndices?
-    recycled_page_queue: Mutex<Vec<(NonNull<Page>, PageIndex)>>,
+    recycled_page_queue: Mutex<Vec<(NonNull<MaybeUninit<Page>>, PageIndex)>>,
 }
 
 unsafe impl Send for VersionManager {}

@@ -44,6 +44,7 @@ impl<'block> PageRef<'block> {
     }
 
     #[instrument(skip(self), fields(index = ?self.index, block = self.block.name))]
+    // TODO rename -> try_lock, change result to option
     pub fn lock_nowait(&self) -> Result<PageGuard<'block>, LockError> {
         unsafe { PageGuard::new_nowait(self.page, self.block, self.index) }
     }
@@ -51,6 +52,14 @@ impl<'block> PageRef<'block> {
     #[instrument(skip(self), fields(index = ?self.index, block = self.block.name))]
     pub fn lock(&self) -> PageGuard<'block> {
         unsafe { PageGuard::new(self.page, self.block, self.index) }
+    }
+
+    // TODO does it have to be unsafe? do we really care if somebody else has a PageRef to this?
+    pub unsafe fn reset(self) -> UninitializedPageGuard<'block> {
+        let housekeeping = unsafe { self.block.housekeeping_for(self.index) };
+        housekeeping.mark_uninitialized();
+
+        unsafe { UninitializedPageGuard::new(self.block, self.page.cast(), self.index) }
     }
 
     pub const fn index(&self) -> PageIndex {
@@ -290,6 +299,36 @@ impl Block {
         }
     }
 
+    // TODO it's unsafe because we don't want multiple UninitializedPageGuards, but do we really
+    // care?
+    pub unsafe fn get_uninitialized(&'_ self, index: PageIndex) -> UninitializedPageGuard<'_> {
+        let latest_initialized_page = self.allocated_page_count.load(Ordering::Acquire);
+        assert!(
+            index.0 < latest_initialized_page,
+            "trying to get page {index:?}, but initialized only upto {latest_initialized_page:?}",
+        );
+
+        let housekeeping = unsafe { self.housekeeping_for(index) };
+
+        assert!(
+            !housekeeping.is_initialized(),
+            "[{}] trying to get as unitialized {index:?}, but housekeeping says it's already initialized",
+            self.name
+        );
+
+        let page = unsafe {
+            self.data
+                .base_address()
+                .cast()
+                .add(usize::try_from(index.0).unwrap())
+        };
+
+        assert!(page.cast() < unsafe { self.data.base_address().byte_add(Self::SIZE.as_bytes()) });
+        assert!(page.cast() >= self.data.base_address());
+
+        unsafe { UninitializedPageGuard::new(self, page, index) }
+    }
+
     #[instrument(skip(self), parent = &self.span)]
     pub fn get_or_allocate_zeroed(&'_ self, index: PageIndex) -> Result<PageRef<'_>, StorageError> {
         while index.0 >= self.allocated_page_count.load(Ordering::Acquire) {
@@ -307,7 +346,8 @@ impl Block {
 
     #[instrument(skip(self), parent = &self.span)]
     pub fn try_get(&'_ self, index: PageIndex) -> Option<PageRef<'_>> {
-        if index.0 >= self.allocated_page_count.load(Ordering::Acquire) {
+        let allocated_page_count = self.allocated_page_count.load(Ordering::Acquire);
+        if index.0 >= allocated_page_count {
             return None;
         }
 
