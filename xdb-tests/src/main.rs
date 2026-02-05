@@ -1,3 +1,4 @@
+mod predictable;
 mod random_single;
 mod random_threaded;
 
@@ -8,8 +9,9 @@ use std::{
     thread::{self},
     time::Duration,
 };
-use tracing::{debug, error};
+use tracing::error;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use xdb::bplustree::TreeKey;
 use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::find;
 use xdb::bplustree::algorithms::insert::insert;
@@ -23,10 +25,12 @@ use xdb::{
 };
 
 type KeyType = BigKey<u16, 1024>;
-// TODO make this a CLI option?
-const RUN_LENGTH: Duration = Duration::from_secs(60);
 
-fn final_checks(tree: &Tree<InMemoryStorage, KeyType>) {
+// TODO make these CLI options?
+const RUN_LENGTH: Duration = Duration::from_secs(60);
+const THREAD_COUNT: usize = 16;
+
+fn final_checks<T: TreeKey + for<'a> Arbitrary<'a>>(tree: &Tree<InMemoryStorage, T>) {
     let mut trx = tree.transaction().unwrap();
     assert_properties(&mut trx);
     trx.rollback().unwrap();
@@ -46,18 +50,16 @@ impl<'a> Arbitrary<'a> for Value {
 }
 
 #[derive(Debug, Arbitrary)]
+#[arbitrary(bound = "T: TreeKey + for<'a> Arbitrary<'a>")]
 // TODO add a `Sleep` command, it would allow us to stress-test locking code
-enum Command {
-    Insert(KeyType, Value),
-    Delete(KeyType),
-    Read(KeyType),
+enum Command<T: TreeKey + for<'a> Arbitrary<'a>> {
+    Insert(T, Value),
+    Delete(T),
+    Read(T),
 }
 
-impl Command {
-    fn run(
-        &self,
-        transaction: &mut TreeTransaction<InMemoryStorage, KeyType>,
-    ) -> Result<(), TreeError> {
+impl<T: TreeKey + for<'a> Arbitrary<'a>> Command<T> {
+    fn run(&self, transaction: &mut TreeTransaction<InMemoryStorage, T>) -> Result<(), TreeError> {
         match self {
             Command::Insert(key, value) => insert(transaction, *key, &value.0).map(|_| ())?,
             Command::Delete(key) => {
@@ -71,12 +73,13 @@ impl Command {
 }
 
 #[derive(Debug, Arbitrary)]
-struct TransactionCommands {
-    commands: Vec<Command>,
+#[arbitrary(bound = "T: TreeKey + for<'a> Arbitrary<'a>")]
+struct TransactionCommands<T: TreeKey + for<'a> Arbitrary<'a>> {
+    commands: Vec<Command<T>>,
     commit: bool,
 }
 
-impl TransactionCommands {
+impl<T: TreeKey + for<'a> Arbitrary<'a>> TransactionCommands<T> {
     // TODO allow providing probabilities for each type of command (so we can e.g. create a read
     // heavy test)
     fn new_random<TRng: Rng>(rng: &mut TRng) -> Self {
@@ -87,10 +90,7 @@ impl TransactionCommands {
         TransactionCommands::arbitrary(&mut unstructured).unwrap()
     }
 
-    fn run(
-        &self,
-        mut transaction: TreeTransaction<InMemoryStorage, KeyType>,
-    ) -> Result<(), TreeError> {
+    fn run(&self, mut transaction: TreeTransaction<InMemoryStorage, T>) -> Result<(), TreeError> {
         for command in &self.commands {
             command.run(&mut transaction)?;
         }
@@ -107,11 +107,11 @@ impl TransactionCommands {
 
 // TODO we should differentiate between deadlocks and optimistic concurrency failures (and only
 // handle the latter here)
-fn retry_on_deadlock(
-    tree: &Tree<InMemoryStorage, KeyType>,
-    callable: impl Fn(TreeTransaction<InMemoryStorage, KeyType>) -> Result<(), TreeError>,
+fn retry_on_deadlock<T: TreeKey + for<'a> Arbitrary<'a>>(
+    tree: &Tree<InMemoryStorage, T>,
+    callable: impl Fn(TreeTransaction<InMemoryStorage, T>) -> Result<(), TreeError>,
 ) -> Result<(), TreeError> {
-    for i in 0..10 {
+    for i in 0..128 {
         let transaction = tree.transaction().unwrap();
 
         match callable(transaction) {
@@ -119,13 +119,11 @@ fn retry_on_deadlock(
             Err(TreeError::StorageError(StorageError::Deadlock(_))) => {}
             error @ Err(_) => return error,
         };
-        thread::sleep(Duration::from_millis(5));
-
-        debug!("retrying: {i}");
+        thread::sleep(Duration::from_millis(2u64.pow(i / 16)));
     }
 
     // TODO we really should not ignore this
-    error!("10 retries not succesful, giving up");
+    error!("128 retries not succesful, giving up");
 
     Ok(())
 }
@@ -134,6 +132,9 @@ fn retry_on_deadlock(
 enum TestName {
     MultiThreadedRandom,
     SingleThreadedRandom,
+
+    SingleThreadedPredictable,
+    MultiThreadedPredictable,
 }
 
 #[derive(Parser)]
@@ -163,5 +164,8 @@ fn main() {
     match &cli.test {
         TestName::MultiThreadedRandom => random_threaded::run(),
         TestName::SingleThreadedRandom => random_single::run(),
+
+        TestName::SingleThreadedPredictable => predictable::single::run(),
+        TestName::MultiThreadedPredictable => predictable::threaded::run(),
     }
 }

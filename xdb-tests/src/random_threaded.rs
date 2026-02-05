@@ -12,13 +12,13 @@ use rand::rng;
 use tracing::{error, info};
 use xdb::{bplustree::Tree, storage::in_memory::InMemoryStorage};
 
-use crate::{KeyType, RUN_LENGTH, TransactionCommands, final_checks, retry_on_deadlock};
-
-const THREAD_COUNT: usize = 16;
+use crate::{
+    KeyType, RUN_LENGTH, THREAD_COUNT, TransactionCommands, final_checks, retry_on_deadlock,
+};
 
 struct ServerThread {
     id: usize,
-    tx: SyncSender<TransactionCommands>,
+    tx: SyncSender<TransactionCommands<KeyType>>,
     handle: JoinHandle<()>,
 }
 
@@ -104,7 +104,7 @@ pub fn run() {
 
 fn server_thread(
     _id: usize,
-    rx: Receiver<TransactionCommands>,
+    rx: Receiver<TransactionCommands<KeyType>>,
     tree: Arc<Tree<InMemoryStorage, KeyType>>,
 ) {
     while let Ok(commands) = rx.recv() {

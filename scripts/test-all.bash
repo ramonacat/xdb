@@ -18,6 +18,8 @@ popd
 pushd xdb-tests
 cargo run --release multi-threaded-random
 cargo run --release single-threaded-random
+cargo run --release multi-threaded-predictable
+cargo run --release single-threaded-predictable
 popd
 
 # TODO run xdb-tests here, once its stable enough
