@@ -145,6 +145,7 @@ struct Cli {
 // TODO Add a separate "mod X" testing mode, where every thread operates (in a single, long
 // transaction) only on keys that are (n%THREAD_COUNT)+thread_id, and verifies that it does not
 // see anything from other threads.
+// TODO Add a testing mode that creates (and removes) a lot of predicatable data, and ensure the data is correct.
 fn main() {
     // TODO create a script for running a docker container with jaeger and make it possible to send
     // telemetry there
