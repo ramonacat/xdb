@@ -127,7 +127,7 @@ impl PageState {
     }
 
     fn wait(self: Pin<&Self>, previous: PageStateValue) {
-        match self.futex().wait(previous.0) {
+        match self.futex().wait(previous.0, None) {
             Ok(()) | Err(FutexError::Race) => {}
         }
     }

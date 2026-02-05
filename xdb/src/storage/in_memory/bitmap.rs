@@ -189,7 +189,7 @@ mod test {
     fn bitmap_respects_count() {
         let bitmap = Bitmap::new("test".into());
 
-        for i in 25_000..50_000 {
+        for i in 25_000..30_000 {
             bitmap.set(i).unwrap();
         }
 

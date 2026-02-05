@@ -223,7 +223,7 @@ impl Committer {
             })
             .unwrap();
 
-        match is_done.as_ref().wait(0) {
+        match is_done.as_ref().wait(0, None) {
             Ok(()) | Err(FutexError::Race) => {}
         }
 
