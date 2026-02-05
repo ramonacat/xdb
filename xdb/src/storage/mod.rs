@@ -23,7 +23,8 @@ pub enum StorageError {
 
 #[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-// TODO the index should have some sort of storage id
+// TODO the index should have some sort of storage id (can we have a type-level [lifetime?] tag that ties it to
+// an instance of a block?)
 pub struct PageIndex(u64);
 
 impl PageIndex {

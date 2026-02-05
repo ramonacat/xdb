@@ -87,8 +87,11 @@ pub struct VersionManager {
     #[allow(unused)]
     vacuum: Vacuum,
     committer: Committer,
+    // TODO get rid of the mutex (this is only ever used by vacuum to figure out the lowest running
+    // transaction, so perhaps just having an AtomicU64 instead is enough?
     running_transactions: Arc<Mutex<BTreeSet<TransactionId>>>,
-    // TODO instead of a mutex, we should probably have per-thread queues or something
+    // TODO instead of a mutex, we should probably have per-thread queues or something (a lock-free ring-buffer
+    // perhaps?)
     // TODO give it a better name, it is not really a queue
     // TODO sending raw pointers kinda sucks, we probably should just do PageIndices?
     recycled_page_queue: Mutex<Vec<(NonNull<Page>, PageIndex)>>,
