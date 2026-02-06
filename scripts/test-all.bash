@@ -16,6 +16,7 @@ cargo fmt --check
 popd
 
 pushd xdb-tests
+# TODO detect when the tests are running longer than they should be, and treat that as a failure
 cargo run --release multi-threaded-random
 cargo run --release single-threaded-random
 cargo run --release multi-threaded-predictable

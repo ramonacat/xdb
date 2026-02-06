@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::mem::MaybeUninit;
 use std::ptr::NonNull;
 
@@ -7,12 +6,14 @@ use crate::storage::in_memory::Bitmap;
 use crate::storage::in_memory::block::{Block, PageRef, UninitializedPageGuard};
 use crate::storage::in_memory::version_manager::committer::Committer;
 use crate::storage::in_memory::version_manager::transaction::VersionManagedTransaction;
+use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use crate::storage::in_memory::version_manager::vacuum::Vacuum;
 use crate::storage::{PageIndex, TransactionId};
 use crate::sync::{Arc, Mutex};
 
 mod committer;
 pub mod transaction;
+pub mod transaction_log;
 mod vacuum;
 
 #[derive(Debug)]
@@ -22,10 +23,12 @@ enum MainPageRef<'storage> {
 }
 
 #[derive(Debug)]
+// TODO rename -> "TransactionPage" or something
 struct CowPage<'storage> {
     main: MainPageRef<'storage>,
     cow: PageRef<'storage>,
     version: PageVersion,
+    deleted: bool,
 }
 
 impl CowPage<'_> {
@@ -37,6 +40,7 @@ impl CowPage<'_> {
             },
             cow: (self.cow.as_ptr(), self.cow.index()),
             version: self.version,
+            deleted: self.deleted,
         }
     }
 }
@@ -56,6 +60,7 @@ struct RawCowPage {
     main: RawMainPage,
     cow: (NonNull<Page>, PageIndex),
     version: PageVersion,
+    deleted: bool,
 }
 
 unsafe impl Send for RawCowPage {}
@@ -75,6 +80,7 @@ impl RawCowPage {
             main,
             cow: unsafe { PageRef::new(self.cow.0, block, self.cow.1) },
             version: self.version,
+            deleted: self.deleted,
         }
     }
 }
@@ -87,9 +93,7 @@ pub struct VersionManager {
     #[allow(unused)]
     vacuum: Vacuum,
     committer: Committer,
-    // TODO get rid of the mutex (this is only ever used by vacuum to figure out the lowest running
-    // transaction, so perhaps just having an AtomicU64 instead is enough?
-    running_transactions: Arc<Mutex<BTreeSet<TransactionId>>>,
+    transaction_log: Arc<TransactionLog>,
     // TODO instead of a mutex, we should probably have per-thread queues or something (a lock-free ring-buffer
     // perhaps?)
     // TODO give it a better name, it is not really a queue
@@ -101,16 +105,16 @@ unsafe impl Send for VersionManager {}
 unsafe impl Sync for VersionManager {}
 
 impl VersionManager {
-    pub fn new(
-        data: Arc<Block>,
-        running_transactions: Arc<Mutex<BTreeSet<TransactionId>>>,
-        freemap: Arc<Bitmap>,
-    ) -> Self {
+    pub fn new(data: Arc<Block>, freemap: Arc<Bitmap>) -> Self {
+        let log = Arc::new(TransactionLog::new());
         Self {
-            vacuum: Vacuum::start(running_transactions.clone(), data.clone(), freemap.clone()),
-            committer: Committer::new(data.clone()),
+            vacuum: Vacuum::start(log.clone(), data.clone(), freemap.clone()),
+            committer: Committer::new(data.clone(), log.clone()),
+            // TODO this should be an argument probably? and we should have some sorta storage
+            // loader or something that'll load data from disk (or create new files/memory
+            // structures)
+            transaction_log: log,
             data,
-            running_transactions,
             freemap,
             recycled_page_queue: Mutex::new(Vec::new()),
         }
@@ -119,8 +123,6 @@ impl VersionManager {
     pub fn start_transaction(&self) -> VersionManagedTransaction<'_> {
         let id = TransactionId::next();
 
-        self.running_transactions.lock().unwrap().insert(id);
-
-        VersionManagedTransaction::new(id, self)
+        VersionManagedTransaction::new(id, self, self.transaction_log.start_transaction(id))
     }
 }

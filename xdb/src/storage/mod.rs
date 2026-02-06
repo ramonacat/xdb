@@ -58,7 +58,6 @@ impl From<PageIndex> for [PageIndex; 1] {
     }
 }
 
-// TODO does numeric ordering always imply a happens-before relationship?
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct TransactionId(NonZeroU64);
@@ -74,7 +73,17 @@ impl TransactionId {
     }
 }
 
-// TODO the page reservation should probably be an associated type instad?
+#[derive(Debug, Clone, Copy, Zeroable, Pod, PartialEq, PartialOrd, Eq, Ord)]
+#[repr(transparent)]
+pub struct TransactionalTimestamp(u64);
+
+impl TransactionalTimestamp {
+    #[must_use]
+    pub(crate) const fn zero() -> Self {
+        Self(0)
+    }
+}
+
 pub trait Transaction<'storage>: Send + Debug {
     type Storage: Storage + 'storage;
 

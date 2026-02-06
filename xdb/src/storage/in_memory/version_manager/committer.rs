@@ -2,6 +2,7 @@ use tracing::{debug, info_span, instrument};
 
 use crate::page::PAGE_DATA_SIZE;
 use crate::storage::in_memory::block::Block;
+use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::pin::Pin;
@@ -94,9 +95,14 @@ pub struct Committer {
     tx: Sender<CommitRequest>,
 }
 
-#[instrument(skip(pages))]
-fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<(), StorageError> {
-    debug!("starting commit");
+#[instrument(skip(pages, log))]
+fn do_commit(
+    log: &TransactionLog,
+    id: TransactionId,
+    pages: HashMap<PageIndex, CowPage>,
+) -> Result<(), StorageError> {
+    let commit_handle = log.start_commit(id).unwrap();
+    debug!("starting commit: {commit_handle:?}");
 
     let mut locks = HashMap::new();
 
@@ -106,6 +112,7 @@ fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<()
                 let lock = page_ref.lock();
 
                 if lock.version() != page.version {
+                    commit_handle.rollback();
                     // TODO this is not a deadlock, but an optimistic concurrency race
                     return Err(StorageError::Deadlock(*index));
                 }
@@ -130,23 +137,17 @@ fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<()
 
                 let mut modfied_copy = page.cow.lock();
 
-                if index == PageIndex::zero() {
-                    debug!(
-                        "touching page zero. cow index: {:?}, index: {index:?}, page: {:?}, cow page: {:?}",
-                        page.cow.index(),
-                        &**lock,
-                        &*modfied_copy
-                    );
-                }
+                if page.deleted {
+                    debug!("page {index:?} deleted");
 
-                if (modfied_copy.data::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
-                    != lock.data::<[u8; PAGE_DATA_SIZE.as_bytes()]>())
-                    // TODO do a full header comparison
-                    || (modfied_copy.visible_until() != lock.visible_until())
+                    lock.set_visible_until(commit_handle.timestamp());
+                    modfied_copy.set_visible_until(commit_handle.timestamp());
+                } else if modfied_copy.data::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
+                    != lock.data::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
                 {
                     debug!("page {index:?} was modified, incrementing version");
 
-                    modfied_copy.set_visible_from(id);
+                    modfied_copy.set_visible_from(commit_handle.timestamp());
                     modfied_copy.increment_version();
 
                     // TODO instead of overwriting the page, just `set_visible_until` to `id`, add
@@ -157,7 +158,7 @@ fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<()
                     debug!("page {index:?} updated to: {:?}", &**lock);
                 } else {
                     debug!("page {index:?} was not modified, leaving as is");
-                    modfied_copy.set_visible_until(id);
+                    modfied_copy.set_visible_until(commit_handle.timestamp());
                 }
             }
             MainPageRef::Uninitialized(guard) => {
@@ -165,7 +166,7 @@ fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<()
 
                 let mut page = page.cow.lock();
 
-                page.set_visible_from(id);
+                page.set_visible_from(commit_handle.timestamp());
 
                 debug!("initializing new page {index:?}");
 
@@ -174,13 +175,15 @@ fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<()
         }
     }
 
+    commit_handle.commit();
+
     debug!("commit succesful");
 
     Ok(())
 }
 
 impl Committer {
-    pub(crate) fn new(block: Arc<Block>) -> Self {
+    pub(crate) fn new(block: Arc<Block>, log: Arc<TransactionLog>) -> Self {
         let (tx, rx) = mpsc::channel::<CommitRequest>();
         let handle = {
             thread::Builder::new()
@@ -189,6 +192,7 @@ impl Committer {
                     while let Ok(mut request) = rx.recv() {
                         info_span!("transaction commit", %request).in_scope(|| {
                             let commit_result = do_commit(
+                                &log,
                                 request.id,
                                 request
                                     .take_pages()

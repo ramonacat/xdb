@@ -1,24 +1,28 @@
 mod scheduler;
 
-use std::{collections::BTreeSet, time::Duration};
+use std::time::Duration;
 
 use tracing::debug;
 
 use crate::{
     storage::{
-        PageIndex, TransactionId,
+        PageIndex,
         in_memory::{
             Bitmap,
             block::Block,
-            version_manager::vacuum::scheduler::{FreezeGuard, Scheduler},
+            version_manager::{
+                transaction_log::TransactionLog,
+                vacuum::scheduler::{FreezeGuard, Scheduler},
+            },
         },
     },
-    sync::{Arc, Mutex},
+    sync::Arc,
     thread::{self, JoinHandle},
 };
 
 struct VacuumThread {
-    running_transactions: Arc<Mutex<BTreeSet<TransactionId>>>,
+    // TODO we should prolly just have an Arc<VersionManager> here?
+    log: Arc<TransactionLog>,
     data: Arc<Block>,
     freemap: Arc<Bitmap>,
     scheduler: Arc<Scheduler>,
@@ -37,9 +41,7 @@ impl VacuumThread {
 
             debug!("requesting running transactions");
 
-            let running_transactions = self.running_transactions.lock().unwrap();
-            let Some(min_txid) = running_transactions.first().copied() else {
-                drop(running_transactions);
+            let Some(min_timestamp) = self.log.minimum_active_timestamp() else {
                 // TODO we need a smarter way of scheduling vacuum (based on usage of the
                 // block)
                 if cfg!(any(fuzzing, test)) {
@@ -49,9 +51,8 @@ impl VacuumThread {
                 }
                 continue;
             };
-            drop(running_transactions);
 
-            debug!("min txid: {min_txid:?}");
+            debug!("minimum active timestamp: {min_timestamp:?}");
 
             let mut index = PageIndex::from_value(1);
 
@@ -85,7 +86,7 @@ impl VacuumThread {
                     checked_count += 1;
 
                     if let Some(visible_until) = page_guard.visible_until()
-                        && visible_until < min_txid
+                        && visible_until < min_timestamp
                     {
                         drop(page_guard); // ensure the lock is dropped before we uninitialize it
                         unsafe {
@@ -115,11 +116,7 @@ pub struct Vacuum {
 }
 
 impl Vacuum {
-    pub fn start(
-        running_transactions: Arc<Mutex<BTreeSet<TransactionId>>>,
-        data: Arc<Block>,
-        freemap: Arc<Bitmap>,
-    ) -> Self {
+    pub fn start(log: Arc<TransactionLog>, data: Arc<Block>, freemap: Arc<Bitmap>) -> Self {
         let scheduler = Arc::new(Scheduler::new());
 
         let handle = {
@@ -129,7 +126,7 @@ impl Vacuum {
                 .name("vacuum".into())
                 .spawn(move || {
                     let runner = VacuumThread {
-                        running_transactions,
+                        log,
                         data,
                         freemap,
                         scheduler,

@@ -3,12 +3,9 @@ mod block;
 mod transaction;
 mod version_manager;
 
-use std::collections::BTreeSet;
-
 use crate::storage::in_memory::bitmap::Bitmap;
 use crate::storage::in_memory::version_manager::VersionManager;
 use crate::sync::Arc;
-use crate::sync::Mutex;
 
 use crate::storage::in_memory::transaction::InMemoryTransaction;
 
@@ -45,13 +42,11 @@ impl InMemoryStorage {
     // TODO give the InMemoryStorage a name so we can differentiate the blocks if we have
     // multiple storages?
     pub fn new() -> Self {
-        let running_transactions = Arc::new(Mutex::new(BTreeSet::new()));
         let freemap = Arc::new(Bitmap::new("freemap".into()));
 
         Self {
             version_manager: VersionManager::new(
                 Arc::new(Block::new("main block".into())),
-                running_transactions,
                 freemap,
             ),
         }

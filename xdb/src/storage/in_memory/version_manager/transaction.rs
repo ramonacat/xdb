@@ -1,3 +1,4 @@
+use crate::storage::in_memory::version_manager::transaction_log::TransactionLogEntryHandle;
 use std::{
     collections::HashMap,
     thread,
@@ -25,21 +26,27 @@ pub struct VersionManagedTransaction<'storage> {
     version_manager: &'storage VersionManager,
     span: tracing::Span,
     last_free_page_scan: Mutex<Option<Instant>>,
+    log_entry: TransactionLogEntryHandle<'storage>,
+    committed: bool,
 }
 
 impl Drop for VersionManagedTransaction<'_> {
     fn drop(&mut self) {
-        self.version_manager
-            .running_transactions
-            .lock()
-            .unwrap()
-            .remove(&self.id);
-        // TODO do a rollback?
+        // TODO is it ok to just drop, or should we warn if there wasn't an explicit
+        // rollback/commit call?
+        // TODO the boolean is an awful hack, use the log_entry to figure out the state instead
+        if !self.committed {
+            self.rollback();
+        }
     }
 }
 
 impl<'storage> VersionManagedTransaction<'storage> {
-    pub fn new(id: TransactionId, version_manager: &'storage VersionManager) -> Self {
+    pub fn new(
+        id: TransactionId,
+        version_manager: &'storage VersionManager,
+        log_entry: TransactionLogEntryHandle<'storage>,
+    ) -> Self {
         let span = info_span!("transaction", id = ?id);
 
         Self {
@@ -48,6 +55,8 @@ impl<'storage> VersionManagedTransaction<'storage> {
             version_manager,
             span,
             last_free_page_scan: Mutex::new(None),
+            log_entry,
+            committed: false,
         }
     }
 
@@ -170,7 +179,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
             let main = self.version_manager.data.get(index);
             let main_lock = main.lock();
 
-            if !main_lock.is_visible_in(self.id) {
+            if !main_lock.is_visible_at(self.log_entry.start_timestamp()) {
                 // TODO we should not be returning an error, but instead there should be multiple
                 // versions of the page stored, each with link to the newer version
                 return Err(StorageError::Deadlock(index));
@@ -184,6 +193,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                     main: MainPageRef::Initialized(main),
                     cow,
                     version: main_lock.version(),
+                    deleted: false,
                 },
             );
 
@@ -212,6 +222,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 main: MainPageRef::Uninitialized(page_guard),
                 cow,
                 version: page.version(),
+                deleted: false,
             },
         );
 
@@ -220,8 +231,10 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
     #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
-        if let Some(page) = self.pages.get(&page) {
-            page.cow.lock().set_visible_until(self.id);
+        if let Some(page) = self.pages.get_mut(&page) {
+            // TODO this should really be an enum describing various possible states of a page,
+            // instead of this boolean flag
+            page.deleted = true;
 
             return Ok(());
         }
@@ -231,14 +244,13 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
         let cow = self.allocate_cow_copy()?.initialize(*main_lock);
 
-        cow.lock().set_visible_until(self.id);
-
         self.pages.insert(
             page,
             CowPage {
                 main: MainPageRef::Initialized(main),
                 cow,
                 version: main_lock.version(),
+                deleted: true,
             },
         );
 
@@ -247,6 +259,8 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
     #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn commit(&mut self) -> Result<(), StorageError> {
+        self.committed = true;
+
         // TODO make the commit consistent in event of a crash:
         //    1. write to a transaction log
         //    2. fsync the transaction log
@@ -266,8 +280,10 @@ impl<'storage> VersionManagedTransaction<'storage> {
         }
 
         for lock in &mut locks {
-            lock.set_visible_until(self.id);
+            lock.set_visible_until(self.log_entry.start_timestamp());
         }
+
+        self.log_entry.rollback();
     }
 
     pub const fn id(&self) -> TransactionId {

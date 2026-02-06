@@ -5,7 +5,11 @@ use bytemuck::{
 };
 use thiserror::Error;
 
-use crate::{Size, checksum::Checksum, storage::TransactionId};
+use crate::{
+    Size,
+    checksum::Checksum,
+    storage::{PageIndex, TransactionalTimestamp},
+};
 
 pub const PAGE_SIZE: Size = Size::B(4096);
 pub const PAGE_DATA_SIZE: Size = PAGE_SIZE.subtract(Size::of::<PageHeader>());
@@ -37,15 +41,17 @@ impl Display for PageVersion {
 struct PageHeader {
     checksum: Checksum,
     _unused1: u32,
-    visible_from: Option<TransactionId>,
-    visible_until: Option<TransactionId>,
+    visible_from: TransactionalTimestamp,
+    visible_until: TransactionalTimestamp,
     version: PageVersion,
+    next_version: PageIndex,
 }
 
-const _: () = assert!(size_of::<PageHeader>() == 4 * size_of::<u64>());
+const _: () = assert!(size_of::<PageHeader>() == 5 * size_of::<u64>());
 
 #[derive(Pod, Clone, Copy, Zeroable)]
 #[repr(C, align(8))]
+// TODO page should be visible at pub(crate) probably
 pub struct Page {
     header: PageHeader,
     data: [u8; PAGE_DATA_SIZE.as_bytes()],
@@ -109,15 +115,13 @@ impl Page {
         from_bytes_mut(&mut self.data)
     }
 
-    pub fn is_visible_in(&self, txid: TransactionId) -> bool {
-        if let Some(from) = self.header.visible_from
-            && from >= txid
-        {
+    pub fn is_visible_at(&self, timestamp: TransactionalTimestamp) -> bool {
+        if self.header.visible_from > timestamp {
             return false;
         }
 
-        if let Some(to) = self.header.visible_until
-            && to <= txid
+        if self.header.visible_until != TransactionalTimestamp::zero()
+            && self.header.visible_until < timestamp
         {
             return false;
         }
@@ -125,12 +129,12 @@ impl Page {
         true
     }
 
-    pub const fn set_visible_from(&mut self, txid: TransactionId) {
-        self.header.visible_from = Some(txid);
+    pub const fn set_visible_from(&mut self, timestamp: TransactionalTimestamp) {
+        self.header.visible_from = timestamp;
     }
 
-    pub const fn set_visible_until(&mut self, txid: TransactionId) {
-        self.header.visible_until = Some(txid);
+    pub const fn set_visible_until(&mut self, timestamp: TransactionalTimestamp) {
+        self.header.visible_until = timestamp;
     }
 
     pub const fn version(&self) -> PageVersion {
@@ -141,8 +145,12 @@ impl Page {
         self.header.version = self.header.version.next();
     }
 
-    pub const fn visible_until(&self) -> Option<TransactionId> {
-        self.header.visible_until
+    pub fn visible_until(&self) -> Option<TransactionalTimestamp> {
+        if self.header.visible_until == TransactionalTimestamp::zero() {
+            None
+        } else {
+            Some(self.header.visible_until)
+        }
     }
 }
 
