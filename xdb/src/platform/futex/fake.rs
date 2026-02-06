@@ -1,8 +1,7 @@
 use crate::sync::atomic::{AtomicU32, Ordering};
 use crate::thread;
 use std::pin::Pin;
-
-use crate::platform::futex::FutexError;
+use std::time::Duration;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -18,12 +17,8 @@ impl Futex {
         }
     }
 
-    pub fn wait(self: Pin<&Self>, value: u32) -> Result<(), FutexError> {
+    pub fn wait(self: Pin<&Self>, value: u32, timeout: Option<Duration>) {
         thread::yield_now();
-
-        if self.value.load(Ordering::SeqCst) != value {
-            return Err(FutexError::Race);
-        }
 
         loop {
             thread::yield_now();
@@ -32,13 +27,26 @@ impl Futex {
                 continue;
             }
 
-            return Ok(());
+            return;
         }
     }
 
-    #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
-    pub fn wake(self: Pin<&Self>, count: u32) -> u64 {
-        u64::from(count)
+    #[allow(
+        clippy::unused_self,
+        clippy::unnecessary_wraps,
+        clippy::missing_const_for_fn
+    )]
+    pub fn wake_one(self: Pin<&Self>) -> u64 {
+        1
+    }
+
+    #[allow(
+        clippy::unused_self,
+        clippy::unnecessary_wraps,
+        clippy::missing_const_for_fn
+    )]
+    pub fn wake_all(self: Pin<&Self>) -> u64 {
+        1
     }
 
     pub const fn atomic(self: Pin<&Self>) -> &AtomicU32 {
