@@ -18,7 +18,7 @@ use crate::{
 
 impl From<Option<InteriorNodeId>> for PageIndex {
     fn from(value: Option<InteriorNodeId>) -> Self {
-        value.map_or_else(Self::zero, |x| x.0)
+        value.map_or_else(Self::max, |x| x.0)
     }
 }
 
@@ -57,7 +57,7 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
     }
 
     pub(in crate::bplustree) fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
-        self.header.parent = parent.map_or_else(PageIndex::zero, |x| x.page());
+        self.header.parent = parent.map_or_else(PageIndex::max, |x| x.page());
     }
 
     pub(in crate::bplustree) fn keys(&self) -> impl Iterator<Item = (KeyIndex, TKey)> {

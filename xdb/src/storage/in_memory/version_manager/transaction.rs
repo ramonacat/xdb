@@ -1,4 +1,7 @@
-use crate::storage::in_memory::version_manager::transaction_log::TransactionLogEntryHandle;
+use crate::storage::in_memory::{
+    block::{PageGuard, PageGuardRead, PageRef},
+    version_manager::transaction_log::TransactionLogEntryHandle,
+};
 use std::{
     collections::HashMap,
     thread,
@@ -12,7 +15,7 @@ use crate::{
     storage::{
         PageIndex, StorageError, TransactionId,
         in_memory::{
-            block::{PageGuard, UninitializedPageGuard},
+            block::UninitializedPageGuard,
             version_manager::{CowPage, MainPageRef, VersionManager},
         },
     },
@@ -58,6 +61,40 @@ impl<'storage> VersionManagedTransaction<'storage> {
             log_entry,
             committed: false,
         }
+    }
+
+    fn get_matching_version(&self, index: PageIndex) -> PageRef<'storage> {
+        debug!(
+            "looking for a matching version of {index:?} for {:?}",
+            self.log_entry.start_timestamp()
+        );
+        let mut main = self.version_manager.data.get(index);
+        let mut main_lock = main.lock_read();
+
+        while !main_lock.is_visible_at(self.log_entry.start_timestamp()) {
+            debug!(
+                "{index:?} not visible in {:?}, checking {:?}",
+                main.index(),
+                main_lock.next_version()
+            );
+
+            let Some(next) = main_lock.next_version() else {
+                // TODO should we panic here? I think we should not be able to get to this
+                // place if the database is in a valid state?
+                panic!("page {index:?} not found");
+            };
+
+            main = self.version_manager.data.get(next);
+            main_lock = main.lock_read();
+        }
+
+        debug!(
+            "{index:?}@{:?} is {:?}",
+            self.log_entry.start_timestamp(),
+            main.index()
+        );
+
+        main
     }
 
     // TODO all page allocations should go through this
@@ -160,44 +197,86 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     #[instrument(skip(self), parent = &self.span)]
-    pub(crate) fn read(&mut self, index: PageIndex) -> Result<PageGuard<'storage>, StorageError> {
-        // TODO what we have currently only implements "read comitted" isolation level. What we
-        // really need is is "snapshot"
-        //
-        // T1 starts
-        // T2 starts
-        // T1 reads page 1
-        // T1 writes page 1 and page 2
-        // T1 commits
-        //
-        // T2 page 1 now points to page 2 which was modified by T1, when T2 reads page 2 it gets
-        // the new version!!!
-
+    pub(crate) fn read(
+        &mut self,
+        index: PageIndex,
+    ) -> Result<PageGuardRead<'storage>, StorageError> {
         if let Some(entry) = self.pages.get(&index) {
-            Ok(entry.cow.lock())
-        } else {
-            let main = self.version_manager.data.get(index);
-            let main_lock = main.lock();
-
-            if !main_lock.is_visible_at(self.log_entry.start_timestamp()) {
-                // TODO we should not be returning an error, but instead there should be multiple
-                // versions of the page stored, each with link to the newer version
-                return Err(StorageError::Deadlock(index));
+            if let Some(cow) = entry.cow {
+                return Ok(cow.lock_read());
             }
 
-            let cow = self.allocate_cow_copy()?.initialize(*main_lock);
+            match entry.main {
+                MainPageRef::Initialized(page_ref) => Ok(page_ref.lock_read()),
+                MainPageRef::Uninitialized(_) => todo!(),
+            }
+        } else {
+            let main = self.get_matching_version(index);
 
             self.pages.insert(
                 index,
                 CowPage {
                     main: MainPageRef::Initialized(main),
-                    cow,
-                    version: main_lock.version(),
+                    cow: None,
+                    // TODO do we still need the version?
+                    version: main.lock_read().version(),
                     deleted: false,
+                    inserted: false,
                 },
             );
 
-            Ok(self.pages.get(&index).unwrap().cow.lock())
+            Ok(main.lock_read())
+        }
+    }
+
+    pub(crate) fn write(&mut self, index: PageIndex) -> Result<PageGuard<'storage>, StorageError> {
+        if let Some(entry) = self.pages.get(&index) {
+            if entry.inserted {
+                match entry.main {
+                    MainPageRef::Initialized(page_ref) => {
+                        return Ok(page_ref.lock());
+                    }
+                    MainPageRef::Uninitialized(_) => todo!(),
+                }
+            }
+
+            if let Some(cow) = entry.cow {
+                return Ok(cow.lock());
+            }
+
+            match entry.main {
+                MainPageRef::Initialized(page_ref) => {
+                    let cow = self.allocate_cow_copy()?;
+                    let cow = cow.initialize(*page_ref.lock_read());
+
+                    self.pages.get_mut(&index).unwrap().cow = Some(cow);
+
+                    Ok(cow.lock())
+                }
+                MainPageRef::Uninitialized(_) => todo!(),
+            }
+        } else {
+            let page = self.get_matching_version(index);
+            let cow = self.allocate_cow_copy()?;
+            let page_lock = page.lock_read();
+            if page_lock.next_version().is_some() {
+                // TODO not a deadlock, but optimistic concurrency failure
+                return Err(StorageError::Deadlock(index));
+            }
+            let cow = cow.initialize(*page_lock);
+
+            self.pages.insert(
+                index,
+                CowPage {
+                    main: MainPageRef::Initialized(page),
+                    cow: Some(cow),
+                    version: page_lock.version(),
+                    deleted: false,
+                    inserted: false,
+                },
+            );
+
+            Ok(cow.lock())
         }
     }
 
@@ -214,15 +293,14 @@ impl<'storage> VersionManagedTransaction<'storage> {
         page_guard: UninitializedPageGuard<'storage>,
         page: Page,
     ) -> Result<(), StorageError> {
-        let cow = self.allocate_cow_copy()?.initialize(page);
-
         self.pages.insert(
             page_guard.index(),
             CowPage {
-                main: MainPageRef::Uninitialized(page_guard),
-                cow,
+                main: MainPageRef::Initialized(page_guard.initialize(page)),
+                cow: None,
                 version: page.version(),
                 deleted: false,
+                inserted: true,
             },
         );
 
@@ -239,18 +317,17 @@ impl<'storage> VersionManagedTransaction<'storage> {
             return Ok(());
         }
 
-        let main = self.version_manager.data.get(page);
+        let main = self.get_matching_version(page);
         let main_lock = main.lock();
-
-        let cow = self.allocate_cow_copy()?.initialize(*main_lock);
 
         self.pages.insert(
             page,
             CowPage {
                 main: MainPageRef::Initialized(main),
-                cow,
+                cow: None,
                 version: main_lock.version(),
                 deleted: true,
+                inserted: false,
             },
         );
 
@@ -271,17 +348,9 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     #[instrument(skip(self), parent = &self.span)]
+    #[allow(clippy::needless_pass_by_ref_mut)] // TODO make const if we really don't need it
     pub fn rollback(&mut self) {
-        // TODO this should also be happening in the committer thread
-        let mut locks = vec![];
-
-        for (_, page) in self.pages.drain() {
-            locks.push(page.cow.lock());
-        }
-
-        for lock in &mut locks {
-            lock.set_visible_until(self.log_entry.start_timestamp());
-        }
+        // TODO do we need to do anything more here?
 
         self.log_entry.rollback();
     }

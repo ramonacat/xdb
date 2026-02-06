@@ -26,21 +26,23 @@ enum MainPageRef<'storage> {
 // TODO rename -> "TransactionPage" or something
 struct CowPage<'storage> {
     main: MainPageRef<'storage>,
-    cow: PageRef<'storage>,
+    cow: Option<PageRef<'storage>>,
     version: PageVersion,
     deleted: bool,
+    inserted: bool,
 }
 
 impl CowPage<'_> {
-    const fn into_raw(self) -> RawCowPage {
+    fn into_raw(self) -> RawCowPage {
         RawCowPage {
             main: match self.main {
                 MainPageRef::Initialized(r) => RawMainPage::Initialized(r.as_ptr(), r.index()),
                 MainPageRef::Uninitialized(r) => RawMainPage::Uninitialized(r.as_ptr(), r.index()),
             },
-            cow: (self.cow.as_ptr(), self.cow.index()),
+            cow: self.cow.map(|x| (x.as_ptr(), x.index())),
             version: self.version,
             deleted: self.deleted,
+            inserted: self.inserted,
         }
     }
 }
@@ -58,15 +60,16 @@ unsafe impl Send for RawMainPage {}
 // between threads?
 struct RawCowPage {
     main: RawMainPage,
-    cow: (NonNull<Page>, PageIndex),
+    cow: Option<(NonNull<Page>, PageIndex)>,
     version: PageVersion,
     deleted: bool,
+    inserted: bool,
 }
 
 unsafe impl Send for RawCowPage {}
 
 impl RawCowPage {
-    const unsafe fn reconstruct(self, block: &'_ Block) -> CowPage<'_> {
+    unsafe fn reconstruct(self, block: &'_ Block) -> CowPage<'_> {
         let main = match self.main {
             RawMainPage::Initialized(page, index) => {
                 MainPageRef::Initialized(unsafe { PageRef::new(page, block, index) })
@@ -78,9 +81,10 @@ impl RawCowPage {
 
         CowPage {
             main,
-            cow: unsafe { PageRef::new(self.cow.0, block, self.cow.1) },
+            cow: self.cow.map(|x| unsafe { PageRef::new(x.0, block, x.1) }),
             version: self.version,
             deleted: self.deleted,
+            inserted: self.inserted,
         }
     }
 }

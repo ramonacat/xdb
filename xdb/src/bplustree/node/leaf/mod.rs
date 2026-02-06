@@ -22,7 +22,7 @@ use crate::{
 
 impl From<Option<LeafNodeId>> for PageIndex {
     fn from(value: Option<LeafNodeId>) -> Self {
-        value.map_or_else(Self::zero, |x| x.0)
+        value.map_or_else(Self::max, |x| x.0)
     }
 }
 
@@ -48,8 +48,8 @@ impl<TKey: TreeKey> LeafNode<TKey> {
         Self {
             header: NodeHeader::new_leaf(parent.into()),
             leaf_header: LeafNodeHeader {
-                previous: PageIndex::zero(),
-                next: PageIndex::zero(),
+                previous: PageIndex::max(),
+                next: PageIndex::max(),
             },
             data: LeafNodeEntries::new(),
         }
@@ -66,7 +66,7 @@ impl<TKey: TreeKey> LeafNode<TKey> {
     pub fn previous(&self) -> Option<LeafNodeId> {
         let previous = self.leaf_header.previous;
 
-        if previous == PageIndex::zero() {
+        if previous == PageIndex::max() {
             None
         } else {
             Some(LeafNodeId::new(previous))
@@ -76,7 +76,7 @@ impl<TKey: TreeKey> LeafNode<TKey> {
     pub fn next(&self) -> Option<LeafNodeId> {
         let next = self.leaf_header.next;
 
-        if next == PageIndex::zero() {
+        if next == PageIndex::max() {
             None
         } else {
             Some(LeafNodeId::new(next))
@@ -193,7 +193,7 @@ impl<TKey: TreeKey> LeafNode<TKey> {
 
 impl<TKey: TreeKey> Node<TKey> for LeafNode<TKey> {
     fn parent(&self) -> Option<InteriorNodeId> {
-        if self.header.parent == PageIndex::zero() {
+        if self.header.parent == PageIndex::max() {
             None
         } else {
             Some(InteriorNodeId::new(self.header.parent))

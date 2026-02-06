@@ -29,8 +29,8 @@ pub struct PageIndex(u64);
 
 impl PageIndex {
     #[must_use]
-    pub(crate) const fn zero() -> Self {
-        Self(0)
+    pub(crate) const fn max() -> Self {
+        Self(u64::MAX)
     }
 
     #[must_use]

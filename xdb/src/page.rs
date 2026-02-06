@@ -38,6 +38,7 @@ impl Display for PageVersion {
 
 #[derive(Debug, Pod, Clone, Copy, Zeroable)]
 #[repr(C, align(8))]
+// TODO this header is growing in size, are all of these fields really neccessary?
 struct PageHeader {
     checksum: Checksum,
     _unused1: u32,
@@ -45,9 +46,23 @@ struct PageHeader {
     visible_until: TransactionalTimestamp,
     version: PageVersion,
     next_version: PageIndex,
+    previous_version: PageIndex,
+}
+impl PageHeader {
+    fn new() -> Self {
+        Self {
+            checksum: Checksum::zeroed(),
+            _unused1: 0,
+            visible_from: TransactionalTimestamp::zeroed(),
+            visible_until: TransactionalTimestamp::zeroed(),
+            version: PageVersion(0),
+            next_version: PageIndex::max(),
+            previous_version: PageIndex::max(),
+        }
+    }
 }
 
-const _: () = assert!(size_of::<PageHeader>() == 5 * size_of::<u64>());
+const _: () = assert!(size_of::<PageHeader>() == 6 * size_of::<u64>());
 
 #[derive(Pod, Clone, Copy, Zeroable)]
 #[repr(C, align(8))]
@@ -70,7 +85,7 @@ const _: () = assert!(Size::of::<Page>().is_equal(PAGE_SIZE));
 impl Page {
     pub fn from_data<T: AnyBitPattern + NoUninit>(data: T) -> Self {
         Self {
-            header: PageHeader::zeroed(),
+            header: PageHeader::new(),
             data: must_cast(data),
         }
     }
@@ -152,6 +167,41 @@ impl Page {
             Some(self.header.visible_until)
         }
     }
+
+    pub fn next_version(&self) -> Option<PageIndex> {
+        if self.header.next_version == PageIndex::max() {
+            None
+        } else {
+            Some(self.header.next_version)
+        }
+    }
+
+    pub fn previous_version(&self) -> Option<PageIndex> {
+        if self.header.previous_version == PageIndex::max() {
+            None
+        } else {
+            Some(self.header.previous_version)
+        }
+    }
+
+    pub fn set_next_version(&mut self, link: PageIndex) {
+        assert!(link != PageIndex::max());
+
+        self.header.next_version = link;
+    }
+
+    pub fn set_previous_version(&mut self, link: PageIndex) {
+        assert!(link != PageIndex::max());
+
+        self.header.previous_version = link;
+    }
+
+    pub(crate) fn new() -> Self {
+        Self {
+            header: PageHeader::new(),
+            data: [0; _],
+        }
+    }
 }
 
 #[cfg(test)]
@@ -160,11 +210,11 @@ mod tests {
 
     #[test]
     pub fn serialize_has_correct_crc32() {
-        let page = Page::zeroed();
+        let page = Page::new();
 
         let serialized = page.serialize();
 
-        assert_eq!(&serialized[0..4], &[137, 65, 249, 152]);
+        assert_eq!(&serialized[0..4], &[20, 42, 180, 196]);
     }
 
     #[test]

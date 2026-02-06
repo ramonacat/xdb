@@ -13,7 +13,9 @@ fn commands_for_iteration(i: u64) -> TransactionCommands<u64> {
         commands.push(Command::Insert(j, Value(vec![11; (j % 32) as usize])));
     }
 
-    commands.push(Command::Delete((i - 1) * KEYS_PER_ITERATION));
+    if i > 0 {
+        commands.push(Command::Delete((i - 1) * KEYS_PER_ITERATION));
+    }
 
     TransactionCommands {
         commands,

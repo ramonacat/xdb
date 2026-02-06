@@ -1,6 +1,5 @@
 use tracing::{debug, info_span, instrument};
 
-use crate::page::PAGE_DATA_SIZE;
 use crate::storage::in_memory::block::Block;
 use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use std::collections::HashMap;
@@ -74,7 +73,7 @@ impl Display for CommitRequest {
                             index,
                         ) => format!("uninit({})", index.value()),
                     },
-                    page.cow.1.value(),
+                    page.cow.map(|x| x.1.value()),
                     page.version
                 )?;
             }
@@ -111,13 +110,12 @@ fn do_commit(
             MainPageRef::Initialized(page_ref) => {
                 let lock = page_ref.lock();
 
-                if lock.version() != page.version {
+                if lock.next_version().is_some() {
+                    debug!("rolling back, conflict");
                     commit_handle.rollback();
                     // TODO this is not a deadlock, but an optimistic concurrency race
                     return Err(StorageError::Deadlock(*index));
                 }
-
-                assert!(*index == page_ref.index());
 
                 locks.insert(*index, lock);
             }
@@ -125,7 +123,7 @@ fn do_commit(
         }
     }
 
-    debug!("collcted {} locks for {} pages", locks.len(), pages.len());
+    debug!("collected {} locks for {} pages", locks.len(), pages.len());
 
     for (index, page) in pages {
         match page.main {
@@ -135,42 +133,35 @@ fn do_commit(
                 // We can only start unlocking after this loop is done.
                 let lock = locks.get_mut(&index).unwrap();
 
-                let mut modfied_copy = page.cow.lock();
+                //let mut modfied_copy = page.cow.map(|x| x.lock());
 
                 if page.deleted {
                     debug!("page {index:?} deleted");
 
                     lock.set_visible_until(commit_handle.timestamp());
-                    modfied_copy.set_visible_until(commit_handle.timestamp());
-                } else if modfied_copy.data::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
-                    != lock.data::<[u8; PAGE_DATA_SIZE.as_bytes()]>()
-                {
+                } else if let Some(cow) = page.cow {
                     debug!("page {index:?} was modified, incrementing version");
 
-                    modfied_copy.set_visible_from(commit_handle.timestamp());
-                    modfied_copy.increment_version();
+                    lock.set_next_version(cow.index());
+                    lock.set_visible_until(commit_handle.timestamp());
 
-                    // TODO instead of overwriting the page, just `set_visible_until` to `id`, add
-                    // a link to the new version, and let vacuum clean it up once all previous
-                    // transactions are gone
-                    **lock = *modfied_copy;
+                    // TODO do we care?
+                    lock.increment_version();
 
-                    debug!("page {index:?} updated to: {:?}", &**lock);
+                    let mut cow_lock = cow.lock();
+                    cow_lock.set_visible_from(commit_handle.timestamp());
+                    cow_lock.set_previous_version(index);
+
+                    debug!("page {index:?} updated to point at: {:?}", cow.index());
+                } else if page.inserted {
+                    lock.set_visible_from(commit_handle.timestamp());
+                    lock.increment_version();
                 } else {
                     debug!("page {index:?} was not modified, leaving as is");
-                    modfied_copy.set_visible_until(commit_handle.timestamp());
                 }
             }
-            MainPageRef::Uninitialized(guard) => {
-                assert!(guard.index() == index);
-
-                let mut page = page.cow.lock();
-
-                page.set_visible_from(commit_handle.timestamp());
-
-                debug!("initializing new page {index:?}");
-
-                guard.initialize(*page);
+            MainPageRef::Uninitialized(_) => {
+                todo!("TODO do we need this variant at all?");
             }
         }
     }

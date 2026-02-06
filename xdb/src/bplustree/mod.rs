@@ -75,7 +75,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     ) -> Result<TReturn, TreeError> {
         let txid = self.transaction.id();
 
-        Ok(self.transaction.read(PageIndex::zero(), |[page]| {
+        Ok(self.transaction.read(PageIndex::zeroed(), |[page]| {
             let data: &TreeHeader = page.data();
 
             assert!(
@@ -92,7 +92,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     ) -> Result<TReturn, TreeError> {
         Ok(self
             .transaction
-            .write(PageIndex::zero(), |[page]| write(page.data_mut()))?)
+            .write(PageIndex::zeroed(), |[page]| write(page.data_mut()))?)
     }
 
     // TODO we should probably get rid of the callable, and just return a reference that has the
@@ -103,7 +103,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         read: impl for<'node> FnOnce(TIndices::Nodes<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         let page_indices = indices.to_page_indices();
-        debug_assert!(!page_indices.iter().any(|x| *x == PageIndex::zero()));
+        debug_assert!(!page_indices.iter().any(|x| *x == PageIndex::max()));
 
         Ok(self.transaction.read(page_indices, |pages| {
             read(TIndices::pages_to_nodes(pages.map(|x| x)))
@@ -116,7 +116,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         write: impl for<'node> FnOnce(TIndices::NodesMut<'node, TKey>) -> TReturn,
     ) -> Result<TReturn, TreeError> {
         let page_indices = indices.to_page_indices();
-        debug_assert!(!page_indices.iter().any(|x| *x == PageIndex::zero()));
+        debug_assert!(!page_indices.iter().any(|x| *x == PageIndex::max()));
 
         Ok(self.transaction.write(page_indices, |pages| {
             write(TIndices::pages_to_nodes_mut(pages.map(|x| x)))
@@ -136,7 +136,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         reservation: TStorage::PageReservation<'storage>,
         page: impl Node<TKey>,
     ) -> Result<(), TreeError> {
-        debug_assert!(reservation.index() != PageIndex::zero());
+        debug_assert!(reservation.index() != PageIndex::max());
 
         self.transaction
             .insert_reserved(reservation, Page::from_data(page))?;
@@ -223,7 +223,7 @@ impl TreeHeader {
         let mut transaction = storage.transaction()?;
 
         let header_page = transaction.reserve()?;
-        assert!(header_page.index() == PageIndex::zero());
+        assert!(header_page.index() == PageIndex::zeroed());
 
         // TODO replace usize with actual TKey!
         let root_index = transaction.insert(Page::from_data(LeafNode::<TKey>::new(None)))?;

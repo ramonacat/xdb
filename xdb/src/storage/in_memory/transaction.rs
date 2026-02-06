@@ -55,7 +55,7 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
         let indices: [PageIndex; N] = indices.into();
 
         let mut guards: [_; N] = indices
-            .map(|x| self.version_manager.read(x))
+            .map(|x| self.version_manager.write(x))
             .into_iter()
             .collect::<Result<Vec<_>, StorageError>>()?
             .try_into()

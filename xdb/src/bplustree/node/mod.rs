@@ -35,7 +35,7 @@ impl From<InteriorNodeId> for AnyNodeId {
 
 impl AnyNodeId {
     pub fn new(index: PageIndex) -> Self {
-        assert!(index != PageIndex::zero());
+        assert!(index != PageIndex::max());
 
         Self(index)
     }
@@ -62,7 +62,7 @@ impl LeafNodeId {
     }
 
     pub fn new(index: PageIndex) -> Self {
-        assert!(index != PageIndex::zero());
+        assert!(index != PageIndex::max());
 
         Self(index)
     }
@@ -84,7 +84,7 @@ pub(super) struct InteriorNodeId(PageIndex);
 
 impl InteriorNodeId {
     pub(crate) fn new(index: PageIndex) -> Self {
-        assert!(index != PageIndex::zero());
+        assert!(index != PageIndex::max());
 
         Self(index)
     }
@@ -143,7 +143,7 @@ impl NodeHeader {
     }
 
     fn parent(&self) -> Option<InteriorNodeId> {
-        if self.parent == PageIndex::zero() {
+        if self.parent == PageIndex::max() {
             None
         } else {
             Some(InteriorNodeId::new(self.parent))
@@ -151,7 +151,7 @@ impl NodeHeader {
     }
 
     fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
-        self.parent = parent.map_or_else(PageIndex::zero, |x| x.page());
+        self.parent = parent.map_or_else(PageIndex::max, |x| x.page());
     }
 }
 

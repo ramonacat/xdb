@@ -4,7 +4,6 @@ use crate::platform::allocation::Allocation;
 use crate::platform::allocation::uncommitted::UncommittedAllocation;
 use crate::storage::StorageError;
 use crate::storage::in_memory::block::page_state::PageStateValue;
-use bytemuck::Zeroable;
 use std::ops::DerefMut;
 #[cfg(debug_assertions)]
 use std::time::{Duration, Instant};
@@ -54,6 +53,11 @@ impl<'block> PageRef<'block> {
         unsafe { PageGuard::new(self.page, self.block, self.index) }
     }
 
+    #[instrument(skip(self), fields(index = ?self.index, block = self.block.name))]
+    pub fn lock_read(&self) -> PageGuardRead<'block> {
+        unsafe { PageGuardRead::new(self.page, self.block, self.index) }
+    }
+
     // TODO does it have to be unsafe? do we really care if somebody else has a PageRef to this?
     pub unsafe fn reset(self) -> UninitializedPageGuard<'block> {
         let housekeeping = unsafe { self.block.housekeeping_for(self.index) };
@@ -68,6 +72,59 @@ impl<'block> PageRef<'block> {
 
     pub(super) const fn as_ptr(&self) -> NonNull<Page> {
         self.page
+    }
+}
+
+#[derive(Debug)]
+pub struct PageGuardRead<'block> {
+    page: NonNull<Page>,
+    block: &'block Block,
+    index: PageIndex,
+    #[cfg(debug_assertions)]
+    taken: Instant,
+    #[allow(unused)]
+    span: Span,
+}
+
+impl<'block> PageGuardRead<'block> {
+    unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
+        let span = info_span!("page guard", block = block.name, ?index);
+        span.in_scope(|| {
+            let housekeeping = unsafe { block.housekeeping_for(index) };
+            housekeeping.lock_read();
+        });
+
+        Self {
+            page,
+            block,
+            index,
+            #[cfg(debug_assertions)]
+            taken: Instant::now(),
+            span,
+        }
+    }
+}
+
+impl Deref for PageGuardRead<'_> {
+    type Target = Page;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.page.as_ref() }
+    }
+}
+
+impl Drop for PageGuardRead<'_> {
+    fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        {
+            let elapsed = self.taken.elapsed();
+
+            if elapsed > Duration::from_millis(100) {
+                warn!("read lock held for too long: {elapsed:?}");
+            }
+        }
+
+        unsafe { self.block.housekeeping_for(self.index) }.unlock_read();
     }
 }
 
@@ -187,6 +244,8 @@ impl<'block> UninitializedPageGuard<'block> {
     #[allow(clippy::large_types_passed_by_value)] // TODO create an API that allows us to avoid
     // this
     pub fn initialize(mut self, page: Page) -> PageRef<'block> {
+        debug!("initializing page {:?}", self.index());
+
         let housekeeping = unsafe { self.block.housekeeping_for(self.index) };
 
         // we're taking a mutable reference, so we must lock so that there is only one, even if
@@ -332,7 +391,7 @@ impl Block {
     #[instrument(skip(self), parent = &self.span)]
     pub fn get_or_allocate_zeroed(&'_ self, index: PageIndex) -> Result<PageRef<'_>, StorageError> {
         while index.0 >= self.allocated_page_count.load(Ordering::Acquire) {
-            let allocated = self.allocate()?.initialize(Page::zeroed());
+            let allocated = self.allocate()?.initialize(Page::new());
 
             if allocated.index == index {
                 return Ok(allocated);

@@ -34,24 +34,39 @@ impl PageStateValue {
     const MASK_IS_INITIALIZED: u32 = 1 << 31;
     const MASK_IS_LOCKED: u32 = 1 << 30;
 
+    const MASK_READERS: u32 = 0x0000_FFFF;
+
     const fn is_initialized(self) -> bool {
         self.0 & Self::MASK_IS_INITIALIZED != 0
     }
 
+    // TODO rename -> has_writer
     const fn is_locked(self) -> bool {
         self.0 & Self::MASK_IS_LOCKED != 0
     }
 
+    // TODO rename -> lock_write
     const fn lock(self) -> Self {
         Self(self.0 | Self::MASK_IS_LOCKED)
     }
 
+    // TODO rename -> unlock_write
     const fn unlock(self) -> Self {
         Self(self.0 & !Self::MASK_IS_LOCKED)
     }
 
     const fn mark_uninitialized(self) -> Self {
         Self(self.0 & !Self::MASK_IS_INITIALIZED)
+    }
+
+    fn readers(self) -> u16 {
+        u16::try_from(self.0 & Self::MASK_READERS).unwrap()
+    }
+
+    fn with_readers(self, readers: u16) -> Self {
+        assert!(!self.is_locked());
+
+        Self((self.0 & !Self::MASK_READERS) | u32::from(readers))
     }
 }
 
@@ -83,6 +98,7 @@ impl PageState {
                 let x = PageStateValue(x);
 
                 assert!(!x.is_locked());
+                assert!(x.readers() == 0);
 
                 Some(x.mark_uninitialized().0)
             }) {
@@ -101,6 +117,10 @@ impl PageState {
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
                 let f = PageStateValue(f);
+
+                if f.readers() > 0 {
+                    return None;
+                }
 
                 if f.is_locked() {
                     return None;
@@ -158,6 +178,7 @@ impl PageState {
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 let x = PageStateValue(x);
 
+                assert!(x.readers() == 0);
                 assert!(x.is_locked());
 
                 Some(x.unlock().0)
@@ -173,7 +194,52 @@ impl PageState {
         }
     }
 
+    pub fn lock_read(self: Pin<&Self>) {
+        debug_assert!(self.is_initialized());
+
+        match self
+            .atomic()
+            .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
+                let x = PageStateValue(x);
+
+                if x.is_locked() {
+                    return None;
+                }
+
+                Some(x.with_readers(x.readers() + 1).0)
+            }) {
+            Ok(_) => {}
+            Err(previous) => {
+                let previous = PageStateValue(previous);
+
+                self.wait(previous);
+                self.lock_read();
+            }
+        }
+    }
+
+    pub fn unlock_read(self: Pin<&Self>) {
+        debug_assert!(self.is_initialized());
+
+        match self
+            .atomic()
+            .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
+                let x = PageStateValue(x);
+
+                assert!(!x.is_locked());
+                assert!(x.readers() > 0);
+
+                Some(x.with_readers(x.readers() - 1).0)
+            }) {
+            Ok(_) => {
+                self.wake();
+            }
+            Err(_) => todo!(),
+        }
+    }
+
     // TODO rename -> wake_one?
+    // TODO does this need to be pub?
     pub fn wake(self: Pin<&Self>) {
         let awoken = self.futex().wake_one();
         debug!("awoken a waiter? {awoken} ");

@@ -87,6 +87,9 @@ impl VacuumThread {
 
                     if let Some(visible_until) = page_guard.visible_until()
                         && visible_until < min_timestamp
+                        // TODO in this case we have to go through the whole chain and update it to
+                        // remove the old versions
+                        && page_guard.next_version().is_none()
                     {
                         drop(page_guard); // ensure the lock is dropped before we uninitialize it
                         unsafe {

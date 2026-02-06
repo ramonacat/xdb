@@ -262,7 +262,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
 
         let value = self.data.values()[index.0];
 
-        assert!(value != PageIndex::zero());
+        assert!(value != PageIndex::max());
 
         Some(value)
     }
