@@ -23,10 +23,13 @@ fn commands_for_iteration(i: u64) -> TransactionCommands<u64> {
 
 fn expected_value_for_key(key: u64) -> Option<Vec<u8>> {
     let iteration = key / KEYS_PER_ITERATION;
-    let committed = !iteration.is_multiple_of(10);
-    let deleted = key.is_multiple_of(KEYS_PER_ITERATION) && committed;
 
-    if deleted || committed {
+    let insert_committed = !iteration.is_multiple_of(10);
+    let delete_committed = !(iteration + 1).is_multiple_of(10);
+
+    let deleted = key.is_multiple_of(KEYS_PER_ITERATION) && delete_committed;
+
+    if !deleted && insert_committed {
         Some(vec![11; (key % 32) as usize])
     } else {
         None

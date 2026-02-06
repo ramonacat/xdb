@@ -9,7 +9,6 @@ use std::{
     thread::{self},
     time::Duration,
 };
-use tracing::error;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 use xdb::bplustree::TreeKey;
 use xdb::bplustree::algorithms::delete::delete;
@@ -122,10 +121,8 @@ fn retry_on_deadlock<T: TreeKey + for<'a> Arbitrary<'a>>(
         thread::sleep(Duration::from_millis(2u64.pow(i / 16)));
     }
 
-    // TODO we really should not ignore this
-    error!("128 retries not succesful, giving up");
-
-    Ok(())
+    let transaction = tree.transaction().unwrap();
+    callable(transaction)
 }
 
 #[derive(Subcommand)]

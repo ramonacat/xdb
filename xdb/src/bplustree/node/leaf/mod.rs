@@ -91,6 +91,7 @@ impl<TKey: TreeKey> LeafNode<TKey> {
 
         self.data.delete_at(index);
 
+        // TODO the caller should call needs_merge themselves
         Some((result, self.data.needs_merge()))
     }
 

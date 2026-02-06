@@ -57,9 +57,7 @@ pub(super) fn leaf_search<TStorage: Storage, TKey: TreeKey>(
     })?;
 
     match result {
-        LeafSearchResult::Recurse(interior_node_id) => {
-            leaf_search(transaction, interior_node_id, key)
-        }
+        LeafSearchResult::Recurse(child) => leaf_search(transaction, child, key),
         LeafSearchResult::Done(leaf_node_id) => Ok(leaf_node_id),
     }
 }

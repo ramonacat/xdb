@@ -152,6 +152,18 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
     #[instrument(skip(self), parent = &self.span)]
     pub(crate) fn read(&mut self, index: PageIndex) -> Result<PageGuard<'storage>, StorageError> {
+        // TODO what we have currently only implements "read comitted" isolation level. What we
+        // really need is is "snapshot"
+        //
+        // T1 starts
+        // T2 starts
+        // T1 reads page 1
+        // T1 writes page 1 and page 2
+        // T1 commits
+        //
+        // T2 page 1 now points to page 2 which was modified by T1, when T2 reads page 2 it gets
+        // the new version!!!
+
         if let Some(entry) = self.pages.get(&index) {
             Ok(entry.cow.lock())
         } else {
@@ -159,7 +171,8 @@ impl<'storage> VersionManagedTransaction<'storage> {
             let main_lock = main.lock();
 
             if !main_lock.is_visible_in(self.id) {
-                // TODO this is not a deadlock, it's just optimisitc concurrency race
+                // TODO we should not be returning an error, but instead there should be multiple
+                // versions of the page stored, each with link to the newer version
                 return Err(StorageError::Deadlock(index));
             }
 

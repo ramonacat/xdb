@@ -1,3 +1,4 @@
+use std::fmt::Write;
 mod entries;
 
 use crate::bplustree::{
@@ -159,6 +160,15 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
 
     pub(crate) fn key_at(&self, index: KeyIndex) -> Option<TKey> {
         self.entries.key_at(index)
+    }
+
+    pub(crate) fn debug(&self) -> String {
+        let mut output = String::new();
+
+        writeln!(output, "header: {:?}", self.header).unwrap();
+        writeln!(output, "entries: {:?}", self.entries.debug()).unwrap();
+
+        output
     }
 }
 

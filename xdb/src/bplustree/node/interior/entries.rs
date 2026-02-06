@@ -19,6 +19,12 @@ pub struct InteriorNodeEntries<TKey> {
     data: InteriorNodeData<TKey>,
 }
 
+impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
+    pub(crate) fn debug(&self) -> String {
+        self.data.debug(self.key_count())
+    }
+}
+
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
 // automatically if not for the PhantomData
 unsafe impl<TKey: TreeKey> Pod for InteriorNodeEntries<TKey> {}
@@ -29,6 +35,7 @@ struct InteriorNodeData<TKey> {
     data: [u8; INTERIOR_NODE_DATA_SIZE.as_bytes()],
     _key: PhantomData<TKey>,
 }
+
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
 // automatically if not for the PhantomData
 unsafe impl<TKey: TreeKey> Pod for InteriorNodeData<TKey> {}
@@ -75,6 +82,19 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
 
     fn values_mut(&mut self) -> &mut [PageIndex] {
         cast_slice_mut(&mut self.data[Self::VALUES_OFFSET.as_bytes()..])
+    }
+
+    fn debug(&self, key_count: usize) -> String {
+        let mut debug = "keys: ".to_string();
+        debug += &(0..key_count)
+            .map(|x| format!("{:?}", self.keys()[x]))
+            .fold(String::new(), |acc, x| acc + " " + &x);
+        debug += "\nvalues: ";
+        debug += &(0..=key_count)
+            .map(|x| format!("{:?}", self.values()[x]))
+            .fold(String::new(), |acc, x| acc + " " + &x);
+
+        debug
     }
 }
 
@@ -265,6 +285,8 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     pub fn key_at(&self, index: KeyIndex) -> Option<TKey> {
+        assert!(index.0 < self.key_count());
+
         self.data.keys().get(index.0).copied()
     }
 

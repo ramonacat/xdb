@@ -6,6 +6,7 @@
 // TODO setup clippy/cargo-fmt to automatically format and group imports
 // TODO multithreaded fuzzing? not ideal, because it's not deterministic, but maybe could be a bit
 // better at finding bugs?
+// TODO once all the major bugs are gone, make the most expensive assert hidden behind a feature
 
 // TODO require `SAFETY: ...` comments
 #![deny(clippy::all, clippy::pedantic, clippy::nursery, warnings)]

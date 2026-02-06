@@ -5,11 +5,11 @@ use tracing::debug;
 
 use crate::{
     bplustree::{
-        InteriorNodeId, LeafNodeId, TreeError, TreeKey, TreeTransaction,
+        InteriorNodeId, LeafNodeId, NodeId, TreeError, TreeKey, TreeTransaction,
         algorithms::{last_leaf, leaf_search},
         node::{Node, interior::InteriorNode, leaf::LeafNode},
     },
-    storage::Storage,
+    storage::{Storage, StorageError},
 };
 
 #[must_use]
@@ -117,11 +117,20 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
         return Ok(());
     };
 
-    let index_in_parent =
-        transaction.read_nodes(parent_id, |x| x.find_value_index(node_id.into()).unwrap())?;
+    let index_in_parent = transaction
+        .read_nodes(parent_id, |x| {
+            x.find_value_index(node_id.into())
+            // TODO the error here happens because we're doing READ COMMITTED isolation and not
+            // snapshot, panic once that's fixed
+        })?
+        .ok_or_else(|| TreeError::StorageError(StorageError::Deadlock(node_id.page())))?;
 
     if let Some(value_before) = index_in_parent.value_before() {
-        let left = transaction.read_nodes(parent_id, |x| x.value_at(value_before).unwrap())?;
+        let left = transaction.read_nodes(
+            parent_id,
+            |x| {
+                x.value_at(value_before).unwrap_or_else(|| panic!("parent node does not have left sibling@{value_before:?}, parent_id: {parent_id:?}, node: node_id: {node_id:?}. node:\n{:?}", x.debug()))
+            })?;
         let left = InteriorNodeId::from_any(left);
 
         match merge_interior_node_with(transaction, left, node_id, parent_id) {
@@ -130,7 +139,13 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
                 return Ok(());
             }
             Err(MergeError::NotEnoughCapacity) => {}
-            Err(MergeError::NotSiblings) => todo!(), // this should probably just panic?
+            Err(MergeError::NotSiblings) => {
+                // TODO this can happen due to the fact that our isolation level is currently `READ
+                // COMMITTED`. panic here once we're able to do snapshot
+                return Err(TreeError::StorageError(StorageError::Deadlock(
+                    node_id.page(),
+                )));
+            }
             Err(MergeError::Tree(err)) => return Err(err),
         }
     }
@@ -148,8 +163,13 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
                 return Ok(());
             }
             Err(MergeError::NotEnoughCapacity) => {}
-            // TODO this happens occasionaly in tests, figure out why and fix!
-            Err(MergeError::NotSiblings) => todo!(), // this should probably just panic?
+            Err(MergeError::NotSiblings) => {
+                // TODO this can happen due to the fact that our isolation level is currently `READ
+                // COMMITTED`. panic here once we're able to do snapshot
+                return Err(TreeError::StorageError(StorageError::Deadlock(
+                    node_id.page(),
+                )));
+            }
             Err(MergeError::Tree(err)) => return Err(err),
         }
     }

@@ -18,7 +18,7 @@ pub(super) trait NodeId: Copy + PartialEq {
     fn page(&self) -> PageIndex;
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub(super) struct AnyNodeId(PageIndex);
 
 impl From<LeafNodeId> for AnyNodeId {

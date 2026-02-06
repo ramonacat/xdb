@@ -149,6 +149,9 @@ fn do_commit(id: TransactionId, pages: HashMap<PageIndex, CowPage>) -> Result<()
                     modfied_copy.set_visible_from(id);
                     modfied_copy.increment_version();
 
+                    // TODO instead of overwriting the page, just `set_visible_until` to `id`, add
+                    // a link to the new version, and let vacuum clean it up once all previous
+                    // transactions are gone
                     **lock = *modfied_copy;
 
                     debug!("page {index:?} updated to: {:?}", &**lock);

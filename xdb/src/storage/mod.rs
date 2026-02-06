@@ -79,6 +79,7 @@ pub trait Transaction<'storage>: Send + Debug {
     type Storage: Storage + 'storage;
 
     fn id(&self) -> TransactionId;
+    // TODO unify get and write, don't take callbacks, return a ref with the same lifetime as &self
     fn read<T, const N: usize>(
         &mut self,
         indices: impl Into<[PageIndex; N]>,

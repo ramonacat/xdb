@@ -26,5 +26,6 @@ popd
 
 while read -r line
 do
-        cargo +nightly fuzz run "$line" -j"$(nproc)" -- -max_total_time=300
+        # leak detection is disabled, as there are some minor leaks being detected in rust's std::sync::mpmc, over which we have no control
+        ASAN_OPTIONS="detect_leaks=0" cargo +nightly fuzz run "$line" -j"$(nproc)" -- -max_total_time=300
 done < <(cargo +nightly fuzz list)

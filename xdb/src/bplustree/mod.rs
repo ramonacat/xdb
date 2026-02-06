@@ -95,6 +95,8 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
             .write(PageIndex::zero(), |[page]| write(page.data_mut()))?)
     }
 
+    // TODO we should probably get rid of the callable, and just return a reference that has the
+    // same lifetime as the transaction
     fn read_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
         &mut self,
         indices: TIndices,
@@ -121,6 +123,8 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         })?)
     }
 
+    // TODO separete reserve_interior_node and reserve_leaf_node, so that callers don't have to
+    // touch the ID directly?
     fn reserve_node(&mut self) -> Result<TStorage::PageReservation<'storage>, TreeError> {
         Ok(self.transaction.reserve()?)
     }
