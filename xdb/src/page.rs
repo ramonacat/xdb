@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 use bytemuck::{
     AnyBitPattern, NoUninit, Pod, Zeroable, bytes_of, from_bytes, from_bytes_mut, must_cast,
@@ -20,31 +20,16 @@ pub enum PageError {
     Checksum,
 }
 
-#[derive(Debug, Pod, Zeroable, Clone, Copy, PartialEq, Eq)]
-#[repr(transparent)]
-pub struct PageVersion(u64);
-
-impl PageVersion {
-    const fn next(self) -> Self {
-        Self(self.0 + 1)
-    }
-}
-
-impl Display for PageVersion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "v{}", self.0)
-    }
-}
-
 #[derive(Debug, Pod, Clone, Copy, Zeroable)]
 #[repr(C, align(8))]
 // TODO this header is growing in size, are all of these fields really neccessary?
+// TODO the versioning and visibility stuff should be moved into another datastructure, the
+// physical page doesn't really care about anything other than a checksum and raw data
 struct PageHeader {
     checksum: Checksum,
     _unused1: u32,
     visible_from: TransactionalTimestamp,
     visible_until: TransactionalTimestamp,
-    version: PageVersion,
     next_version: PageIndex,
     previous_version: PageIndex,
 }
@@ -55,14 +40,13 @@ impl PageHeader {
             _unused1: 0,
             visible_from: TransactionalTimestamp::zeroed(),
             visible_until: TransactionalTimestamp::zeroed(),
-            version: PageVersion(0),
             next_version: PageIndex::max(),
             previous_version: PageIndex::max(),
         }
     }
 }
 
-const _: () = assert!(size_of::<PageHeader>() == 6 * size_of::<u64>());
+const _: () = assert!(size_of::<PageHeader>() == 5 * size_of::<u64>());
 
 #[derive(Pod, Clone, Copy, Zeroable)]
 #[repr(C, align(8))]
@@ -144,27 +128,34 @@ impl Page {
         true
     }
 
-    pub const fn set_visible_from(&mut self, timestamp: TransactionalTimestamp) {
-        self.header.visible_from = timestamp;
+    pub fn set_visible_from(&mut self, timestamp: Option<TransactionalTimestamp>) {
+        self.header.visible_from = timestamp.unwrap_or_else(TransactionalTimestamp::zero);
     }
 
-    pub const fn set_visible_until(&mut self, timestamp: TransactionalTimestamp) {
-        self.header.visible_until = timestamp;
-    }
-
-    pub const fn version(&self) -> PageVersion {
-        self.header.version
-    }
-
-    pub const fn increment_version(&mut self) {
-        self.header.version = self.header.version.next();
+    pub fn set_visible_until(&mut self, timestamp: Option<TransactionalTimestamp>) {
+        self.header.visible_until = timestamp.unwrap_or_else(TransactionalTimestamp::zero);
     }
 
     pub fn visible_until(&self) -> Option<TransactionalTimestamp> {
         if self.header.visible_until == TransactionalTimestamp::zero() {
             None
         } else {
+            debug_assert!(self.header.visible_until >= self.header.visible_from);
+
             Some(self.header.visible_until)
+        }
+    }
+
+    pub fn visible_from(&self) -> Option<TransactionalTimestamp> {
+        if self.header.visible_from == TransactionalTimestamp::zero() {
+            None
+        } else {
+            debug_assert!(
+                self.header.visible_until == TransactionalTimestamp::zero()
+                    || self.header.visible_until >= self.header.visible_from
+            );
+
+            Some(self.header.visible_from)
         }
     }
 
@@ -184,16 +175,24 @@ impl Page {
         }
     }
 
-    pub fn set_next_version(&mut self, link: PageIndex) {
-        assert!(link != PageIndex::max());
+    pub fn set_next_version(&mut self, link: Option<PageIndex>) {
+        if let Some(link) = link {
+            assert!(link != PageIndex::max());
 
-        self.header.next_version = link;
+            self.header.next_version = link;
+        } else {
+            self.header.next_version = PageIndex::max();
+        }
     }
 
-    pub fn set_previous_version(&mut self, link: PageIndex) {
-        assert!(link != PageIndex::max());
+    pub fn set_previous_version(&mut self, link: Option<PageIndex>) {
+        if let Some(link) = link {
+            assert!(link != PageIndex::max());
 
-        self.header.previous_version = link;
+            self.header.previous_version = link;
+        } else {
+            self.header.previous_version = PageIndex::max();
+        }
     }
 
     pub(crate) fn new() -> Self {
@@ -214,7 +213,7 @@ mod tests {
 
         let serialized = page.serialize();
 
-        assert_eq!(&serialized[0..4], &[20, 42, 180, 196]);
+        assert_eq!(&serialized[0..4], &[195, 136, 198, 29]);
     }
 
     #[test]

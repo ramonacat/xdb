@@ -78,26 +78,70 @@ impl VacuumThread {
                 index = index.next();
                 i += 1;
 
-                let Some(page) = self.data.try_get(index) else {
+                let Some(page) = self.data.try_get(None, index) else {
                     continue;
                 };
 
-                if let Ok(page_guard) = page.lock_nowait() {
+                if let Ok(mut page_guard) = page.lock_nowait() {
+                    if page_guard.previous_version().is_some() {
+                        continue;
+                    }
+
                     checked_count += 1;
 
                     if let Some(visible_until) = page_guard.visible_until()
-                        && visible_until < min_timestamp
-                        // TODO in this case we have to go through the whole chain and update it to
-                        // remove the old versions
-                        && page_guard.next_version().is_none()
+                        && min_timestamp > visible_until
                     {
-                        drop(page_guard); // ensure the lock is dropped before we uninitialize it
-                        unsafe {
-                            page.reset();
+                        debug!(
+                            "page {index:?} needs to be cleaned up next:{:?}, previous:{:?}",
+                            page_guard.next_version(),
+                            page_guard.previous_version()
+                        );
+
+                        if page_guard.previous_version().is_some() {
+                            continue;
                         }
 
-                        self.freemap.set(index.0).unwrap();
-                        freed_count += 1;
+                        if let Some(next_version_index) = page_guard.next_version() {
+                            if let Some(next_version) = self.data.try_get(None, next_version_index)
+                                && let Ok(next_version) = next_version.lock_nowait()
+                            {
+                                let mut next_next =
+                                    if let Some(next_next_index) = next_version.next_version() {
+                                        if let Some(next_next) =
+                                            self.data.try_get(None, next_next_index)
+                                            && let Ok(next_next) = next_next.lock_nowait()
+                                        {
+                                            Some(next_next)
+                                        } else {
+                                            continue;
+                                        }
+                                    } else {
+                                        None
+                                    };
+
+                                *page_guard = *next_version;
+                                page_guard.set_previous_version(None);
+
+                                if let Some(ref mut next_next) = next_next {
+                                    next_next.set_previous_version(Some(index));
+                                }
+
+                                next_version.reset();
+
+                                drop(next_next);
+                                drop(page_guard);
+
+                                self.freemap.set(next_version_index.0).unwrap();
+                                freed_count += 1;
+                            }
+                        } else {
+                            debug!("freeing page {:?}", index);
+                            page_guard.reset();
+
+                            self.freemap.set(index.0).unwrap();
+                            freed_count += 1;
+                        }
                     }
                 }
             }

@@ -23,6 +23,8 @@ pub enum StorageError {
 
 #[derive(Debug, Clone, Copy, Pod, Zeroable, PartialEq, Eq, Hash)]
 #[repr(transparent)]
+// TODO we need to separate the type that's used for storage from the type we give out to users,
+// that should simplify the matters of logical/physical indices
 // TODO the index should have some sort of storage id (can we have a type-level [lifetime?] tag that ties it to
 // an instance of a block?)
 pub struct PageIndex(u64);

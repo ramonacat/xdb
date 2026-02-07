@@ -1,3 +1,6 @@
+// TODO the logical_index thing is a hack, instead version_manager should wrap all pagerefs into
+// it's own datastructures which have that information
+
 mod page_state;
 
 use crate::platform::allocation::Allocation;
@@ -9,7 +12,7 @@ use std::ops::DerefMut;
 use std::time::{Duration, Instant};
 use std::{fmt::Debug, mem::MaybeUninit, ops::Deref, pin::Pin, ptr::NonNull};
 use thiserror::Error;
-use tracing::{Span, debug, debug_span, info_span, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 use crate::{
     Size,
@@ -28,7 +31,8 @@ pub enum LockError {
 pub struct PageRef<'block> {
     page: NonNull<Page>,
     block: &'block Block,
-    index: PageIndex,
+    logical_index: Option<PageIndex>,
+    physical_index: PageIndex,
 }
 
 unsafe impl Send for PageRef<'_> {}
@@ -37,37 +41,60 @@ impl<'block> PageRef<'block> {
     pub(super) const unsafe fn new(
         page: NonNull<Page>,
         block: &'block Block,
-        index: PageIndex,
+        logical_index: Option<PageIndex>,
+        physical_index: PageIndex,
     ) -> Self {
-        Self { page, block, index }
+        Self {
+            page,
+            block,
+            logical_index,
+            physical_index,
+        }
     }
 
-    #[instrument(skip(self), fields(index = ?self.index, block = self.block.name))]
+    #[instrument(skip(self), fields(logical_index = ?self.logical_index, physical_index = ?self.physical_index, block = self.block.name))]
     // TODO rename -> try_lock, change result to option
     pub fn lock_nowait(&self) -> Result<PageGuard<'block>, LockError> {
-        unsafe { PageGuard::new_nowait(self.page, self.block, self.index) }
+        unsafe {
+            PageGuard::new_nowait(
+                self.page,
+                self.block,
+                self.logical_index,
+                self.physical_index,
+            )
+        }
     }
 
-    #[instrument(skip(self), fields(index = ?self.index, block = self.block.name))]
+    #[instrument(skip(self), fields(logical_index = ?self.logical_index, physical_index = ?self.physical_index, block = self.block.name))]
     pub fn lock(&self) -> PageGuard<'block> {
-        unsafe { PageGuard::new(self.page, self.block, self.index) }
+        unsafe {
+            PageGuard::new(
+                self.page,
+                self.block,
+                self.logical_index,
+                self.physical_index,
+            )
+        }
     }
 
-    #[instrument(skip(self), fields(index = ?self.index, block = self.block.name))]
+    #[instrument(skip(self), fields(logical_index = ?self.logical_index, physical_index = ?self.physical_index, block = self.block.name))]
     pub fn lock_read(&self) -> PageGuardRead<'block> {
-        unsafe { PageGuardRead::new(self.page, self.block, self.index) }
+        unsafe {
+            PageGuardRead::new(
+                self.page,
+                self.block,
+                self.logical_index,
+                self.physical_index,
+            )
+        }
     }
 
-    // TODO does it have to be unsafe? do we really care if somebody else has a PageRef to this?
-    pub unsafe fn reset(self) -> UninitializedPageGuard<'block> {
-        let housekeeping = unsafe { self.block.housekeeping_for(self.index) };
-        housekeeping.mark_uninitialized();
-
-        unsafe { UninitializedPageGuard::new(self.block, self.page.cast(), self.index) }
+    pub const fn logical_index(&self) -> Option<PageIndex> {
+        self.logical_index
     }
 
-    pub const fn index(&self) -> PageIndex {
-        self.index
+    pub const fn physical_index(&self) -> PageIndex {
+        self.physical_index
     }
 
     pub(super) const fn as_ptr(&self) -> NonNull<Page> {
@@ -79,28 +106,31 @@ impl<'block> PageRef<'block> {
 pub struct PageGuardRead<'block> {
     page: NonNull<Page>,
     block: &'block Block,
-    index: PageIndex,
+    #[allow(unused)] // TODO drop if we really don't need it
+    logical_index: Option<PageIndex>,
+    physical_index: PageIndex,
     #[cfg(debug_assertions)]
     taken: Instant,
-    #[allow(unused)]
-    span: Span,
 }
 
 impl<'block> PageGuardRead<'block> {
-    unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
-        let span = info_span!("page guard", block = block.name, ?index);
-        span.in_scope(|| {
-            let housekeeping = unsafe { block.housekeeping_for(index) };
-            housekeeping.lock_read();
-        });
+    #[instrument]
+    unsafe fn new(
+        page: NonNull<Page>,
+        block: &'block Block,
+        logical_index: Option<PageIndex>,
+        physical_index: PageIndex,
+    ) -> Self {
+        let housekeeping = unsafe { block.housekeeping_for(physical_index) };
+        housekeeping.lock_read();
 
         Self {
             page,
             block,
-            index,
+            logical_index,
+            physical_index,
             #[cfg(debug_assertions)]
             taken: Instant::now(),
-            span,
         }
     }
 }
@@ -124,7 +154,7 @@ impl Drop for PageGuardRead<'_> {
             }
         }
 
-        unsafe { self.block.housekeeping_for(self.index) }.unlock_read();
+        unsafe { self.block.housekeeping_for(self.physical_index) }.unlock_read();
     }
 }
 
@@ -132,53 +162,70 @@ impl Drop for PageGuardRead<'_> {
 pub struct PageGuard<'block> {
     page: NonNull<Page>,
     block: &'block Block,
-    index: PageIndex,
+    logical_index: Option<PageIndex>,
+    physical_index: PageIndex,
     #[cfg(debug_assertions)]
     taken: Instant,
-    span: Span,
+    lock_consumed: bool,
 }
 
 unsafe impl Send for PageGuard<'_> {}
 
 impl<'block> PageGuard<'block> {
-    unsafe fn new(page: NonNull<Page>, block: &'block Block, index: PageIndex) -> Self {
-        let span = info_span!("page guard", block = block.name, ?index);
-        span.in_scope(|| {
-            let housekeeping = unsafe { block.housekeeping_for(index) };
-            housekeeping.lock();
-        });
+    #[instrument]
+    unsafe fn new(
+        page: NonNull<Page>,
+        block: &'block Block,
+        logical_index: Option<PageIndex>,
+        physical_index: PageIndex,
+    ) -> Self {
+        let housekeeping = unsafe { block.housekeeping_for(physical_index) };
+        housekeeping.lock();
 
         Self {
             page,
             block,
-            index,
+            logical_index,
+            physical_index,
             #[cfg(debug_assertions)]
             taken: Instant::now(),
-            span,
+            lock_consumed: false,
         }
     }
 
     unsafe fn new_nowait(
         page: NonNull<Page>,
         block: &'block Block,
-        index: PageIndex,
+        logical_index: Option<PageIndex>,
+        physical_index: PageIndex,
     ) -> Result<Self, LockError> {
-        let span = debug_span!("page guard", block = block.name, ?index);
-        span.in_scope(|| {
-            let housekeeping = unsafe { block.housekeeping_for(index) };
-            housekeeping.lock_nowait()?;
-
-            Ok(())
-        })?;
+        let housekeeping = unsafe { block.housekeeping_for(physical_index) };
+        housekeeping.lock_nowait()?;
 
         Ok(Self {
             page,
             block,
-            index,
+            logical_index,
+            physical_index,
             #[cfg(debug_assertions)]
             taken: Instant::now(),
-            span,
+            lock_consumed: false,
         })
+    }
+
+    pub fn reset(mut self) -> UninitializedPageGuard<'block> {
+        let housekeeping = unsafe { self.block.housekeeping_for(self.physical_index) };
+        housekeeping.mark_uninitialized();
+        self.lock_consumed = true;
+
+        unsafe {
+            UninitializedPageGuard::new(
+                self.block,
+                self.page.cast(),
+                self.logical_index,
+                self.physical_index,
+            )
+        }
     }
 }
 
@@ -203,8 +250,12 @@ impl DerefMut for PageGuard<'_> {
 }
 
 impl Drop for PageGuard<'_> {
-    #[instrument(skip(self), fields(index = ?self.index, block = self.block.name), follows_from = [&self.span])]
+    #[instrument(skip(self), fields(logical_index = ?self.logical_index, physical_index = ?self.physical_index, block = self.block.name))]
     fn drop(&mut self) {
+        if self.lock_consumed {
+            return;
+        }
+
         #[cfg(debug_assertions)]
         {
             let elapsed = self.taken.elapsed();
@@ -214,7 +265,7 @@ impl Drop for PageGuard<'_> {
             }
         }
 
-        unsafe { self.block.housekeeping_for(self.index) }.unlock();
+        unsafe { self.block.housekeeping_for(self.physical_index) }.unlock();
     }
 }
 
@@ -223,7 +274,8 @@ impl Drop for PageGuard<'_> {
 pub struct UninitializedPageGuard<'block> {
     block: &'block Block,
     page: NonNull<MaybeUninit<Page>>,
-    index: PageIndex,
+    logical_index: Option<PageIndex>,
+    physical_index: PageIndex,
 }
 
 unsafe impl Send for UninitializedPageGuard<'_> {}
@@ -232,21 +284,36 @@ impl<'block> UninitializedPageGuard<'block> {
     pub(super) const unsafe fn new(
         block: &'block Block,
         page: NonNull<MaybeUninit<Page>>,
-        index: PageIndex,
+        logical_index: Option<PageIndex>,
+        physical_index: PageIndex,
     ) -> Self {
-        Self { block, page, index }
+        Self {
+            block,
+            page,
+            logical_index,
+            physical_index,
+        }
     }
 
-    pub const fn index(&self) -> PageIndex {
-        self.index
+    pub const fn logical_index(&self) -> Option<PageIndex> {
+        // TODO should we return an option instead?
+        self.logical_index
+    }
+
+    pub const fn physical_index(&self) -> PageIndex {
+        self.physical_index
     }
 
     #[allow(clippy::large_types_passed_by_value)] // TODO create an API that allows us to avoid
     // this
     pub fn initialize(mut self, page: Page) -> PageRef<'block> {
-        debug!("initializing page {:?}", self.index());
+        debug!(
+            "initializing page {:?}/{:?}",
+            self.logical_index(),
+            self.physical_index()
+        );
 
-        let housekeeping = unsafe { self.block.housekeeping_for(self.index) };
+        let housekeeping = unsafe { self.block.housekeeping_for(self.physical_index) };
 
         // we're taking a mutable reference, so we must lock so that there is only one, even if
         // there are multiple UninitializedPageGuards
@@ -258,7 +325,8 @@ impl<'block> UninitializedPageGuard<'block> {
         PageRef {
             page: initialized_page,
             block: self.block,
-            index: self.index,
+            logical_index: self.logical_index,
+            physical_index: self.physical_index,
         }
     }
 
@@ -273,7 +341,6 @@ pub struct Block {
     data: Box<dyn Allocation>,
     latest_page: AtomicU64,
     allocated_page_count: AtomicU64,
-    span: tracing::Span,
 }
 
 impl Debug for Block {
@@ -283,10 +350,7 @@ impl Debug for Block {
             .field("housekeeping", &self.housekeeping)
             .field("data", &self.data)
             .field("latest_page", &self.latest_page)
-            .field(
-                "allocated_page_count_lower_bound",
-                &self.allocated_page_count,
-            )
+            .field("allocated_page_count", &self.allocated_page_count)
             .finish_non_exhaustive()
     }
 }
@@ -304,7 +368,6 @@ impl Block {
         let housekeeping: Box<dyn Allocation> =
             Box::new(UncommittedAllocation::new(Self::HOUSEKEEPING_BLOCK_SIZE));
         let data: Box<dyn Allocation> = Box::new(UncommittedAllocation::new(Self::SIZE));
-        let span = info_span!("block", name, base=?data.base_address(), housekeeping=?housekeeping.base_address());
 
         Self {
             name,
@@ -312,7 +375,6 @@ impl Block {
             data,
             latest_page: AtomicU64::new(0),
             allocated_page_count: AtomicU64::new(0),
-            span,
         }
     }
 
@@ -320,32 +382,37 @@ impl Block {
     //
     // TODO rename this, as this is actually an upper bound, and while it's guaranted that the
     // pages are allocated, it's not guaranteed that those pages are initialized
-    #[instrument(skip(self), parent = &self.span)]
+    #[instrument]
     pub fn page_count_lower_bound(&self) -> u64 {
         self.allocated_page_count.load(Ordering::Acquire)
     }
 
-    #[instrument(skip(self), parent = &self.span)]
-    pub fn get(&self, index: PageIndex) -> PageRef<'_> {
+    #[instrument]
+    pub fn get(&self, logical_index: Option<PageIndex>, physical_index: PageIndex) -> PageRef<'_> {
         let latest_initialized_page = self.allocated_page_count.load(Ordering::Acquire);
         assert!(
-            index.0 < latest_initialized_page,
-            "trying to get page {index:?}, but initialized only upto {latest_initialized_page:?}",
+            physical_index.0 < latest_initialized_page,
+            "trying to get page {logical_index:?}/{physical_index:?}, but initialized only upto {latest_initialized_page:?}",
         );
 
-        let housekeeping = unsafe { self.housekeeping_for(index) };
+        let housekeeping = unsafe { self.housekeeping_for(physical_index) };
 
-        assert!(
-            housekeeping.is_initialized(),
-            "[{}] trying to get {index:?}, but housekeeping is not initialized",
-            self.name
-        );
+        if !housekeeping.is_initialized() {
+            error!(
+                "trying to get {logical_index:?}/{physical_index:?}, but housekeeping is not initialized: {:?}",
+                housekeeping
+            );
+            panic!(
+                "[{}] trying to get {logical_index:?}/{physical_index:?}, but housekeeping is not initialized",
+                self.name
+            );
+        }
 
         let page = unsafe {
             self.data
                 .base_address()
                 .cast()
-                .add(usize::try_from(index.0).unwrap())
+                .add(usize::try_from(physical_index.0).unwrap())
         };
 
         assert!(page.cast() < unsafe { self.data.base_address().byte_add(Self::SIZE.as_bytes()) });
@@ -354,24 +421,29 @@ impl Block {
         PageRef {
             page,
             block: self,
-            index,
+            logical_index,
+            physical_index,
         }
     }
 
     // TODO it's unsafe because we don't want multiple UninitializedPageGuards, but do we really
     // care?
-    pub unsafe fn get_uninitialized(&'_ self, index: PageIndex) -> UninitializedPageGuard<'_> {
+    pub unsafe fn get_uninitialized(
+        &'_ self,
+        logical_index: Option<PageIndex>,
+        physical_index: PageIndex,
+    ) -> UninitializedPageGuard<'_> {
         let latest_initialized_page = self.allocated_page_count.load(Ordering::Acquire);
         assert!(
-            index.0 < latest_initialized_page,
-            "trying to get page {index:?}, but initialized only upto {latest_initialized_page:?}",
+            physical_index.0 < latest_initialized_page,
+            "trying to get page {logical_index:?}/{physical_index:?}, but initialized only upto {latest_initialized_page:?}",
         );
 
-        let housekeeping = unsafe { self.housekeeping_for(index) };
+        let housekeeping = unsafe { self.housekeeping_for(physical_index) };
 
         assert!(
             !housekeeping.is_initialized(),
-            "[{}] trying to get as unitialized {index:?}, but housekeeping says it's already initialized",
+            "[{}] trying to get as unitialized {logical_index:?}/{physical_index:?}, but housekeeping says it's already initialized",
             self.name
         );
 
@@ -379,47 +451,59 @@ impl Block {
             self.data
                 .base_address()
                 .cast()
-                .add(usize::try_from(index.0).unwrap())
+                .add(usize::try_from(physical_index.0).unwrap())
         };
 
         assert!(page.cast() < unsafe { self.data.base_address().byte_add(Self::SIZE.as_bytes()) });
         assert!(page.cast() >= self.data.base_address());
 
-        unsafe { UninitializedPageGuard::new(self, page, index) }
+        unsafe { UninitializedPageGuard::new(self, page, logical_index, physical_index) }
     }
 
-    #[instrument(skip(self), parent = &self.span)]
-    pub fn get_or_allocate_zeroed(&'_ self, index: PageIndex) -> Result<PageRef<'_>, StorageError> {
-        while index.0 >= self.allocated_page_count.load(Ordering::Acquire) {
-            let allocated = self.allocate()?.initialize(Page::new());
+    #[instrument]
+    pub fn get_or_allocate_zeroed(
+        &'_ self,
+        logical_index: Option<PageIndex>,
+        physical_index: PageIndex,
+    ) -> Result<PageRef<'_>, StorageError> {
+        while physical_index.0 >= self.allocated_page_count.load(Ordering::Acquire) {
+            let allocated = self.allocate(logical_index)?.initialize(Page::new());
 
-            if allocated.index == index {
+            if allocated.physical_index == physical_index {
                 return Ok(allocated);
             }
         }
 
-        debug_assert!(self.allocated_page_count.load(Ordering::Acquire) > index.0);
+        debug_assert!(self.allocated_page_count.load(Ordering::Acquire) > physical_index.0);
 
-        Ok(self.get(index))
+        Ok(self.get(logical_index, physical_index))
     }
 
-    #[instrument(skip(self), parent = &self.span)]
-    pub fn try_get(&'_ self, index: PageIndex) -> Option<PageRef<'_>> {
+    #[instrument]
+    pub fn try_get(
+        &'_ self,
+        logical_index: Option<PageIndex>,
+        physical_index: PageIndex,
+    ) -> Option<PageRef<'_>> {
         let allocated_page_count = self.allocated_page_count.load(Ordering::Acquire);
-        if index.0 >= allocated_page_count {
+
+        if physical_index.0 >= allocated_page_count {
             return None;
         }
 
-        if !unsafe { self.housekeeping_for(index) }.is_initialized() {
+        if !unsafe { self.housekeeping_for(physical_index) }.is_initialized() {
             return None;
         }
 
         // TODO should we fliparound and define self.get in terms of try_get?
-        Some(self.get(index))
+        Some(self.get(logical_index, physical_index))
     }
 
-    #[instrument(skip(self), parent = &self.span)]
-    pub fn allocate(&self) -> Result<UninitializedPageGuard<'_>, StorageError> {
+    #[instrument]
+    pub fn allocate(
+        &self,
+        logical_index: Option<PageIndex>,
+    ) -> Result<UninitializedPageGuard<'_>, StorageError> {
         let index = self.latest_page.fetch_add(1, Ordering::AcqRel);
 
         let index = PageIndex(index);
@@ -440,7 +524,7 @@ impl Block {
         );
         debug_assert!(page.cast() >= self.data.base_address());
 
-        Ok(unsafe { UninitializedPageGuard::new(self, page, index) })
+        Ok(unsafe { UninitializedPageGuard::new(self, page, logical_index, index) })
     }
 
     fn allocate_housekeeping(&self, index: PageIndex) -> Result<NonNull<PageState>, StorageError> {

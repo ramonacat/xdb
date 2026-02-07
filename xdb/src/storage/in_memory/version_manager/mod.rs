@@ -1,9 +1,9 @@
 use std::mem::MaybeUninit;
 use std::ptr::NonNull;
 
-use crate::page::{Page, PageVersion};
+use crate::page::Page;
 use crate::storage::in_memory::Bitmap;
-use crate::storage::in_memory::block::{Block, PageRef, UninitializedPageGuard};
+use crate::storage::in_memory::block::{Block, PageRef};
 use crate::storage::in_memory::version_manager::committer::Committer;
 use crate::storage::in_memory::version_manager::transaction::VersionManagedTransaction;
 use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
@@ -17,17 +17,10 @@ pub mod transaction_log;
 mod vacuum;
 
 #[derive(Debug)]
-enum MainPageRef<'storage> {
-    Initialized(PageRef<'storage>),
-    Uninitialized(UninitializedPageGuard<'storage>),
-}
-
-#[derive(Debug)]
 // TODO rename -> "TransactionPage" or something
 struct CowPage<'storage> {
-    main: MainPageRef<'storage>,
+    main: PageRef<'storage>,
     cow: Option<PageRef<'storage>>,
-    version: PageVersion,
     deleted: bool,
     inserted: bool,
 }
@@ -35,12 +28,14 @@ struct CowPage<'storage> {
 impl CowPage<'_> {
     fn into_raw(self) -> RawCowPage {
         RawCowPage {
-            main: match self.main {
-                MainPageRef::Initialized(r) => RawMainPage::Initialized(r.as_ptr(), r.index()),
-                MainPageRef::Uninitialized(r) => RawMainPage::Uninitialized(r.as_ptr(), r.index()),
-            },
-            cow: self.cow.map(|x| (x.as_ptr(), x.index())),
-            version: self.version,
+            main: (
+                self.main.as_ptr(),
+                self.main.logical_index(),
+                self.main.physical_index(),
+            ),
+            cow: self
+                .cow
+                .map(|x| (x.as_ptr(), x.logical_index(), x.physical_index())),
             deleted: self.deleted,
             inserted: self.inserted,
         }
@@ -48,20 +43,11 @@ impl CowPage<'_> {
 }
 
 #[derive(Debug)]
-enum RawMainPage {
-    Initialized(NonNull<Page>, PageIndex),
-    Uninitialized(NonNull<MaybeUninit<Page>>, PageIndex),
-}
-
-unsafe impl Send for RawMainPage {}
-
-#[derive(Debug)]
 // TODO this is an awful hack, can we find a better way to work with the lifetime issues
 // between threads?
 struct RawCowPage {
-    main: RawMainPage,
-    cow: Option<(NonNull<Page>, PageIndex)>,
-    version: PageVersion,
+    main: (NonNull<Page>, Option<PageIndex>, PageIndex),
+    cow: Option<(NonNull<Page>, Option<PageIndex>, PageIndex)>,
     deleted: bool,
     inserted: bool,
 }
@@ -70,19 +56,13 @@ unsafe impl Send for RawCowPage {}
 
 impl RawCowPage {
     unsafe fn reconstruct(self, block: &'_ Block) -> CowPage<'_> {
-        let main = match self.main {
-            RawMainPage::Initialized(page, index) => {
-                MainPageRef::Initialized(unsafe { PageRef::new(page, block, index) })
-            }
-            RawMainPage::Uninitialized(page, index) => MainPageRef::Uninitialized(unsafe {
-                UninitializedPageGuard::new(block, page, index)
-            }),
-        };
+        let main = unsafe { PageRef::new(self.main.0, block, self.main.1, self.main.2) };
 
         CowPage {
             main,
-            cow: self.cow.map(|x| unsafe { PageRef::new(x.0, block, x.1) }),
-            version: self.version,
+            cow: self
+                .cow
+                .map(|x| unsafe { PageRef::new(x.0, block, x.1, x.2) }),
             deleted: self.deleted,
             inserted: self.inserted,
         }

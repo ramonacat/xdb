@@ -97,10 +97,10 @@ impl PageState {
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 let x = PageStateValue(x);
 
-                assert!(!x.is_locked());
+                assert!(x.is_locked());
                 assert!(x.readers() == 0);
 
-                Some(x.mark_uninitialized().0)
+                Some(x.mark_uninitialized().unlock().0)
             }) {
             Ok(_) => {}
             Err(_) => todo!(),
@@ -211,6 +211,8 @@ impl PageState {
             Ok(_) => {}
             Err(previous) => {
                 let previous = PageStateValue(previous);
+
+                warn!("waiting for a read lock {previous:?}");
 
                 self.wait(previous);
                 self.lock_read();

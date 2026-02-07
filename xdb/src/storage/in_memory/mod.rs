@@ -21,7 +21,10 @@ pub struct InMemoryPageReservation<'storage> {
 
 impl<'storage> PageReservation<'storage> for InMemoryPageReservation<'storage> {
     fn index(&self) -> PageIndex {
-        self.page_guard.index()
+        // TODO do we want to expose the logical/physical IDs here?
+        self.page_guard
+            .logical_index()
+            .unwrap_or_else(|| self.page_guard.physical_index())
     }
 }
 
