@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tracing::{debug, instrument};
+use tracing::{instrument, trace};
 
 use crate::{
     platform::futex::Futex,
@@ -133,7 +133,7 @@ impl SchedulerState {
             }) {
             Ok(previous) => {
                 let mut previous = SchedulerStateValue(previous);
-                debug!("unfreezed from {previous:?}");
+                trace!(?previous, "unfreezed");
 
                 while previous.is_running() {
                     self.0.as_ref().wake_all();
@@ -149,7 +149,7 @@ impl SchedulerState {
     }
 
     fn wait(&self, current_state: SchedulerStateValue, timeout: Option<Duration>) {
-        debug!("waiting to change state from {current_state:?}");
+        trace!(previous=?current_state, "waiting for state change");
 
         self.0.as_ref().wait(current_state.0, timeout);
     }
@@ -227,7 +227,7 @@ impl Scheduler {
 
                 self.state.wait(current_state, None);
             } else if elapsed_since_last_run < Self::PAUSE_LENGTH {
-                debug!("{elapsed_since_last_run:?} since last run, waiting");
+                trace!("{elapsed_since_last_run:?} since last run, waiting");
 
                 let timeout = self
                     .last_finished_at
@@ -244,6 +244,7 @@ impl Scheduler {
         }
     }
 
+    #[instrument]
     pub(super) fn block_if_frozen(&self) -> RequestedState {
         loop {
             let current_state = self.state.current();

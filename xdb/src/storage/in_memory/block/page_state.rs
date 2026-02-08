@@ -1,6 +1,6 @@
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
-use crate::storage::in_memory::block::LockError;
+use crate::storage::in_memory::block::{LockError, PageRef};
 use crate::sync::atomic::{AtomicU32, Ordering};
 use std::fmt::Debug;
 use std::time::Duration;
@@ -34,15 +34,18 @@ impl PageStateValue {
     const MASK_IS_INITIALIZED: u32 = 1 << 31;
     const MASK_IS_LOCKED: u32 = 1 << 30;
 
+    const MASK_ID_LOCKS: u32 = 0b0011_1111_1111_1111_0000_0000_0000_0000;
+    const SHIFT_ID_LOCKS: u32 = 16;
+
     const MASK_READERS: u32 = 0x0000_FFFF;
 
     const fn is_initialized(self) -> bool {
-        self.0 & Self::MASK_IS_INITIALIZED != 0
+        (self.0 & Self::MASK_IS_INITIALIZED) != 0
     }
 
     // TODO rename -> has_writer
     const fn is_locked(self) -> bool {
-        self.0 & Self::MASK_IS_LOCKED != 0
+        (self.0 & Self::MASK_IS_LOCKED) != 0
     }
 
     // TODO rename -> lock_write
@@ -53,6 +56,27 @@ impl PageStateValue {
     // TODO rename -> unlock_write
     const fn unlock(self) -> Self {
         Self(self.0 & !Self::MASK_IS_LOCKED)
+    }
+
+    const fn id_locks(self) -> u32 {
+        (self.0 & Self::MASK_ID_LOCKS) >> Self::SHIFT_ID_LOCKS
+    }
+
+    const fn lock_id(self) -> Self {
+        let locks = self.id_locks() + 1;
+        let locks = locks << Self::SHIFT_ID_LOCKS;
+
+        assert!((locks & !Self::MASK_ID_LOCKS) == 0);
+
+        Self((self.0 & !Self::MASK_ID_LOCKS) | locks)
+    }
+
+    const fn unlock_id(self) -> Self {
+        let locks = self.id_locks();
+        assert!(locks > 0);
+        let locks = locks - 1;
+
+        Self((self.0 & !Self::MASK_ID_LOCKS) | (locks << Self::SHIFT_ID_LOCKS))
     }
 
     const fn mark_uninitialized(self) -> Self {
@@ -100,7 +124,7 @@ impl PageState {
                 assert!(x.is_locked());
                 assert!(x.readers() == 0);
 
-                Some(x.mark_uninitialized().unlock().0)
+                Some(x.mark_uninitialized().0)
             }) {
             Ok(_) => {}
             Err(_) => todo!(),
@@ -128,19 +152,48 @@ impl PageState {
 
                 Some(f.lock().0)
             }) {
-            Ok(previous) => {
+            Ok(_) => Ok(()),
+            Err(previous) => {
                 let previous = PageStateValue(previous);
 
-                debug!("locked, previous {previous:?}");
+                Err(LockError::Contended(previous))
+            }
+        }
+    }
+
+    pub fn lock_for_move<'block>(
+        self: Pin<&Self>,
+        page_ref: PageRef<'block>,
+    ) -> Result<(), PageRef<'block>> {
+        match self
+            .atomic()
+            .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
+                let f = PageStateValue(f);
+
+                if f.readers() > 0 {
+                    return None;
+                }
+
+                if f.is_locked() {
+                    return None;
+                }
+
+                if f.id_locks() != 1 {
+                    return None;
+                }
+
+                Some(f.lock().0)
+            }) {
+            Ok(_) => {
+                drop(page_ref);
 
                 Ok(())
             }
             Err(previous) => {
                 let previous = PageStateValue(previous);
+                debug!(?previous, "failed to lock for move");
 
-                debug!("failed to lock, previous {previous:?}");
-
-                Err(LockError::Contended(previous))
+                Err(page_ref)
             }
         }
     }
@@ -159,7 +212,7 @@ impl PageState {
                     // TODO do we want to keep this in non-debug builds?
                     let lock_duration = start.elapsed();
                     if lock_duration > Duration::from_millis(100) {
-                        warn!("lock waited for too long: {lock_duration:?}");
+                        warn!(waited=?lock_duration, "waited for too long");
                     }
                 }
             }
@@ -171,8 +224,6 @@ impl PageState {
     }
 
     pub fn unlock(self: Pin<&Self>) {
-        debug_assert!(self.is_initialized());
-
         match self
             .atomic()
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
@@ -183,11 +234,7 @@ impl PageState {
 
                 Some(x.unlock().0)
             }) {
-            Ok(previous) => {
-                let previous = PageStateValue(previous);
-
-                debug!("unlocked from {previous:?}");
-
+            Ok(_) => {
                 self.wake();
             }
             Err(_) => todo!(),
@@ -195,6 +242,10 @@ impl PageState {
     }
 
     pub fn lock_read(self: Pin<&Self>) {
+        if !self.is_initialized() {
+            error!(state = ?self.atomic().load(Ordering::Acquire), "trying to lock for read, but the page is uninitialized");
+        }
+
         debug_assert!(self.is_initialized());
 
         match self
@@ -212,8 +263,7 @@ impl PageState {
             Err(previous) => {
                 let previous = PageStateValue(previous);
 
-                warn!("waiting for a read lock {previous:?}");
-
+                // TODO add a warning if we're waiting for too long
                 self.wait(previous);
                 self.lock_read();
             }
@@ -243,7 +293,48 @@ impl PageState {
     // TODO rename -> wake_one?
     // TODO does this need to be pub?
     pub fn wake(self: Pin<&Self>) {
-        let awoken = self.futex().wake_one();
-        debug!("awoken a waiter? {awoken} ");
+        self.futex().wake_all();
+    }
+
+    pub fn lock_id(self: Pin<&Self>) {
+        match self
+            .atomic()
+            .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
+                let x = PageStateValue(x);
+
+                Some(x.lock_id().0)
+            }) {
+            Ok(_) => {}
+            Err(_) => todo!(),
+        }
+    }
+
+    pub fn unlock_id(self: Pin<&Self>) {
+        match self
+            .atomic()
+            .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
+                let x = PageStateValue(x);
+
+                Some(x.unlock_id().0)
+            }) {
+            Ok(_) => {
+                self.wake();
+            }
+            Err(_) => todo!(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::storage::in_memory::block::page_state::PageStateValue;
+
+    #[test]
+    fn page_state_value() {
+        let lock = PageStateValue(PageStateValue::MASK_IS_INITIALIZED);
+        assert!(lock.readers() == 0);
+
+        assert!(!lock.with_readers(1).is_locked());
+        assert!(lock.lock().readers() == 0);
     }
 }

@@ -1,14 +1,15 @@
 use crate::storage::in_memory::{
-    block::{PageGuard, PageGuardRead, PageRef},
-    version_manager::transaction_log::TransactionLogEntryHandle,
+    block::{PageGuard, PageGuardRead},
+    version_manager::{get_matching_version, transaction_log::TransactionLogEntryHandle},
 };
 use std::{
     collections::HashMap,
+    fmt::Debug,
     thread,
     time::{Duration, Instant},
 };
 
-use tracing::{debug, info_span, instrument, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 use crate::{
     page::Page,
@@ -22,15 +23,24 @@ use crate::{
     sync::Mutex,
 };
 
-#[derive(Debug)]
 pub struct VersionManagedTransaction<'storage> {
     id: TransactionId,
     pages: HashMap<PageIndex, CowPage<'storage>>,
     version_manager: &'storage VersionManager,
-    span: tracing::Span,
     last_free_page_scan: Mutex<Option<Instant>>,
     log_entry: TransactionLogEntryHandle<'storage>,
     committed: bool,
+}
+
+impl Debug for VersionManagedTransaction<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VersionManagedTransaction")
+            .field("id", &self.id)
+            .field("last_free_page_scan", &self.last_free_page_scan)
+            .field("log_entry", &self.log_entry)
+            .field("committed", &self.committed)
+            .finish()
+    }
 }
 
 impl Drop for VersionManagedTransaction<'_> {
@@ -39,6 +49,10 @@ impl Drop for VersionManagedTransaction<'_> {
         // rollback/commit call?
         // TODO the boolean is an awful hack, use the log_entry to figure out the state instead
         if !self.committed {
+            debug!(
+                id = ?self.id,
+                "transaction dropped without being commited"
+            );
             self.rollback();
         }
     }
@@ -50,67 +64,14 @@ impl<'storage> VersionManagedTransaction<'storage> {
         version_manager: &'storage VersionManager,
         log_entry: TransactionLogEntryHandle<'storage>,
     ) -> Self {
-        let span = info_span!("transaction", id = ?id, started = ?log_entry.start_timestamp());
-
         Self {
             id,
             pages: HashMap::new(),
             version_manager,
-            span,
             last_free_page_scan: Mutex::new(None),
             log_entry,
             committed: false,
         }
-    }
-
-    fn get_matching_version(&self, index: PageIndex) -> PageRef<'storage> {
-        debug!(
-            "looking for a matching version of {index:?} for {:?}",
-            self.log_entry.start_timestamp()
-        );
-
-        let mut locks = vec![]; //
-
-        let mut main = self.version_manager.data.get(Some(index), index);
-        let mut main_lock = main.lock_read();
-
-        while !main_lock.is_visible_at(self.log_entry.start_timestamp()) {
-            debug!(
-                "page {index:?}: {:?} {:?}/{:?}",
-                main.physical_index(),
-                main_lock.visible_from(),
-                main_lock.visible_until()
-            );
-            let Some(next) = main_lock.next_version() else {
-                // TODO should we panic here? I think we should not be able to get to this
-                // place if the database is in a valid state?
-                panic!(
-                    "page {index:?} not found (transaction timestamp: {:?}, latest version visible: {:?}/{:?})",
-                    self.log_entry.start_timestamp(),
-                    main_lock.visible_from(),
-                    main_lock.visible_until()
-                );
-            };
-
-            main = self.version_manager.data.get(Some(index), next);
-
-            let next_version_lock = main.lock_read();
-            locks.push(main_lock);
-
-            main_lock = next_version_lock;
-        }
-
-        // keep all the locks till here to avoid situations where vacuum changes the
-        // next_/previous_version links while we're looking at them
-        drop(locks);
-
-        debug!(
-            "{index:?}@{:?} is {:?}",
-            self.log_entry.start_timestamp(),
-            main.physical_index()
-        );
-
-        main
     }
 
     // TODO all page allocations should go through this
@@ -121,7 +82,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         // don't bother with all this if there aren't many allocated pages (TODO figure out if this
         // number makes sense)
         if self.version_manager.data.page_count_lower_bound() < 50000 {
-            debug!("not recycling pages, too few were allocated");
+            trace!("not recycling pages, too few were allocated");
 
             return None;
         }
@@ -130,8 +91,8 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
         if let Some(page) = recycled_page_queue.pop() {
             debug!(
-                "got a page from recycled_page_queue (length: {})",
-                recycled_page_queue.len()
+                queue_length = recycled_page_queue.len(),
+                "got a page from recycled_page_queue",
             );
             return Some(unsafe {
                 UninitializedPageGuard::new(
@@ -151,10 +112,8 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
         // TODO we should allow the scan to happen as often as it wants to if there's no space in
         // storage anymore
-        if since_last_free_page_scan < Duration::from_secs(10) {
-            debug!(
-                "only {since_last_free_page_scan:?} elapsed since last free page scan, skipping"
-            );
+        if since_last_free_page_scan < Duration::from_secs(1) {
+            trace!(?since_last_free_page_scan, "skipping page scan",);
 
             return None;
         }
@@ -181,7 +140,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         drop(lock);
         *self.last_free_page_scan.lock().unwrap() = Some(Instant::now());
 
-        debug!("recycled {} pages", recycled_page_queue.len());
+        debug!(queue_length = ?recycled_page_queue.len(), "recycled page queue filled up");
 
         recycled_page_queue.pop().map(|page| unsafe {
             UninitializedPageGuard::new(&self.version_manager.data, page.0, logical_index, page.1)
@@ -199,9 +158,9 @@ impl<'storage> VersionManagedTransaction<'storage> {
     ) -> Result<UninitializedPageGuard<'storage>, StorageError> {
         if let Some(recycled) = self.get_recycled_page(logical_index) {
             debug!(
-                "allocated a recycled page: {:?} for {:?}",
-                recycled.physical_index(),
-                recycled.logical_index()
+                physical_index = ?recycled.physical_index(),
+                logical_index = ?recycled.logical_index(),
+                "allocated a recycled page",
             );
             return Ok(recycled);
         }
@@ -210,9 +169,9 @@ impl<'storage> VersionManagedTransaction<'storage> {
         match allocation_result {
             Ok(guard) => {
                 debug!(
-                    "allocated a fresh page {:?} for {:?}",
-                    guard.physical_index(),
-                    guard.logical_index()
+                    physical_index = ?guard.physical_index(),
+                    logical_index = ?guard.logical_index(),
+                    "allocated a fresh page",
                 );
                 Ok(guard)
             }
@@ -224,10 +183,11 @@ impl<'storage> VersionManagedTransaction<'storage> {
                     let waited = start.elapsed();
 
                     if let Some(page) = self.get_recycled_page(logical_index) {
-                        debug!(
-                            "allocated a recycled page {:?} for {:?} after waiting for {waited:?}",
-                            page.physical_index(),
-                            page.logical_index()
+                        info!(
+                            physical_index = ?page.physical_index(),
+                            logical_index = ?page.logical_index(),
+                            ?waited,
+                            "allocated a recycled page",
                         );
                         return Ok(page);
                     }
@@ -235,7 +195,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                     thread::yield_now();
 
                     if waited > Duration::from_millis(100) {
-                        warn!("waited {waited:?} for a free cow page");
+                        warn!(?waited, "waiting for a free cow page");
                     }
                 }
             }
@@ -243,28 +203,37 @@ impl<'storage> VersionManagedTransaction<'storage> {
         }
     }
 
-    #[instrument(skip(self), parent = &self.span)]
+    #[instrument(skip(self, index), fields(logical_index=?index))]
     pub(crate) fn read(
         &mut self,
         index: PageIndex,
     ) -> Result<PageGuardRead<'storage>, StorageError> {
         if let Some(entry) = self.pages.get(&index) {
-            if let Some(cow) = entry.cow {
+            if let Some(cow) = &entry.cow {
                 return Ok(cow.lock_read());
             }
 
-            Ok(entry.main.lock_read())
+            let main = get_matching_version(
+                &self.version_manager.data,
+                entry.main,
+                self.log_entry.start_timestamp(),
+            );
+            Ok(main.lock_read())
         } else {
-            let main = self.get_matching_version(index);
-
             self.pages.insert(
                 index,
                 CowPage {
-                    main,
+                    main: index,
                     cow: None,
                     deleted: false,
                     inserted: false,
                 },
+            );
+
+            let main = get_matching_version(
+                &self.version_manager.data,
+                index,
+                self.log_entry.start_timestamp(),
             );
 
             Ok(main.lock_read())
@@ -273,26 +242,40 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
     pub(crate) fn write(&mut self, index: PageIndex) -> Result<PageGuard<'storage>, StorageError> {
         if let Some(entry) = self.pages.get(&index) {
+            assert!(!entry.deleted);
+
             if entry.inserted {
-                return Ok(entry.main.lock());
+                let main = get_matching_version(
+                    &self.version_manager.data,
+                    entry.main,
+                    self.log_entry.start_timestamp(),
+                );
+
+                return Ok(main.lock());
             }
 
-            if let Some(cow) = entry.cow {
+            if let Some(cow) = &entry.cow {
                 return Ok(cow.lock());
             }
 
+            let main = get_matching_version(
+                &self.version_manager.data,
+                index,
+                self.log_entry.start_timestamp(),
+            );
+
             let cow = self.allocate_cow_copy(Some(index))?;
-            let cow = cow.initialize(*entry.main.lock_read());
-            let physical_index = entry.main.physical_index();
-            self.pages.get_mut(&index).unwrap().cow = Some(cow);
+            let cow = cow.initialize(*main.lock_read());
+            self.pages.get_mut(&index).unwrap().cow = Some(cow.clone());
 
-            let mut cow_lock = cow.lock();
-            cow_lock.set_previous_version(Some(physical_index));
-            cow_lock.set_next_version(None);
-
+            let cow_lock = cow.lock();
             Ok(cow_lock)
         } else {
-            let page = self.get_matching_version(index);
+            let page = get_matching_version(
+                &self.version_manager.data,
+                index,
+                self.log_entry.start_timestamp(),
+            );
             let cow = self.allocate_cow_copy(Some(index))?;
             let page_lock = page.lock_read();
             if page_lock.next_version().is_some() {
@@ -300,45 +283,45 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 return Err(StorageError::Deadlock(index));
             }
             let cow = cow.initialize(*page_lock);
+            assert!(page.logical_index() == Some(index));
 
             self.pages.insert(
                 index,
                 CowPage {
-                    main: page,
-                    cow: Some(cow),
+                    main: index,
+                    cow: Some(cow.clone()),
                     deleted: false,
                     inserted: false,
                 },
             );
 
-            // TODO clean this up - we either manage the next/previous links here, or in the
-            // committer
-            let mut cow_lock = cow.lock();
-            cow_lock.set_previous_version(Some(page.physical_index()));
-            cow_lock.set_next_version(None);
+            let cow_lock = cow.lock();
             Ok(cow_lock)
         }
     }
 
-    #[instrument(skip(self), parent = &self.span)]
+    #[instrument(skip(self))]
     pub(crate) fn reserve(&self) -> Result<UninitializedPageGuard<'storage>, StorageError> {
         self.allocate_cow_copy(None)
     }
 
     // TODO can we avoid passing this by value?
     #[allow(clippy::large_types_passed_by_value)]
-    #[instrument(skip(self), parent = &self.span)]
+    #[instrument(skip(self), fields(logical_index=?page_guard.logical_index(), physical_index = ?page_guard.physical_index()))]
     pub(crate) fn insert_reserved(
         &mut self,
         page_guard: UninitializedPageGuard<'storage>,
         page: Page,
     ) -> Result<(), StorageError> {
+        let logical_index = page_guard
+            .logical_index()
+            .unwrap_or_else(|| page_guard.physical_index());
+        page_guard.initialize(page);
+
         self.pages.insert(
-            page_guard
-                .logical_index()
-                .unwrap_or_else(|| page_guard.physical_index()),
+            logical_index,
             CowPage {
-                main: page_guard.initialize(page),
+                main: logical_index,
                 cow: None,
                 deleted: false,
                 inserted: true,
@@ -348,7 +331,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         Ok(())
     }
 
-    #[instrument(skip(self), parent = &self.span)]
+    #[instrument(skip(self), fields(logical_index = ?page))]
     pub(crate) fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
         if let Some(page) = self.pages.get_mut(&page) {
             // TODO this should really be an enum describing various possible states of a page,
@@ -358,12 +341,10 @@ impl<'storage> VersionManagedTransaction<'storage> {
             return Ok(());
         }
 
-        let main = self.get_matching_version(page);
-
         self.pages.insert(
             page,
             CowPage {
-                main,
+                main: page,
                 cow: None,
                 deleted: true,
                 inserted: false,
@@ -373,7 +354,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         Ok(())
     }
 
-    #[instrument(skip(self), parent = &self.span)]
+    #[instrument(skip(self), fields(id = ?self.id))]
     pub(crate) fn commit(&mut self) -> Result<(), StorageError> {
         self.committed = true;
 
@@ -386,11 +367,17 @@ impl<'storage> VersionManagedTransaction<'storage> {
             .request(self.id, self.pages.drain().collect())
     }
 
-    #[instrument(skip(self), parent = &self.span)]
+    #[instrument(skip(self), fields(id = ?self.id))]
     #[allow(clippy::needless_pass_by_ref_mut)] // TODO make const if we really don't need it
     pub fn rollback(&mut self) {
+        debug!("rolling back");
         for (_, page) in self.pages.drain() {
             if let Some(cow) = page.cow {
+                debug!(
+                    logical_index = ?cow.logical_index(),
+                    physical_index = ?cow.physical_index(),
+                    "setting page up to be freed"
+                );
                 // TODO we should probably have a better way of freeing these pages
                 let mut cow_lock = cow.lock();
                 cow_lock.set_next_version(None);

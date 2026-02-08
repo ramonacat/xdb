@@ -8,6 +8,7 @@ mod tuples;
 use crate::Size;
 use crate::bplustree::iterator::TreeIterator;
 use crate::bplustree::tuples::NodeIds;
+use crate::storage::TransactionId;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
@@ -65,6 +66,10 @@ where
 impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
     TreeTransaction<'storage, TStorage, TKey>
 {
+    fn id(&self) -> TransactionId {
+        self.transaction.id()
+    }
+
     fn get_root(&mut self) -> Result<AnyNodeId, TreeError> {
         Ok(AnyNodeId::new(self.read_header(|x| x.root)?))
     }

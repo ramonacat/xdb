@@ -104,6 +104,10 @@ impl CommitHandle<'_> {
         self.timestamp
     }
 
+    pub const fn started(&self) -> TransactionalTimestamp {
+        self.started
+    }
+
     pub fn commit(self) {
         {
             let mut transactions = self.log.transactions.lock().unwrap();
@@ -181,11 +185,19 @@ impl TransactionLogEntry {
     }
 }
 
-#[derive(Debug)]
 pub struct TransactionLogEntryHandle<'log> {
     id: TransactionId,
     start_timestamp: TransactionalTimestamp,
     log: &'log TransactionLog,
+}
+
+impl Debug for TransactionLogEntryHandle<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TransactionLogEntryHandle")
+            .field("id", &self.id)
+            .field("start_timestamp", &self.start_timestamp)
+            .finish()
+    }
 }
 
 impl TransactionLogEntryHandle<'_> {

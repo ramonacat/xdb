@@ -1,15 +1,24 @@
+use opentelemetry::trace::TracerProvider;
+use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::trace::BatchConfigBuilder;
+use opentelemetry_sdk::trace::BatchSpanProcessor;
+use tracing::Level;
+use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 mod predictable;
 mod random_single;
 mod random_threaded;
 
 use clap::Parser;
 use clap::Subcommand;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use rand::Rng;
+use std::fs;
 use std::{
     thread::{self},
     time::Duration,
 };
-use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use tracing_subscriber::util::SubscriberInitExt;
 use xdb::bplustree::TreeKey;
 use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::find;
@@ -26,7 +35,7 @@ use xdb::{
 type KeyType = BigKey<u16, 1024>;
 
 // TODO make these CLI options?
-const RUN_LENGTH: Duration = Duration::from_secs(300);
+const RUN_LENGTH: Duration = Duration::from_secs(120);
 const THREAD_COUNT: usize = 16;
 
 fn final_checks<T: TreeKey + for<'a> Arbitrary<'a>>(tree: &Tree<InMemoryStorage, T>) {
@@ -144,15 +153,43 @@ struct Cli {
 // transaction) only on keys that are (n%THREAD_COUNT)+thread_id, and verifies that it does not
 // see anything from other threads.
 // TODO Add a testing mode that creates (and removes) a lot of predicatable data, and ensure the data is correct.
-fn main() {
-    // TODO create a script for running a docker container with jaeger and make it possible to send
-    // telemetry there
+#[tokio::main]
+async fn main() {
     if !cfg!(miri) {
-        FmtSubscriber::builder()
-            .with_thread_names(true)
-            .with_env_filter(EnvFilter::from_default_env())
-            .pretty()
-            .with_writer(std::fs::File::create("log.txt").unwrap())
+        /*
+        let exporter = opentelemetry_otlp::SpanExporter::builder()
+            .with_tonic()
+            .build()
+            .unwrap();
+
+        let processor = BatchSpanProcessor::builder(exporter)
+            .with_batch_config(
+                BatchConfigBuilder::default()
+                    .with_max_queue_size(40 * 1024 * 1024)
+                    .with_max_export_batch_size(6000)
+                    .with_scheduled_delay(Duration::from_millis(100))
+                    .build()
+            )
+            .build();
+
+        let provider = SdkTracerProvider::builder()
+            .with_span_processor(processor)
+            .with_resource(Resource::builder().with_service_name("xdb-tests").build())
+            .build();
+        let _tracer = provider.tracer("xdb-tests");
+        */
+
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::filter::Targets::new()
+                    .with_target("xdb", Level::DEBUG)
+                    .with_target("xdb-tests", Level::DEBUG)
+                    .with_default(Level::WARN),
+            )
+            //.with(OpenTelemetryLayer::new(tracer))
+            .with(
+                tracing_subscriber::fmt::layer().with_writer(fs::File::create("log.txt").unwrap()),
+            )
             .init();
     }
 

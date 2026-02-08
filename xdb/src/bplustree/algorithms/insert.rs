@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use tracing::debug;
+use tracing::{instrument, trace};
 
 use crate::{
     bplustree::{
@@ -104,7 +104,7 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
     transaction.insert_reserved(new_node_reservation, new_node)?;
 
     if let Some(parent_id) = parent_id {
-        debug!("split interior node {split_id:?} into new node {new_node_id:?}");
+        trace!(node_id=?split_id, new_node_id=?new_node_id, parent_id=?parent_id, "split interior node");
 
         insert_child(transaction, parent_id, split_key, new_node_id.into())?;
     } else {
@@ -122,8 +122,12 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
             new_node_id.into(),
         )?;
 
-        debug!(
-            "created new root {new_root_id:?} at split key {split_key:?}, with children {split_id:?} and {new_node_id:?}"
+        trace!(
+            parent_id=?new_root_id,
+            left_id=?split_id,
+            right_id=?new_node_id,
+            ?split_key,
+            "created new root"
         );
     }
 
@@ -175,7 +179,12 @@ fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     }
 
     let split_key = new_leaf.first_key().unwrap();
-    debug!("split {leaf_id:?} into {new_leaf_id:?} at key {split_key:?}");
+    trace!(
+        node_id=?leaf_id,
+        split_id=?new_leaf_id,
+        ?split_key,
+        "split leaf node"
+    );
 
     transaction.insert_reserved(new_leaf_reservation, new_leaf)?;
 
@@ -184,6 +193,7 @@ fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     Ok(())
 }
 
+#[instrument(skip(value, transaction), fields(transaction_id=?transaction.id()))]
 pub fn insert<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
     key: TKey,
@@ -215,8 +225,6 @@ pub fn insert<TStorage: Storage, TKey: TreeKey>(
     }
 
     transaction.write_nodes(target_node_id, |node| node.insert(key, value))?;
-
-    debug!("inserted {key:?} into {target_node_id:?}");
 
     Ok(())
 }

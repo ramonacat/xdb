@@ -2,7 +2,7 @@ mod scheduler;
 
 use std::time::Duration;
 
-use tracing::debug;
+use tracing::{debug, info, info_span, trace};
 
 use crate::{
     storage::{
@@ -30,16 +30,17 @@ struct VacuumThread {
 
 impl VacuumThread {
     // TODO log a warning if a freeze is taking too long
+    #[allow(clippy::too_many_lines)] // TODO there's a lot of room for improvement here
     pub fn run(&self) {
         loop {
+            let _ = info_span!("vaccum").entered();
+
             match self.scheduler.block_if_unscheduled() {
                 scheduler::RequestedState::Exit => break,
                 scheduler::RequestedState::Run => {}
             }
 
             self.scheduler.start_full_run();
-
-            debug!("requesting running transactions");
 
             let Some(min_timestamp) = self.log.minimum_active_timestamp() else {
                 // TODO we need a smarter way of scheduling vacuum (based on usage of the
@@ -52,8 +53,6 @@ impl VacuumThread {
                 continue;
             };
 
-            debug!("minimum active timestamp: {min_timestamp:?}");
-
             let mut index = PageIndex::from_value(1);
 
             let mut i = 0u64;
@@ -61,14 +60,19 @@ impl VacuumThread {
             let mut checked_count = 0u64;
 
             let pages_to_check = self.data.page_count_lower_bound();
-            debug!("vacuum will iterate over {pages_to_check} pages");
+
+            debug!(
+                minimum_active_timestamp = ?min_timestamp,
+                pages_count = ?pages_to_check,
+                "starting scan"
+            );
+
             while i < pages_to_check {
+                let _ = info_span!("page", physical_index = ?index).entered();
                 // TODO this is another scheduling issue, if there's a lot of pages,
                 // vacuum can spend a lot of time in this loop, preventing freezes and
                 // preventing exit when done
                 if i.is_multiple_of(10000) {
-                    debug!("vacuum checking for freezes and exit requests");
-
                     match self.scheduler.block_if_frozen() {
                         scheduler::RequestedState::Exit => break,
                         scheduler::RequestedState::Run => {}
@@ -92,26 +96,31 @@ impl VacuumThread {
                     if let Some(visible_until) = page_guard.visible_until()
                         && min_timestamp > visible_until
                     {
-                        debug!(
-                            "page {index:?} needs to be cleaned up next:{:?}, previous:{:?}",
-                            page_guard.next_version(),
-                            page_guard.previous_version()
-                        );
-
-                        if page_guard.previous_version().is_some() {
-                            continue;
-                        }
+                        trace!(physical_index = ?index, "trying to clean up");
 
                         if let Some(next_version_index) = page_guard.next_version() {
+                            assert!(next_version_index != index);
+
                             if let Some(next_version) = self.data.try_get(None, next_version_index)
-                                && let Ok(next_version) = next_version.lock_nowait()
+                                && let Ok(next_version) = next_version.lock_for_move()
                             {
+                                assert!(
+                                    next_version.previous_version() == Some(index),
+                                    "previous_version of {next_version_index:?} expected to be {index:?}, but was {:?}",
+                                    next_version.previous_version()
+                                );
+
                                 let mut next_next =
                                     if let Some(next_next_index) = next_version.next_version() {
                                         if let Some(next_next) =
                                             self.data.try_get(None, next_next_index)
                                             && let Ok(next_next) = next_next.lock_nowait()
                                         {
+                                            assert!(
+                                                next_next.previous_version()
+                                                    == Some(next_version_index)
+                                            );
+
                                             Some(next_next)
                                         } else {
                                             continue;
@@ -120,14 +129,36 @@ impl VacuumThread {
                                         None
                                     };
 
+                                assert!(page_guard.previous_version().is_none());
+
                                 *page_guard = *next_version;
                                 page_guard.set_previous_version(None);
 
                                 if let Some(ref mut next_next) = next_next {
+                                    assert!(
+                                        page_guard.next_version()
+                                            == Some(next_next.physical_index())
+                                    );
+
                                     next_next.set_previous_version(Some(index));
+                                } else {
+                                    assert!(page_guard.next_version().is_none());
                                 }
 
-                                next_version.reset();
+                                assert!(next_version_index != index);
+                                assert!(next_version.physical_index() != index);
+
+                                debug!(
+                                    physical_index=?next_version_index,
+                                    logical_index = ?index,
+                                    min_visible_timestamp = ?min_timestamp,
+                                    next.visible_until = ?next_version.visible_until(),
+                                    next.visible_since = ?next_version.visible_from(),
+                                    visible_until = ?page_guard.visible_until(),
+                                    visible_from = ?page_guard.visible_from(),
+                                    "freeing page"
+                                );
+                                drop(next_version.reset());
 
                                 drop(next_next);
                                 drop(page_guard);
@@ -136,8 +167,8 @@ impl VacuumThread {
                                 freed_count += 1;
                             }
                         } else {
-                            debug!("freeing page {:?}", index);
-                            page_guard.reset();
+                            debug!(physical_index=?index, "freeing page");
+                            drop(page_guard.reset());
 
                             self.freemap.set(index.0).unwrap();
                             freed_count += 1;
@@ -147,12 +178,15 @@ impl VacuumThread {
             }
 
             debug!(
-                "vacuum scan finished, freed/checked/scanned/total {freed_count}/{checked_count}/{i}/{}",
-                self.data.page_count_lower_bound()
+                freed_count = ?freed_count,
+                checked_count = ?checked_count,
+                scanned_count = ?i,
+                total_count = ?self.data.page_count_lower_bound(),
+                "vacuum scan finished",
             );
         }
 
-        debug!("exiting vacuum thread...");
+        info!("exiting vacuum thread");
     }
 }
 
@@ -189,9 +223,9 @@ impl Vacuum {
     }
 
     pub(crate) fn freeze(&'_ self) -> FreezeGuard<'_> {
-        debug!("requesting vacuum freeze");
+        trace!("requesting vacuum freeze");
         let guard = self.scheduler.request_freeze();
-        debug!("freeze succesfuly started");
+        trace!("freeze succesfuly started");
 
         guard
     }
@@ -199,7 +233,8 @@ impl Vacuum {
 
 impl Drop for Vacuum {
     fn drop(&mut self) {
-        debug!("dropping vacuum...");
+        info!("exiting vacuum...");
+
         self.scheduler.request_exit();
 
         let handle = self.handle.take();

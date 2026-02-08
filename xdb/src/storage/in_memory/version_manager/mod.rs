@@ -1,8 +1,13 @@
 use std::mem::MaybeUninit;
 use std::ptr::NonNull;
+use tracing::error;
+use tracing::instrument;
+use tracing::trace;
 
 use crate::page::Page;
+use crate::storage::TransactionalTimestamp;
 use crate::storage::in_memory::Bitmap;
+use crate::storage::in_memory::block::IdLock;
 use crate::storage::in_memory::block::{Block, PageRef};
 use crate::storage::in_memory::version_manager::committer::Committer;
 use crate::storage::in_memory::version_manager::transaction::VersionManagedTransaction;
@@ -19,7 +24,8 @@ mod vacuum;
 #[derive(Debug)]
 // TODO rename -> "TransactionPage" or something
 struct CowPage<'storage> {
-    main: PageRef<'storage>,
+    // We only keep the logical index, physical can be figured out from that
+    main: PageIndex,
     cow: Option<PageRef<'storage>>,
     deleted: bool,
     inserted: bool,
@@ -28,11 +34,7 @@ struct CowPage<'storage> {
 impl CowPage<'_> {
     fn into_raw(self) -> RawCowPage {
         RawCowPage {
-            main: (
-                self.main.as_ptr(),
-                self.main.logical_index(),
-                self.main.physical_index(),
-            ),
+            main: self.main,
             cow: self
                 .cow
                 .map(|x| (x.as_ptr(), x.logical_index(), x.physical_index())),
@@ -46,7 +48,7 @@ impl CowPage<'_> {
 // TODO this is an awful hack, can we find a better way to work with the lifetime issues
 // between threads?
 struct RawCowPage {
-    main: (NonNull<Page>, Option<PageIndex>, PageIndex),
+    main: PageIndex,
     cow: Option<(NonNull<Page>, Option<PageIndex>, PageIndex)>,
     deleted: bool,
     inserted: bool,
@@ -56,13 +58,11 @@ unsafe impl Send for RawCowPage {}
 
 impl RawCowPage {
     unsafe fn reconstruct(self, block: &'_ Block) -> CowPage<'_> {
-        let main = unsafe { PageRef::new(self.main.0, block, self.main.1, self.main.2) };
-
         CowPage {
-            main,
+            main: self.main,
             cow: self
                 .cow
-                .map(|x| unsafe { PageRef::new(x.0, block, x.1, x.2) }),
+                .map(|x| unsafe { PageRef::new(x.0, block, x.1, x.2, IdLock::new(x.2, block)) }),
             deleted: self.deleted,
             inserted: self.inserted,
         }
@@ -109,4 +109,56 @@ impl VersionManager {
 
         VersionManagedTransaction::new(id, self, self.transaction_log.start_transaction(id))
     }
+}
+
+#[instrument(skip(data))]
+fn get_matching_version(
+    data: &'_ Block,
+    logical_index: PageIndex,
+    timestamp: TransactionalTimestamp,
+) -> PageRef<'_> {
+    let mut locks = vec![];
+
+    let mut main = data.get(Some(logical_index), logical_index);
+    let mut main_lock = main.lock_read();
+    assert!(main_lock.previous_version().is_none());
+
+    while !main_lock.is_visible_at(timestamp) {
+        let Some(next) = main_lock.next_version() else {
+            // TODO should we panic here? I think we should not be able to get to this
+            // place if the database is in a valid state?
+            error!(
+                latest_from = ?main_lock.visible_from(),
+                latest_until = ?main_lock.visible_until(),
+                physical_index = ?main.physical_index(),
+                "page not found"
+            );
+            panic!(
+                "page {logical_index:?} not found (transaction timestamp: {:?}, latest version visible: {:?}/{:?})",
+                timestamp,
+                main_lock.visible_from(),
+                main_lock.visible_until()
+            );
+        };
+
+        let previous_version = main.physical_index();
+        main = data.get(Some(logical_index), next);
+
+        let next_version_lock = main.lock_read();
+        locks.push(main_lock);
+
+        main_lock = next_version_lock;
+        assert!(main_lock.previous_version() == Some(previous_version));
+    }
+
+    // keep all the locks till here to avoid situations where vacuum changes the
+    // next_/previous_version links while we're looking at them
+    drop(locks);
+
+    trace!(
+        physical_index = ?main.physical_index(),
+        "found",
+    );
+
+    main
 }

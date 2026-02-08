@@ -4,6 +4,7 @@ use bytemuck::{
     AnyBitPattern, NoUninit, Pod, Zeroable, bytes_of, from_bytes, from_bytes_mut, must_cast,
 };
 use thiserror::Error;
+use tracing::debug;
 
 use crate::{
     Size,
@@ -133,6 +134,11 @@ impl Page {
     }
 
     pub fn set_visible_until(&mut self, timestamp: Option<TransactionalTimestamp>) {
+        debug!(
+            "setting visible_until to {:?}",
+            timestamp.unwrap_or_else(TransactionalTimestamp::zero)
+        );
+
         self.header.visible_until = timestamp.unwrap_or_else(TransactionalTimestamp::zero);
     }
 

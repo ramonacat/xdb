@@ -27,12 +27,48 @@ pub enum LockError {
     Contended(PageStateValue),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
+pub struct IdLock<'block> {
+    physical_index: PageIndex,
+    block: &'block Block,
+}
+
+impl<'block> IdLock<'block> {
+    pub unsafe fn new(physical_index: PageIndex, block: &'block Block) -> Self {
+        unsafe { block.housekeeping_for(physical_index) }.lock_id();
+
+        Self {
+            physical_index,
+            block,
+        }
+    }
+}
+
+impl Clone for IdLock<'_> {
+    fn clone(&self) -> Self {
+        unsafe { self.block.housekeeping_for(self.physical_index) }.lock_id();
+
+        Self {
+            physical_index: self.physical_index,
+            block: self.block,
+        }
+    }
+}
+
+impl Drop for IdLock<'_> {
+    fn drop(&mut self) {
+        unsafe { self.block.housekeeping_for(self.physical_index) }.unlock_id();
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct PageRef<'block> {
     page: NonNull<Page>,
     block: &'block Block,
     logical_index: Option<PageIndex>,
     physical_index: PageIndex,
+    #[allow(unused)]
+    id_lock: IdLock<'block>,
 }
 
 unsafe impl Send for PageRef<'_> {}
@@ -43,12 +79,14 @@ impl<'block> PageRef<'block> {
         block: &'block Block,
         logical_index: Option<PageIndex>,
         physical_index: PageIndex,
+        id_lock: IdLock<'block>,
     ) -> Self {
         Self {
             page,
             block,
             logical_index,
             physical_index,
+            id_lock,
         }
     }
 
@@ -100,6 +138,17 @@ impl<'block> PageRef<'block> {
     pub(super) const fn as_ptr(&self) -> NonNull<Page> {
         self.page
     }
+
+    pub(crate) fn lock_for_move(self) -> Result<PageGuard<'block>, Self> {
+        let page = self.page;
+        let block = self.block;
+        let logical_index = self.logical_index;
+        let physical_index = self.physical_index;
+
+        unsafe { self.block.housekeeping_for(self.physical_index) }.lock_for_move(self)?;
+
+        Ok(unsafe { PageGuard::from_locked(page, block, logical_index, physical_index) })
+    }
 }
 
 #[derive(Debug)]
@@ -150,7 +199,7 @@ impl Drop for PageGuardRead<'_> {
             let elapsed = self.taken.elapsed();
 
             if elapsed > Duration::from_millis(100) {
-                warn!("read lock held for too long: {elapsed:?}");
+                warn!(waited=?elapsed, "read lock held for too long");
             }
         }
 
@@ -213,19 +262,44 @@ impl<'block> PageGuard<'block> {
         })
     }
 
+    unsafe fn from_locked(
+        page: NonNull<Page>,
+        block: &'block Block,
+        logical_index: Option<PageIndex>,
+        physical_index: PageIndex,
+    ) -> Self {
+        Self {
+            page,
+            block,
+            logical_index,
+            physical_index,
+            #[cfg(debug_assertions)]
+            taken: Instant::now(),
+            lock_consumed: false,
+        }
+    }
+
     pub fn reset(mut self) -> UninitializedPageGuard<'block> {
         let housekeeping = unsafe { self.block.housekeeping_for(self.physical_index) };
         housekeeping.mark_uninitialized();
         self.lock_consumed = true;
 
         unsafe {
-            UninitializedPageGuard::new(
+            UninitializedPageGuard::from_locked(
                 self.block,
                 self.page.cast(),
                 self.logical_index,
                 self.physical_index,
             )
         }
+    }
+
+    pub const fn physical_index(&self) -> PageIndex {
+        self.physical_index
+    }
+
+    pub const fn logical_index(&self) -> Option<PageIndex> {
+        self.logical_index
     }
 }
 
@@ -261,7 +335,7 @@ impl Drop for PageGuard<'_> {
             let elapsed = self.taken.elapsed();
 
             if elapsed > Duration::from_millis(100) {
-                warn!("lock held for too long: {elapsed:?}");
+                warn!(waited=?elapsed, "lock held for too long");
             }
         }
 
@@ -276,12 +350,30 @@ pub struct UninitializedPageGuard<'block> {
     page: NonNull<MaybeUninit<Page>>,
     logical_index: Option<PageIndex>,
     physical_index: PageIndex,
+    lock_consumed: bool,
 }
 
 unsafe impl Send for UninitializedPageGuard<'_> {}
 
 impl<'block> UninitializedPageGuard<'block> {
-    pub(super) const unsafe fn new(
+    pub(super) unsafe fn new(
+        block: &'block Block,
+        page: NonNull<MaybeUninit<Page>>,
+        logical_index: Option<PageIndex>,
+        physical_index: PageIndex,
+    ) -> Self {
+        let housekeeping = unsafe { block.housekeeping_for(physical_index) };
+        match housekeeping.lock_nowait() {
+            Ok(()) => {}
+            Err(LockError::Contended(previous)) => panic!(
+                "lock contended for supposedly unallocated page {logical_index:?}/{physical_index:?}: {previous:?}"
+            ),
+        }
+
+        unsafe { Self::from_locked(block, page, logical_index, physical_index) }
+    }
+
+    const unsafe fn from_locked(
         block: &'block Block,
         page: NonNull<MaybeUninit<Page>>,
         logical_index: Option<PageIndex>,
@@ -292,6 +384,7 @@ impl<'block> UninitializedPageGuard<'block> {
             page,
             logical_index,
             physical_index,
+            lock_consumed: false,
         }
     }
 
@@ -306,32 +399,51 @@ impl<'block> UninitializedPageGuard<'block> {
 
     #[allow(clippy::large_types_passed_by_value)] // TODO create an API that allows us to avoid
     // this
+    #[instrument(skip(self, page), fields(logical_index = ?self.logical_index(), physical_index = ?self.physical_index()))]
     pub fn initialize(mut self, page: Page) -> PageRef<'block> {
-        debug!(
-            "initializing page {:?}/{:?}",
-            self.logical_index(),
-            self.physical_index()
-        );
-
         let housekeeping = unsafe { self.block.housekeeping_for(self.physical_index) };
 
-        // we're taking a mutable reference, so we must lock so that there is only one, even if
-        // there are multiple UninitializedPageGuards
-        housekeeping.lock();
+        // we took the lock when creating this struct
         let initialized_page = NonNull::from_mut(unsafe { self.page.as_mut().write(page) });
         housekeeping.mark_initialized();
         housekeeping.unlock();
+        self.lock_consumed = true;
 
         PageRef {
             page: initialized_page,
             block: self.block,
             logical_index: self.logical_index,
             physical_index: self.physical_index,
+            id_lock: unsafe { IdLock::new(self.physical_index, self.block) },
         }
     }
 
     pub(super) const fn as_ptr(&self) -> NonNull<MaybeUninit<Page>> {
         self.page
+    }
+}
+
+impl Drop for UninitializedPageGuard<'_> {
+    fn drop(&mut self) {
+        debug!(
+            logical_index = ?self.logical_index,
+            physical_index = ?self.physical_index,
+            lock_consumed = ?self.lock_consumed,
+            "dropping uninitialized page"
+        );
+
+        if self.lock_consumed {
+            return;
+        }
+
+        debug!(
+            logical_index = ?self.logical_index,
+            physical_index = ?self.physical_index,
+            "unlocking uninitialized page"
+        );
+
+        let housekeeping = unsafe { self.block.housekeeping_for(self.physical_index) };
+        housekeeping.unlock();
     }
 }
 
@@ -399,8 +511,10 @@ impl Block {
 
         if !housekeeping.is_initialized() {
             error!(
-                "trying to get {logical_index:?}/{physical_index:?}, but housekeeping is not initialized: {:?}",
-                housekeeping
+                ?logical_index,
+                ?physical_index,
+                ?housekeeping,
+                "trying to get a page, but housekeeping is not initialized",
             );
             panic!(
                 "[{}] trying to get {logical_index:?}/{physical_index:?}, but housekeeping is not initialized",
@@ -423,6 +537,7 @@ impl Block {
             block: self,
             logical_index,
             physical_index,
+            id_lock: unsafe { IdLock::new(physical_index, self) },
         }
     }
 
@@ -441,6 +556,13 @@ impl Block {
 
         let housekeeping = unsafe { self.housekeeping_for(physical_index) };
 
+        match housekeeping.lock_nowait() {
+            Ok(()) => {}
+            Err(LockError::Contended(previous)) => panic!(
+                "lock contended while trying to get supposedly uninitialized page {physical_index:?}: {previous:?}"
+            ),
+        }
+
         assert!(
             !housekeeping.is_initialized(),
             "[{}] trying to get as unitialized {logical_index:?}/{physical_index:?}, but housekeeping says it's already initialized",
@@ -457,7 +579,7 @@ impl Block {
         assert!(page.cast() < unsafe { self.data.base_address().byte_add(Self::SIZE.as_bytes()) });
         assert!(page.cast() >= self.data.base_address());
 
-        unsafe { UninitializedPageGuard::new(self, page, logical_index, physical_index) }
+        unsafe { UninitializedPageGuard::from_locked(self, page, logical_index, physical_index) }
     }
 
     #[instrument]
@@ -527,9 +649,8 @@ impl Block {
         Ok(unsafe { UninitializedPageGuard::new(self, page, logical_index, index) })
     }
 
+    #[instrument]
     fn allocate_housekeeping(&self, index: PageIndex) -> Result<NonNull<PageState>, StorageError> {
-        debug!("[{}] allocating housekeeping for {index:?}", self.name);
-
         if index.0 >= Self::PAGE_COUNT as u64 {
             return Err(StorageError::OutOfSpace);
         }

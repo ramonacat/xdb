@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use thiserror::Error;
-use tracing::debug;
+use tracing::{instrument, trace};
 
 use crate::{
     bplustree::{
@@ -55,7 +55,7 @@ fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
     transaction.write_nodes(parent_id, |parent| parent.delete(right_id.into()))?;
     transaction.delete_node(right_id.into())?;
 
-    debug!("merged leaf {left_id:?} with {right_id:?}");
+    trace!(?left_id, ?right_id, "merged leaf");
 
     Ok(())
 }
@@ -78,13 +78,23 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
             return Err(MergeError::NotEnoughCapacity);
         }
 
-        let parent_key_index = parent.find_value_index(right_id.into()).unwrap().key_before().unwrap();
+        let parent_key_index = parent
+            .find_value_index(right_id.into())
+            .unwrap()
+            .key_before()
+            .unwrap();
         let parent_key = parent.key_at(parent_key_index).unwrap();
 
         left.merge_from(right, parent_key);
         parent.delete_at(parent_key_index.value_after());
 
-        debug!("merged interior node {left_id:?} from {right_id:?} (parent: {parent_id:?}, key: {parent_key:?}, index: {parent_key_index:?})");
+        trace!(
+            ?left_id,
+            ?right_id,
+            ?parent_id,
+            ?parent_key_index,
+            "merged interior node"
+        );
 
         Ok(())
     })??;
@@ -219,6 +229,7 @@ fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
     Ok(())
 }
 
+#[instrument(skip(transaction), fields(transaction_id=?transaction.id()))]
 pub fn delete<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
     key: TKey,
@@ -228,7 +239,6 @@ pub fn delete<TStorage: Storage, TKey: TreeKey>(
 
     let result = transaction.write_nodes(starting_leaf, |node| node.delete(key))?;
 
-    debug!("deleted {key:?} from {starting_leaf:?}");
     match result {
         Some((deleted, needs_merge)) => {
             if needs_merge {

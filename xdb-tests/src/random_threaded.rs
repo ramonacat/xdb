@@ -9,7 +9,7 @@ use std::{
 };
 
 use rand::rng;
-use tracing::{error, info};
+use tracing::{error, info, info_span};
 use xdb::{bplustree::Tree, storage::in_memory::InMemoryStorage};
 
 use crate::{
@@ -108,11 +108,13 @@ fn server_thread(
     tree: Arc<Tree<InMemoryStorage, KeyType>>,
 ) {
     while let Ok(commands) = rx.recv() {
-        retry_on_deadlock(&tree, |transaction| {
-            commands.run(transaction)?;
+        info_span!("transaction").in_scope(|| {
+            retry_on_deadlock(&tree, |transaction| {
+                commands.run(transaction)?;
 
-            Ok(())
-        })
-        .unwrap();
+                Ok(())
+            })
+            .unwrap();
+        });
     }
 }

@@ -1,6 +1,7 @@
-use tracing::{debug, info_span, instrument};
+use crate::storage::in_memory::version_manager::get_matching_version;
+use tracing::{debug, info_span, instrument, trace};
 
-use crate::storage::in_memory::block::Block;
+use crate::storage::in_memory::block::{Block, PageRef};
 use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -46,7 +47,7 @@ impl Display for CommitRequest {
             "commit request: {:?} ({} {}) [",
             self.id,
             if self.is_done.as_ref().atomic().load(Ordering::Relaxed) == 1 {
-                "done"
+                "done "
             } else {
                 "not done "
             },
@@ -62,9 +63,11 @@ impl Display for CommitRequest {
             for page in self.pages.values() {
                 write!(
                     f,
-                    "(main: {:?}, cow: {:?}) ",
-                    page.main,
-                    page.cow.map(|x| x.1),
+                    "(main: {:?} cow: {:?} {}{}) ",
+                    page.main.0,
+                    page.cow.map(|x| format!("{:?}/{:?}", x.1, x.2)),
+                    if page.deleted { "[deleted]" } else { "" },
+                    if page.inserted { "[inserted]" } else { "" },
                 )?;
             }
         } else {
@@ -85,30 +88,78 @@ pub struct Committer {
 }
 
 #[instrument(skip(pages, log))]
+#[allow(clippy::too_many_lines)] // TODO lots of room for improvement...
 fn do_commit(
     log: &TransactionLog,
     id: TransactionId,
-    pages: HashMap<PageIndex, CowPage>,
+    mut pages: HashMap<PageIndex, CowPage>,
+    block: &Block,
 ) -> Result<(), StorageError> {
     let commit_handle = log.start_commit(id).unwrap();
-    debug!("starting commit: {commit_handle:?}");
-
     let mut locks = HashMap::new();
 
+    let mut rollback = None;
+
     for (index, page) in &pages {
-        let lock = page.main.lock();
+        let lock = get_matching_version(block, page.main, commit_handle.started()).lock();
 
         if lock.next_version().is_some() {
-            debug!("rolling back, conflict");
-            commit_handle.rollback();
-            // TODO this is not a deadlock, but an optimistic concurrency race
-            return Err(StorageError::Deadlock(*index));
+            debug!(
+                physical_index = ?lock.physical_index(),
+                logical_index = ?lock.logical_index(),
+                next_version = ?lock.next_version(),
+                "rolling back, conflict"
+            );
+
+            rollback = Some(*index);
+
+            break;
         }
 
         locks.insert(*index, lock);
     }
 
-    debug!("collected {} locks for {} pages", locks.len(), pages.len());
+    if let Some(rollback_index) = rollback {
+        for page in pages.values_mut() {
+            if let Some(cow) = page.cow.take() {
+                debug!(
+                    physical_index = ?cow.physical_index(),
+                    logical_index = ?cow.logical_index(),
+                    "clearing page"
+                );
+                let mut cow_lock = cow.lock();
+                cow_lock.set_previous_version(None);
+                cow_lock.set_next_version(None);
+                cow_lock.set_visible_until(Some(commit_handle.timestamp()));
+            }
+        }
+
+        for lock in locks {
+            let page = pages.remove(&lock.0).unwrap();
+
+            if let Some(cow) = page.cow {
+                debug!(
+                    physical_index = ?cow.physical_index(),
+                    logical_index = ?cow.logical_index(),
+                    "clearing page"
+                );
+                let mut cow_lock = cow.lock();
+                cow_lock.set_previous_version(None);
+                cow_lock.set_next_version(None);
+                cow_lock.set_visible_until(Some(commit_handle.timestamp()));
+            }
+        }
+
+        commit_handle.rollback();
+        // TODO this is not a deadlock, but an optimistic concurrency race
+        return Err(StorageError::Deadlock(rollback_index));
+    }
+
+    trace!(
+        lock_count = locks.len(),
+        page_count = pages.len(),
+        "collected locks for pages"
+    );
 
     for (index, page) in pages {
         // It's very tempting to change this `get_mut` to `remove`, but that would be
@@ -117,7 +168,12 @@ fn do_commit(
         let lock = locks.get_mut(&index).unwrap();
 
         if page.deleted {
-            debug!("page {index:?} deleted");
+            debug!(
+                logical_index = ?index,
+                cow.logical_index = ?page.cow.as_ref().map(PageRef::logical_index),
+                cow.physical_index = ?page.cow.as_ref().map(PageRef::physical_index),
+                "deleted"
+            );
 
             lock.set_visible_until(Some(commit_handle.timestamp()));
 
@@ -129,41 +185,45 @@ fn do_commit(
                 cow.set_previous_version(None);
             }
         } else if let Some(cow) = page.cow {
-            debug!("page {index:?} was modified, updating...");
+            assert!(!page.inserted);
+            debug!(
+                logical_index = ?page.main,
+                cow.logical_index = ?cow.logical_index(),
+                cow.physical_index = ?cow.physical_index(),
+                logical_index=?index, "updated"
+            );
 
             let mut cow_lock = cow.lock();
 
             assert!(cow.logical_index() == Some(index));
-            debug!(
-                "setting next version for {:?} to {:?}",
-                index,
-                cow.physical_index()
-            );
 
             lock.set_next_version(Some(cow.physical_index()));
             lock.set_visible_until(Some(commit_handle.timestamp()));
 
             cow_lock.set_visible_from(Some(commit_handle.timestamp()));
             cow_lock.set_visible_until(None);
-            cow_lock.set_previous_version(Some(page.main.physical_index()));
+            cow_lock.set_previous_version(Some(lock.physical_index()));
             cow_lock.set_next_version(None);
-
-            debug!(
-                "page {index:?} updated to point at: {:?}/{:?}",
-                cow.logical_index(),
-                cow.physical_index()
-            );
         } else if page.inserted {
+            debug!(
+                logical_index = ?page.main,
+                "inserted"
+            );
+            assert!(page.cow.is_none());
+
             lock.set_visible_from(Some(commit_handle.timestamp()));
             lock.set_visible_until(None);
         } else {
-            debug!("page {index:?} was not modified, leaving as is");
+            trace!(
+                logical_index = ?page.main,
+                "page not modified"
+            );
         }
     }
 
     commit_handle.commit();
 
-    debug!("commit succesful");
+    debug!("commit completed");
 
     Ok(())
 }
@@ -176,19 +236,22 @@ impl Committer {
                 .name("committer".into())
                 .spawn(move || {
                     while let Ok(mut request) = rx.recv() {
-                        info_span!("transaction commit", %request).in_scope(|| {
-                            let commit_result = do_commit(
-                                &log,
-                                request.id,
-                                request
-                                    .take_pages()
-                                    .into_iter()
-                                    .map(|(k, v)| (k, unsafe { v.reconstruct(&block) }))
-                                    .collect(),
-                            );
+                        info_span!("transaction commit", id = ?request.id, %request).in_scope(
+                            || {
+                                let commit_result = do_commit(
+                                    &log,
+                                    request.id,
+                                    request
+                                        .take_pages()
+                                        .into_iter()
+                                        .map(|(k, v)| (k, unsafe { v.reconstruct(&block) }))
+                                        .collect(),
+                                    &block,
+                                );
 
-                            request.respond(commit_result);
-                        });
+                                request.respond(commit_result);
+                            },
+                        );
                     }
                 })
                 .unwrap()
