@@ -74,22 +74,6 @@ pub struct PageRef<'block> {
 unsafe impl Send for PageRef<'_> {}
 
 impl<'block> PageRef<'block> {
-    pub(super) const unsafe fn new(
-        page: NonNull<Page>,
-        block: &'block Block,
-        logical_index: Option<PageIndex>,
-        physical_index: PageIndex,
-        id_lock: IdLock<'block>,
-    ) -> Self {
-        Self {
-            page,
-            block,
-            logical_index,
-            physical_index,
-            id_lock,
-        }
-    }
-
     #[instrument(skip(self), fields(logical_index = ?self.logical_index, physical_index = ?self.physical_index, block = self.block.name))]
     // TODO rename -> try_lock, change result to option
     pub fn lock_nowait(&self) -> Result<PageGuard<'block>, LockError> {
@@ -133,10 +117,6 @@ impl<'block> PageRef<'block> {
 
     pub const fn physical_index(&self) -> PageIndex {
         self.physical_index
-    }
-
-    pub(super) const fn as_ptr(&self) -> NonNull<Page> {
-        self.page
     }
 
     pub(crate) fn lock_for_move(self) -> Result<PageGuard<'block>, Self> {

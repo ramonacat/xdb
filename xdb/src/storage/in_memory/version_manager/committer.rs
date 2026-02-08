@@ -1,14 +1,14 @@
 use crate::storage::in_memory::version_manager::get_matching_version;
 use tracing::{debug, info_span, instrument, trace};
 
-use crate::storage::in_memory::block::{Block, PageRef};
+use crate::storage::in_memory::block::Block;
 use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::pin::Pin;
 
 use crate::platform::futex::Futex;
-use crate::storage::in_memory::version_manager::{CowPage, RawCowPage};
+use crate::storage::in_memory::version_manager::CowPage;
 use crate::storage::{PageIndex, StorageError, TransactionId};
 use crate::{
     sync::{
@@ -24,7 +24,7 @@ pub struct CommitRequest {
     is_done: Pin<Arc<Futex>>,
     response: Arc<Mutex<Option<Result<(), StorageError>>>>,
     id: TransactionId,
-    pages: HashMap<PageIndex, RawCowPage>,
+    pages: HashMap<PageIndex, CowPage>,
 }
 
 impl CommitRequest {
@@ -35,7 +35,7 @@ impl CommitRequest {
         self.is_done.as_ref().wake_one();
     }
 
-    fn take_pages(&mut self) -> HashMap<PageIndex, RawCowPage> {
+    fn take_pages(&mut self) -> HashMap<PageIndex, CowPage> {
         self.pages.drain().collect()
     }
 }
@@ -65,7 +65,7 @@ impl Display for CommitRequest {
                     f,
                     "(main: {:?} cow: {:?} {}{}) ",
                     page.main.0,
-                    page.cow.map(|x| format!("{:?}/{:?}", x.1, x.2)),
+                    page.cow,
                     if page.deleted { "[deleted]" } else { "" },
                     if page.inserted { "[inserted]" } else { "" },
                 )?;
@@ -122,12 +122,14 @@ fn do_commit(
     if let Some(rollback_index) = rollback {
         for page in pages.values_mut() {
             if let Some(cow) = page.cow.take() {
+                let cow_page = block.get(Some(page.main), cow);
+
                 debug!(
-                    physical_index = ?cow.physical_index(),
-                    logical_index = ?cow.logical_index(),
+                    physical_index = ?cow_page.physical_index(),
+                    logical_index = ?cow_page.logical_index(),
                     "clearing page"
                 );
-                let mut cow_lock = cow.lock();
+                let mut cow_lock = cow_page.lock();
                 cow_lock.set_previous_version(None);
                 cow_lock.set_next_version(None);
                 cow_lock.set_visible_until(Some(commit_handle.timestamp()));
@@ -138,12 +140,13 @@ fn do_commit(
             let page = pages.remove(&lock.0).unwrap();
 
             if let Some(cow) = page.cow {
+                let cow_page = block.get(Some(page.main), cow);
                 debug!(
-                    physical_index = ?cow.physical_index(),
-                    logical_index = ?cow.logical_index(),
+                    physical_index = ?cow_page.physical_index(),
+                    logical_index = ?cow_page.logical_index(),
                     "clearing page"
                 );
-                let mut cow_lock = cow.lock();
+                let mut cow_lock = cow_page.lock();
                 cow_lock.set_previous_version(None);
                 cow_lock.set_next_version(None);
                 cow_lock.set_visible_until(Some(commit_handle.timestamp()));
@@ -170,34 +173,35 @@ fn do_commit(
         if page.deleted {
             debug!(
                 logical_index = ?index,
-                cow.logical_index = ?page.cow.as_ref().map(PageRef::logical_index),
-                cow.physical_index = ?page.cow.as_ref().map(PageRef::physical_index),
+                cow.logical_index = ?page.cow,
                 "deleted"
             );
 
             lock.set_visible_until(Some(commit_handle.timestamp()));
 
             if let Some(cow) = page.cow {
-                let mut cow = cow.lock();
+                let cow_page = block.get(Some(page.main), cow);
+                let mut cow = cow_page.lock();
 
                 cow.set_visible_until(Some(commit_handle.timestamp()));
                 cow.set_next_version(None);
                 cow.set_previous_version(None);
             }
         } else if let Some(cow) = page.cow {
+            let cow_page = block.get(Some(page.main), cow);
             assert!(!page.inserted);
             debug!(
                 logical_index = ?page.main,
-                cow.logical_index = ?cow.logical_index(),
-                cow.physical_index = ?cow.physical_index(),
+                cow.logical_index = ?cow_page.logical_index(),
+                cow.physical_index = ?cow_page.physical_index(),
                 logical_index=?index, "updated"
             );
 
-            let mut cow_lock = cow.lock();
+            let mut cow_lock = cow_page.lock();
 
-            assert!(cow.logical_index() == Some(index));
+            assert!(cow_page.logical_index() == Some(index));
 
-            lock.set_next_version(Some(cow.physical_index()));
+            lock.set_next_version(Some(cow_page.physical_index()));
             lock.set_visible_until(Some(commit_handle.timestamp()));
 
             cow_lock.set_visible_from(Some(commit_handle.timestamp()));
@@ -240,12 +244,9 @@ impl Committer {
                             || {
                                 let commit_result = do_commit(
                                     &log,
+                                    // TODO just pass the whole request???
                                     request.id,
-                                    request
-                                        .take_pages()
-                                        .into_iter()
-                                        .map(|(k, v)| (k, unsafe { v.reconstruct(&block) }))
-                                        .collect(),
+                                    request.take_pages(),
                                     &block,
                                 );
 
@@ -275,7 +276,7 @@ impl Committer {
                 is_done: is_done.clone(),
                 response: response.clone(),
                 id,
-                pages: pages.into_iter().map(|(k, v)| (k, v.into_raw())).collect(),
+                pages,
             })
             .unwrap();
 

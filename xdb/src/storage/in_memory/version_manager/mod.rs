@@ -7,7 +7,6 @@ use tracing::trace;
 use crate::page::Page;
 use crate::storage::TransactionalTimestamp;
 use crate::storage::in_memory::Bitmap;
-use crate::storage::in_memory::block::IdLock;
 use crate::storage::in_memory::block::{Block, PageRef};
 use crate::storage::in_memory::version_manager::committer::Committer;
 use crate::storage::in_memory::version_manager::transaction::VersionManagedTransaction;
@@ -23,50 +22,12 @@ mod vacuum;
 
 #[derive(Debug)]
 // TODO rename -> "TransactionPage" or something
-struct CowPage<'storage> {
+struct CowPage {
     // We only keep the logical index, physical can be figured out from that
     main: PageIndex,
-    cow: Option<PageRef<'storage>>,
+    cow: Option<PageIndex>,
     deleted: bool,
     inserted: bool,
-}
-
-impl CowPage<'_> {
-    fn into_raw(self) -> RawCowPage {
-        RawCowPage {
-            main: self.main,
-            cow: self
-                .cow
-                .map(|x| (x.as_ptr(), x.logical_index(), x.physical_index())),
-            deleted: self.deleted,
-            inserted: self.inserted,
-        }
-    }
-}
-
-#[derive(Debug)]
-// TODO this is an awful hack, can we find a better way to work with the lifetime issues
-// between threads?
-struct RawCowPage {
-    main: PageIndex,
-    cow: Option<(NonNull<Page>, Option<PageIndex>, PageIndex)>,
-    deleted: bool,
-    inserted: bool,
-}
-
-unsafe impl Send for RawCowPage {}
-
-impl RawCowPage {
-    unsafe fn reconstruct(self, block: &'_ Block) -> CowPage<'_> {
-        CowPage {
-            main: self.main,
-            cow: self
-                .cow
-                .map(|x| unsafe { PageRef::new(x.0, block, x.1, x.2, IdLock::new(x.2, block)) }),
-            deleted: self.deleted,
-            inserted: self.inserted,
-        }
-    }
 }
 
 #[derive(Debug)]

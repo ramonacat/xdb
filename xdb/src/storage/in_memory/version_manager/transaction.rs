@@ -25,7 +25,7 @@ use crate::{
 
 pub struct VersionManagedTransaction<'storage> {
     id: TransactionId,
-    pages: HashMap<PageIndex, CowPage<'storage>>,
+    pages: HashMap<PageIndex, CowPage>,
     version_manager: &'storage VersionManager,
     last_free_page_scan: Mutex<Option<Instant>>,
     log_entry: TransactionLogEntryHandle<'storage>,
@@ -210,7 +210,9 @@ impl<'storage> VersionManagedTransaction<'storage> {
     ) -> Result<PageGuardRead<'storage>, StorageError> {
         if let Some(entry) = self.pages.get(&index) {
             if let Some(cow) = &entry.cow {
-                return Ok(cow.lock_read());
+                let cow_page = self.version_manager.data.get(Some(index), *cow);
+
+                return Ok(cow_page.lock_read());
             }
 
             let main = get_matching_version(
@@ -255,7 +257,8 @@ impl<'storage> VersionManagedTransaction<'storage> {
             }
 
             if let Some(cow) = &entry.cow {
-                return Ok(cow.lock());
+                let cow_page = self.version_manager.data.get(Some(index), *cow);
+                return Ok(cow_page.lock());
             }
 
             let main = get_matching_version(
@@ -266,7 +269,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
             let cow = self.allocate_cow_copy(Some(index))?;
             let cow = cow.initialize(*main.lock_read());
-            self.pages.get_mut(&index).unwrap().cow = Some(cow.clone());
+            self.pages.get_mut(&index).unwrap().cow = Some(cow.physical_index());
 
             let cow_lock = cow.lock();
             Ok(cow_lock)
@@ -289,7 +292,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 index,
                 CowPage {
                     main: index,
-                    cow: Some(cow.clone()),
+                    cow: Some(cow.physical_index()),
                     deleted: false,
                     inserted: false,
                 },
@@ -371,15 +374,17 @@ impl<'storage> VersionManagedTransaction<'storage> {
     #[allow(clippy::needless_pass_by_ref_mut)] // TODO make const if we really don't need it
     pub fn rollback(&mut self) {
         debug!("rolling back");
-        for (_, page) in self.pages.drain() {
+        for (index, page) in self.pages.drain() {
             if let Some(cow) = page.cow {
+                let cow_page = self.version_manager.data.get(Some(index), cow);
+
                 debug!(
-                    logical_index = ?cow.logical_index(),
-                    physical_index = ?cow.physical_index(),
+                    logical_index = ?cow_page.logical_index(),
+                    physical_index = ?cow_page.physical_index(),
                     "setting page up to be freed"
                 );
                 // TODO we should probably have a better way of freeing these pages
-                let mut cow_lock = cow.lock();
+                let mut cow_lock = cow_page.lock();
                 cow_lock.set_next_version(None);
                 cow_lock.set_previous_version(None);
                 cow_lock.set_visible_until(Some(self.log_entry.start_timestamp()));

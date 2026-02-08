@@ -1,9 +1,4 @@
-use opentelemetry::trace::TracerProvider;
-use opentelemetry_sdk::Resource;
-use opentelemetry_sdk::trace::BatchConfigBuilder;
-use opentelemetry_sdk::trace::BatchSpanProcessor;
 use tracing::Level;
-use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 mod predictable;
 mod random_single;
@@ -11,7 +6,6 @@ mod random_threaded;
 
 use clap::Parser;
 use clap::Subcommand;
-use opentelemetry_sdk::trace::SdkTracerProvider;
 use rand::Rng;
 use std::fs;
 use std::{
@@ -156,29 +150,6 @@ struct Cli {
 #[tokio::main]
 async fn main() {
     if !cfg!(miri) {
-        /*
-        let exporter = opentelemetry_otlp::SpanExporter::builder()
-            .with_tonic()
-            .build()
-            .unwrap();
-
-        let processor = BatchSpanProcessor::builder(exporter)
-            .with_batch_config(
-                BatchConfigBuilder::default()
-                    .with_max_queue_size(40 * 1024 * 1024)
-                    .with_max_export_batch_size(6000)
-                    .with_scheduled_delay(Duration::from_millis(100))
-                    .build()
-            )
-            .build();
-
-        let provider = SdkTracerProvider::builder()
-            .with_span_processor(processor)
-            .with_resource(Resource::builder().with_service_name("xdb-tests").build())
-            .build();
-        let _tracer = provider.tracer("xdb-tests");
-        */
-
         tracing_subscriber::registry()
             .with(
                 tracing_subscriber::filter::Targets::new()
