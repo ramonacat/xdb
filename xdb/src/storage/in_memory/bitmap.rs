@@ -98,10 +98,9 @@ impl Bitmap {
 
     pub fn set(&self, index: u64) -> Result<(), StorageError> {
         let bit_location = BitLocation::new(index);
-        let page = self.block.get_or_allocate_zeroed(None, bit_location.page)?;
+        let mut page = self.block.get_or_allocate_zeroed(None, bit_location.page)?;
 
-        let mut lock = page.lock();
-        lock.data_mut::<BitmapPage>().set(bit_location);
+        page.data_mut::<BitmapPage>().set(bit_location);
 
         Ok(())
     }
@@ -122,7 +121,7 @@ impl Bitmap {
                 continue;
             };
 
-            let Ok(mut page) = page_ref.lock_nowait() else {
+            let Ok(mut page) = page_ref.try_upgrade() else {
                 continue;
             };
 

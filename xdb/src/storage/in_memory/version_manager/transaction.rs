@@ -216,8 +216,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                         &self.version_manager.data,
                         entry.logical_index,
                         self.log_entry.start_timestamp(),
-                    )
-                    .lock_read();
+                    );
 
                     Ok(lock)
                 }
@@ -230,8 +229,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                     let lock = self
                         .version_manager
                         .data
-                        .get(Some(entry.logical_index), cow_index)
-                        .lock_read();
+                        .get(Some(entry.logical_index), cow_index);
 
                     Ok(lock)
                 }
@@ -251,7 +249,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 self.log_entry.start_timestamp(),
             );
 
-            Ok(main.lock_read())
+            Ok(main)
         }
     }
 
@@ -270,7 +268,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                         .data
                         .get(Some(entry.logical_index), page_index);
 
-                    return Ok(cow_page.lock());
+                    return Ok(cow_page.upgrade());
                 }
                 TransactionPageAction::Insert => {
                     let main = get_matching_version(
@@ -279,7 +277,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                         self.log_entry.start_timestamp(),
                     );
 
-                    return Ok(main.lock());
+                    return Ok(main.upgrade());
                 }
             }
         }
@@ -290,13 +288,13 @@ impl<'storage> VersionManagedTransaction<'storage> {
             self.log_entry.start_timestamp(),
         );
 
-        if main.lock_read().next_version().is_some() {
+        if main.next_version().is_some() {
             // TODO not a deadlock, but optimistic concurrency failure
             return Err(StorageError::Deadlock(index));
         }
 
         let cow = self.allocate_cow_copy(Some(index))?;
-        let cow = cow.initialize(*main.lock_read());
+        let cow = cow.initialize(*main);
         self.pages.insert(
             index,
             TransactionPage {
@@ -305,8 +303,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
             },
         );
 
-        let cow_lock = cow.lock();
-        Ok(cow_lock)
+        Ok(cow)
     }
 
     #[instrument(skip(self))]
@@ -352,7 +349,8 @@ impl<'storage> VersionManagedTransaction<'storage> {
         if let Some(previous) = inserted {
             match previous.action {
                 TransactionPageAction::Update(cow) => {
-                    let mut cow_page = self.version_manager.data.get(Some(page), cow).lock();
+                    let mut cow_page = self.version_manager.data.get(Some(page), cow).upgrade();
+
                     cow_page.mark_free();
                 }
                 TransactionPageAction::Read
@@ -394,7 +392,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                         physical_index = ?cow_page.physical_index(),
                         "setting page up to be freed"
                     );
-                    let mut cow_lock = cow_page.lock();
+                    let mut cow_lock = cow_page.upgrade();
                     cow_lock.mark_free();
                 }
             }

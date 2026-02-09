@@ -7,7 +7,8 @@ use tracing::trace;
 use crate::page::Page;
 use crate::storage::TransactionalTimestamp;
 use crate::storage::in_memory::Bitmap;
-use crate::storage::in_memory::block::{Block, PageRef};
+use crate::storage::in_memory::block::Block;
+use crate::storage::in_memory::block::PageGuardRead;
 use crate::storage::in_memory::version_manager::committer::Committer;
 use crate::storage::in_memory::version_manager::transaction::VersionManagedTransaction;
 use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
@@ -82,11 +83,10 @@ fn get_matching_version(
     data: &'_ Block,
     logical_index: PageIndex,
     timestamp: TransactionalTimestamp,
-) -> PageRef<'_> {
+) -> PageGuardRead<'_> {
     let mut locks = vec![];
 
-    let mut main = data.get(Some(logical_index), logical_index);
-    let mut main_lock = main.lock_read();
+    let mut main_lock = data.get(Some(logical_index), logical_index);
     assert!(main_lock.previous_version().is_none());
 
     while !main_lock.is_visible_at(timestamp) {
@@ -96,25 +96,23 @@ fn get_matching_version(
             error!(
                 latest_from = ?main_lock.visible_from(),
                 latest_until = ?main_lock.visible_until(),
-                physical_index = ?main.physical_index(),
+                physical_index = ?main_lock.physical_index(),
                 "page not found"
             );
             panic!(
                 "page {logical_index:?}/{:?} not found (transaction timestamp: {:?}, latest version visible: {:?}/{:?})",
-                main.physical_index(),
+                main_lock.physical_index(),
                 timestamp,
                 main_lock.visible_from(),
                 main_lock.visible_until()
             );
         };
 
-        let previous_version = main.physical_index();
-        main = data.get(Some(logical_index), next);
+        let previous_version = main_lock.physical_index();
 
-        let next_version_lock = main.lock_read();
         locks.push(main_lock);
+        main_lock = data.get(Some(logical_index), next);
 
-        main_lock = next_version_lock;
         assert!(main_lock.previous_version() == Some(previous_version));
     }
 
@@ -123,9 +121,9 @@ fn get_matching_version(
     drop(locks);
 
     trace!(
-        physical_index = ?main.physical_index(),
+        physical_index = ?main_lock.physical_index(),
         "found",
     );
 
-    main
+    main_lock
 }

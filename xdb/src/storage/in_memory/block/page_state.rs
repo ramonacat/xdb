@@ -1,6 +1,6 @@
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
-use crate::storage::in_memory::block::{LockError, PageRef};
+use crate::storage::in_memory::block::LockError;
 use crate::sync::atomic::{AtomicU32, Ordering};
 use std::fmt::Debug;
 use std::time::Duration;
@@ -25,6 +25,7 @@ impl Debug for PageStateValue {
         f.debug_struct("PageStateValue")
             .field("is_initialized", &self.is_initialized())
             .field("is_locked", &self.is_locked())
+            .field("readers", &self.readers())
             .field("raw", &format!("{:#b}", self.0))
             .finish()
     }
@@ -33,9 +34,6 @@ impl Debug for PageStateValue {
 impl PageStateValue {
     const MASK_IS_INITIALIZED: u32 = 1 << 31;
     const MASK_IS_LOCKED: u32 = 1 << 30;
-
-    const MASK_ID_LOCKS: u32 = 0b0011_1111_1111_1111_0000_0000_0000_0000;
-    const SHIFT_ID_LOCKS: u32 = 16;
 
     const MASK_READERS: u32 = 0x0000_FFFF;
 
@@ -58,33 +56,6 @@ impl PageStateValue {
         Self(self.0 & !Self::MASK_IS_LOCKED)
     }
 
-    const fn id_locks(self) -> u32 {
-        (self.0 & Self::MASK_ID_LOCKS) >> Self::SHIFT_ID_LOCKS
-    }
-
-    // TODO do we actually care about locking the id, while not taking a read or write lock? or
-    // should we just use PageGuard (allowing it to upgrade if needed) and get rid of PageRef entirely?
-    const fn lock_id(self) -> Self {
-        let locks = self.id_locks() + 1;
-        let locks = locks << Self::SHIFT_ID_LOCKS;
-
-        assert!((locks & !Self::MASK_ID_LOCKS) == 0);
-
-        Self((self.0 & !Self::MASK_ID_LOCKS) | locks)
-    }
-
-    const fn unlock_id(self) -> Self {
-        let locks = self.id_locks();
-        assert!(locks > 0);
-        let locks = locks - 1;
-
-        Self((self.0 & !Self::MASK_ID_LOCKS) | (locks << Self::SHIFT_ID_LOCKS))
-    }
-
-    const fn mark_uninitialized(self) -> Self {
-        Self(self.0 & !Self::MASK_IS_INITIALIZED)
-    }
-
     fn readers(self) -> u16 {
         u16::try_from(self.0 & Self::MASK_READERS).unwrap()
     }
@@ -94,8 +65,13 @@ impl PageStateValue {
 
         Self((self.0 & !Self::MASK_READERS) | u32::from(readers))
     }
+
+    const fn mark_uninitialized(self) -> Self {
+        Self(self.0 & !Self::MASK_IS_INITIALIZED)
+    }
 }
 
+// TODO there's a lot of copy-paste here, can we simplify?
 impl PageState {
     pub const fn new() -> Self {
         Self(Futex::new(0), PhantomPinned)
@@ -138,13 +114,13 @@ impl PageState {
     }
 
     // TODO rename -> try_lock, change result to bool
-    pub fn lock_nowait(self: Pin<&Self>) -> Result<(), LockError> {
+    pub fn upgrade_nowait(self: Pin<&Self>) -> Result<(), LockError> {
         match self
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
                 let f = PageStateValue(f);
 
-                if f.readers() > 0 {
+                if f.readers() != 1 {
                     return None;
                 }
 
@@ -152,7 +128,7 @@ impl PageState {
                     return None;
                 }
 
-                Some(f.lock().0)
+                Some(f.with_readers(0).lock().0)
             }) {
             Ok(_) => Ok(()),
             Err(previous) => {
@@ -163,16 +139,13 @@ impl PageState {
         }
     }
 
-    pub fn lock_for_move<'block>(
-        self: Pin<&Self>,
-        page_ref: PageRef<'block>,
-    ) -> Result<(), PageRef<'block>> {
+    pub fn lock_nowait(self: Pin<&Self>) -> Result<(), LockError> {
         match self
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
                 let f = PageStateValue(f);
 
-                if f.readers() > 0 {
+                if f.readers() != 0 {
                     return None;
                 }
 
@@ -180,31 +153,23 @@ impl PageState {
                     return None;
                 }
 
-                if f.id_locks() != 1 {
-                    return None;
-                }
-
-                Some(f.lock().0)
+                Some(f.with_readers(0).lock().0)
             }) {
-            Ok(_) => {
-                drop(page_ref);
-
-                Ok(())
-            }
+            Ok(_) => Ok(()),
             Err(previous) => {
                 let previous = PageStateValue(previous);
-                debug!(?previous, "failed to lock for move");
 
-                Err(page_ref)
+                Err(LockError::Contended(previous))
             }
         }
     }
 
+    // TODO rename -> upgrade
     pub fn lock(self: Pin<&Self>) {
         let start = std::time::Instant::now();
 
         loop {
-            match self.lock_nowait() {
+            match self.upgrade_nowait() {
                 Ok(()) => {
                     return;
                 }
@@ -296,34 +261,6 @@ impl PageState {
     // TODO does this need to be pub?
     pub fn wake(self: Pin<&Self>) {
         self.futex().wake_all();
-    }
-
-    pub fn lock_id(self: Pin<&Self>) {
-        match self
-            .atomic()
-            .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
-                let x = PageStateValue(x);
-
-                Some(x.lock_id().0)
-            }) {
-            Ok(_) => {}
-            Err(_) => todo!(),
-        }
-    }
-
-    pub fn unlock_id(self: Pin<&Self>) {
-        match self
-            .atomic()
-            .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
-                let x = PageStateValue(x);
-
-                Some(x.unlock_id().0)
-            }) {
-            Ok(_) => {
-                self.wake();
-            }
-            Err(_) => todo!(),
-        }
     }
 }
 

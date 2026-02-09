@@ -88,10 +88,10 @@ impl CommitterThread<'_, '_> {
                 TransactionPageAction::Insert => Some(
                     self.block
                         .get(Some(page.logical_index), page.logical_index)
-                        .lock(),
+                        .upgrade(),
                 ),
                 TransactionPageAction::Update(cow) => {
-                    Some(self.block.get(Some(page.logical_index), cow).lock())
+                    Some(self.block.get(Some(page.logical_index), cow).upgrade())
                 }
             };
 
@@ -123,7 +123,7 @@ impl CommitterThread<'_, '_> {
         for (index, page) in &pages {
             let lock =
                 get_matching_version(self.block, page.logical_index, commit_handle.started())
-                    .lock();
+                    .upgrade();
 
             if lock.next_version().is_some() {
                 debug!(
@@ -187,9 +187,9 @@ impl CommitterThread<'_, '_> {
                         logical_index=?index, "updated"
                     );
 
-                    let mut cow_lock = cow_page.lock();
+                    let mut cow_lock = cow_page.upgrade();
 
-                    lock.set_next_version(Some(cow_page.physical_index()));
+                    lock.set_next_version(Some(cow_lock.physical_index()));
                     lock.set_visible_until(Some(commit_handle.timestamp()));
 
                     cow_lock.set_visible_from(Some(commit_handle.timestamp()));

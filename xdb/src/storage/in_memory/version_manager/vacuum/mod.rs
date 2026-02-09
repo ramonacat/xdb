@@ -109,7 +109,7 @@ impl VacuumThread {
             return;
         };
 
-        let Ok(mut page_guard) = page.lock_nowait() else {
+        let Ok(mut page_guard) = page.try_upgrade() else {
             return;
         };
 
@@ -147,7 +147,7 @@ impl VacuumThread {
         let Some(next_version) = self.data.try_get(None, next_version_index) else {
             return;
         };
-        let Ok(next_version) = next_version.lock_for_move() else {
+        let Ok(next_version) = next_version.try_upgrade() else {
             return;
         };
 
@@ -159,7 +159,7 @@ impl VacuumThread {
 
         let mut next_next = if let Some(next_next_index) = next_version.next_version() {
             if let Some(next_next) = self.data.try_get(None, next_next_index)
-                && let Ok(next_next) = next_next.lock_nowait()
+                && let Ok(next_next) = next_next.try_upgrade()
             {
                 assert!(next_next.previous_version() == Some(next_version_index));
 
