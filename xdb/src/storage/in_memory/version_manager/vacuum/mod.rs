@@ -12,7 +12,7 @@ use crate::{
         PageIndex, TransactionalTimestamp,
         in_memory::{
             Bitmap,
-            block::{Block, PageGuard},
+            block::{Block, PageWriteGuard},
             version_manager::{
                 transaction_log::TransactionLog,
                 vacuum::scheduler::{FreezeGuard, Scheduler},
@@ -65,7 +65,7 @@ impl VacuumThread {
             self.freed_count.store(0, Ordering::Release);
             self.checked_count = 0u64;
 
-            let pages_to_check = self.data.page_count_lower_bound();
+            let pages_to_check = self.data.allocated_page_count();
 
             debug!(
                 minimum_active_timestamp = ?min_timestamp,
@@ -95,7 +95,7 @@ impl VacuumThread {
                 freed_count = ?self.freed_count,
                 checked_count = ?self.checked_count,
                 scanned_count = ?i,
-                total_count = ?self.data.page_count_lower_bound(),
+                total_count = ?self.data.allocated_page_count(),
                 "vacuum scan finished",
             );
         }
@@ -132,7 +132,7 @@ impl VacuumThread {
             return;
         };
 
-        if visible_until < min_live_timestamp {
+        if visible_until >= min_live_timestamp {
             return;
         }
 
@@ -202,7 +202,7 @@ impl VacuumThread {
     }
 
     #[instrument(skip(self))]
-    fn free_page(&self, page_guard: PageGuard) {
+    fn free_page(&self, page_guard: PageWriteGuard) {
         debug!(
             physical_index=?page_guard.physical_index(),
             logical_index=?page_guard.logical_index(),

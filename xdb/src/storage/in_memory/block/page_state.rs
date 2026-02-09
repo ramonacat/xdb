@@ -24,7 +24,7 @@ impl Debug for PageStateValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PageStateValue")
             .field("is_initialized", &self.is_initialized())
-            .field("is_locked", &self.is_locked())
+            .field("is_locked", &self.has_writer())
             .field("readers", &self.readers())
             .field("raw", &format!("{:#b}", self.0))
             .finish()
@@ -41,18 +41,19 @@ impl PageStateValue {
         (self.0 & Self::MASK_IS_INITIALIZED) != 0
     }
 
-    // TODO rename -> has_writer
-    const fn is_locked(self) -> bool {
+    const fn mark_uninitialized(self) -> Self {
+        Self(self.0 & !Self::MASK_IS_INITIALIZED)
+    }
+
+    const fn has_writer(self) -> bool {
         (self.0 & Self::MASK_IS_LOCKED) != 0
     }
 
-    // TODO rename -> lock_write
-    const fn lock(self) -> Self {
+    const fn lock_write(self) -> Self {
         Self(self.0 | Self::MASK_IS_LOCKED)
     }
 
-    // TODO rename -> unlock_write
-    const fn unlock(self) -> Self {
+    const fn unlock_write(self) -> Self {
         Self(self.0 & !Self::MASK_IS_LOCKED)
     }
 
@@ -61,13 +62,9 @@ impl PageStateValue {
     }
 
     fn with_readers(self, readers: u16) -> Self {
-        assert!(!self.is_locked());
+        assert!(!self.has_writer());
 
         Self((self.0 & !Self::MASK_READERS) | u32::from(readers))
-    }
-
-    const fn mark_uninitialized(self) -> Self {
-        Self(self.0 & !Self::MASK_IS_INITIALIZED)
     }
 }
 
@@ -99,7 +96,7 @@ impl PageState {
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 let x = PageStateValue(x);
 
-                assert!(x.is_locked());
+                assert!(x.has_writer());
                 assert!(x.readers() == 0);
 
                 Some(x.mark_uninitialized().0)
@@ -113,8 +110,7 @@ impl PageState {
         PageStateValue(self.atomic().load(Ordering::Acquire)).is_initialized()
     }
 
-    // TODO rename -> try_lock, change result to bool
-    pub fn upgrade_nowait(self: Pin<&Self>) -> Result<(), LockError> {
+    pub fn try_upgrade(self: Pin<&Self>) -> Result<(), LockError> {
         match self
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
@@ -124,11 +120,11 @@ impl PageState {
                     return None;
                 }
 
-                if f.is_locked() {
+                if f.has_writer() {
                     return None;
                 }
 
-                Some(f.with_readers(0).lock().0)
+                Some(f.with_readers(0).lock_write().0)
             }) {
             Ok(_) => Ok(()),
             Err(previous) => {
@@ -139,7 +135,7 @@ impl PageState {
         }
     }
 
-    pub fn lock_nowait(self: Pin<&Self>) -> Result<(), LockError> {
+    pub fn try_write(self: Pin<&Self>) -> Result<(), LockError> {
         match self
             .atomic()
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |f| {
@@ -149,11 +145,11 @@ impl PageState {
                     return None;
                 }
 
-                if f.is_locked() {
+                if f.has_writer() {
                     return None;
                 }
 
-                Some(f.with_readers(0).lock().0)
+                Some(f.with_readers(0).lock_write().0)
             }) {
             Ok(_) => Ok(()),
             Err(previous) => {
@@ -164,12 +160,11 @@ impl PageState {
         }
     }
 
-    // TODO rename -> upgrade
-    pub fn lock(self: Pin<&Self>) {
+    pub fn upgrade(self: Pin<&Self>) {
         let start = std::time::Instant::now();
 
         loop {
-            match self.upgrade_nowait() {
+            match self.try_upgrade() {
                 Ok(()) => {
                     return;
                 }
@@ -190,19 +185,19 @@ impl PageState {
         self.futex().wait(previous.0, None);
     }
 
-    pub fn unlock(self: Pin<&Self>) {
+    pub fn unlock_write(self: Pin<&Self>) {
         match self
             .atomic()
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 let x = PageStateValue(x);
 
                 assert!(x.readers() == 0);
-                assert!(x.is_locked());
+                assert!(x.has_writer());
 
-                Some(x.unlock().0)
+                Some(x.unlock_write().0)
             }) {
             Ok(_) => {
-                self.wake();
+                self.wake_all();
             }
             Err(_) => todo!(),
         }
@@ -220,7 +215,7 @@ impl PageState {
             .fetch_update(Ordering::Acquire, Ordering::Acquire, |x| {
                 let x = PageStateValue(x);
 
-                if x.is_locked() {
+                if x.has_writer() {
                     return None;
                 }
 
@@ -245,21 +240,21 @@ impl PageState {
             .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
                 let x = PageStateValue(x);
 
-                assert!(!x.is_locked());
+                assert!(!x.has_writer());
                 assert!(x.readers() > 0);
 
                 Some(x.with_readers(x.readers() - 1).0)
             }) {
             Ok(_) => {
-                self.wake();
+                self.wake_all();
             }
             Err(_) => todo!(),
         }
     }
 
-    // TODO rename -> wake_one?
-    // TODO does this need to be pub?
-    pub fn wake(self: Pin<&Self>) {
+    // TODO we should probably have some way of choosing who to wake (waiters for write, waiters
+    // for read, etc.)
+    fn wake_all(self: Pin<&Self>) {
         self.futex().wake_all();
     }
 }
@@ -273,7 +268,7 @@ mod test {
         let lock = PageStateValue(PageStateValue::MASK_IS_INITIALIZED);
         assert!(lock.readers() == 0);
 
-        assert!(!lock.with_readers(1).is_locked());
-        assert!(lock.lock().readers() == 0);
+        assert!(!lock.with_readers(1).has_writer());
+        assert!(lock.lock_write().readers() == 0);
     }
 }

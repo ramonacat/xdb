@@ -1,5 +1,5 @@
 use crate::storage::in_memory::{
-    block::{PageGuard, PageGuardRead},
+    block::{PageReadGuard, PageWriteGuard},
     version_manager::{
         TransactionPage, TransactionPageAction, get_matching_version,
         transaction_log::TransactionLogEntryHandle,
@@ -81,7 +81,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     ) -> Option<UninitializedPageGuard<'storage>> {
         // don't bother with all this if there aren't many allocated pages (TODO figure out if this
         // number makes sense)
-        if self.version_manager.data.page_count_lower_bound() < 50000 {
+        if self.version_manager.data.allocated_page_count() < 50000 {
             trace!("not recycling pages, too few were allocated");
 
             return None;
@@ -128,7 +128,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
             .freemap
             .find_and_unset(10000)
             .into_iter()
-            .map(|index| unsafe {
+            .map(|index| {
                 self.version_manager
                     .data
                     .get_uninitialized(logical_index, PageIndex(index as u64))
@@ -207,7 +207,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     pub(crate) fn read(
         &mut self,
         index: PageIndex,
-    ) -> Result<PageGuardRead<'storage>, StorageError> {
+    ) -> Result<PageReadGuard<'storage>, StorageError> {
         if let Some(entry) = self.pages.get(&index) {
             match entry.action {
                 crate::storage::in_memory::version_manager::TransactionPageAction::Read
@@ -253,7 +253,10 @@ impl<'storage> VersionManagedTransaction<'storage> {
         }
     }
 
-    pub(crate) fn write(&mut self, index: PageIndex) -> Result<PageGuard<'storage>, StorageError> {
+    pub(crate) fn write(
+        &mut self,
+        index: PageIndex,
+    ) -> Result<PageWriteGuard<'storage>, StorageError> {
         if let Some(entry) = self.pages.get_mut(&index) {
             assert!(entry.logical_index == index);
 

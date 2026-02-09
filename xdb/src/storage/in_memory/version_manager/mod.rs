@@ -8,7 +8,7 @@ use crate::page::Page;
 use crate::storage::TransactionalTimestamp;
 use crate::storage::in_memory::Bitmap;
 use crate::storage::in_memory::block::Block;
-use crate::storage::in_memory::block::PageGuardRead;
+use crate::storage::in_memory::block::PageReadGuard;
 use crate::storage::in_memory::version_manager::committer::Committer;
 use crate::storage::in_memory::version_manager::transaction::VersionManagedTransaction;
 use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
@@ -83,7 +83,7 @@ fn get_matching_version(
     data: &'_ Block,
     logical_index: PageIndex,
     timestamp: TransactionalTimestamp,
-) -> PageGuardRead<'_> {
+) -> PageReadGuard<'_> {
     let mut locks = vec![];
 
     let mut main_lock = data.get(Some(logical_index), logical_index);

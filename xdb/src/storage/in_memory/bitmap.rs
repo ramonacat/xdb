@@ -112,7 +112,7 @@ impl Bitmap {
     pub fn find_and_unset(&self, count: usize) -> Vec<usize> {
         let mut result = vec![];
 
-        for page_index in 0..=self.block.page_count_lower_bound() {
+        for page_index in 0..=self.block.allocated_page_count() {
             if result.len() == count {
                 break;
             }
