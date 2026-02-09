@@ -100,7 +100,8 @@ fn get_matching_version(
                 "page not found"
             );
             panic!(
-                "page {logical_index:?} not found (transaction timestamp: {:?}, latest version visible: {:?}/{:?})",
+                "page {logical_index:?}/{:?} not found (transaction timestamp: {:?}, latest version visible: {:?}/{:?})",
+                main.physical_index(),
                 timestamp,
                 main_lock.visible_from(),
                 main_lock.visible_until()
