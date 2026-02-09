@@ -21,6 +21,14 @@ pub enum PageError {
     Checksum,
 }
 
+bitflags::bitflags! {
+    #[derive(Debug, Pod, Zeroable, Clone, Copy)]
+    #[repr(transparent)]
+    pub struct PageFlags: u16 {
+        const IS_FREE = 1 << 0;
+    }
+}
+
 #[derive(Debug, Pod, Clone, Copy, Zeroable)]
 #[repr(C, align(8))]
 // TODO this header is growing in size, are all of these fields really neccessary?
@@ -28,7 +36,8 @@ pub enum PageError {
 // physical page doesn't really care about anything other than a checksum and raw data
 struct PageHeader {
     checksum: Checksum,
-    _unused1: u32,
+    flags: PageFlags,
+    _unused1: u16,
     visible_from: TransactionalTimestamp,
     visible_until: TransactionalTimestamp,
     next_version: PageIndex,
@@ -38,6 +47,7 @@ impl PageHeader {
     fn new() -> Self {
         Self {
             checksum: Checksum::zeroed(),
+            flags: PageFlags::empty(),
             _unused1: 0,
             visible_from: TransactionalTimestamp::zeroed(),
             visible_until: TransactionalTimestamp::zeroed(),
@@ -206,6 +216,18 @@ impl Page {
             header: PageHeader::new(),
             data: [0; _],
         }
+    }
+
+    /// This is used to mark the page as free and allow for it to be reallocated, regardless of
+    /// `valid_from`/`valid_until`. It can be used e.g. to free cow copies after a transaction rolled
+    /// back (as then we know that the validity timestamps are irrelevant, as there will not be any
+    /// references to these pages).
+    pub fn mark_free(&mut self) {
+        self.header.flags.set(PageFlags::IS_FREE, true);
+    }
+
+    pub const fn is_free(&self) -> bool {
+        self.header.flags.contains(PageFlags::IS_FREE)
     }
 }
 

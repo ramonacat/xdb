@@ -87,92 +87,103 @@ impl VacuumThread {
                 };
 
                 if let Ok(mut page_guard) = page.lock_nowait() {
+                    if page_guard.is_free() {
+                        debug!(physical_index=?index, "freeing page");
+                        drop(page_guard.reset());
+
+                        self.freemap.set(index.0).unwrap();
+                        freed_count += 1;
+
+                        continue;
+                    }
+
                     if page_guard.previous_version().is_some() {
                         continue;
                     }
 
                     checked_count += 1;
 
-                    if let Some(visible_until) = page_guard.visible_until()
-                        && min_timestamp > visible_until
-                    {
-                        trace!(physical_index = ?index, "trying to clean up");
+                    let Some(visible_until) = page_guard.visible_until() else {
+                        continue;
+                    };
+                    if visible_until < min_timestamp {
+                        continue;
+                    }
 
-                        if let Some(next_version_index) = page_guard.next_version() {
-                            assert!(next_version_index != index);
+                    trace!(physical_index = ?index, "trying to clean up");
 
-                            if let Some(next_version) = self.data.try_get(None, next_version_index)
-                                && let Ok(next_version) = next_version.lock_for_move()
+                    if let Some(next_version_index) = page_guard.next_version() {
+                        assert!(next_version_index != index);
+
+                        if let Some(next_version) = self.data.try_get(None, next_version_index)
+                            && let Ok(next_version) = next_version.lock_for_move()
+                        {
+                            assert!(
+                                next_version.previous_version() == Some(index),
+                                "previous_version of {next_version_index:?} expected to be {index:?}, but was {:?}",
+                                next_version.previous_version()
+                            );
+
+                            let mut next_next = if let Some(next_next_index) =
+                                next_version.next_version()
                             {
-                                assert!(
-                                    next_version.previous_version() == Some(index),
-                                    "previous_version of {next_version_index:?} expected to be {index:?}, but was {:?}",
-                                    next_version.previous_version()
-                                );
-
-                                let mut next_next =
-                                    if let Some(next_next_index) = next_version.next_version() {
-                                        if let Some(next_next) =
-                                            self.data.try_get(None, next_next_index)
-                                            && let Ok(next_next) = next_next.lock_nowait()
-                                        {
-                                            assert!(
-                                                next_next.previous_version()
-                                                    == Some(next_version_index)
-                                            );
-
-                                            Some(next_next)
-                                        } else {
-                                            continue;
-                                        }
-                                    } else {
-                                        None
-                                    };
-
-                                assert!(page_guard.previous_version().is_none());
-
-                                *page_guard = *next_version;
-                                page_guard.set_previous_version(None);
-
-                                if let Some(ref mut next_next) = next_next {
+                                if let Some(next_next) = self.data.try_get(None, next_next_index)
+                                    && let Ok(next_next) = next_next.lock_nowait()
+                                {
                                     assert!(
-                                        page_guard.next_version()
-                                            == Some(next_next.physical_index())
+                                        next_next.previous_version() == Some(next_version_index)
                                     );
 
-                                    next_next.set_previous_version(Some(index));
+                                    Some(next_next)
                                 } else {
-                                    assert!(page_guard.next_version().is_none());
+                                    continue;
                                 }
+                            } else {
+                                None
+                            };
 
-                                assert!(next_version_index != index);
-                                assert!(next_version.physical_index() != index);
+                            assert!(page_guard.previous_version().is_none());
 
-                                debug!(
-                                    physical_index=?next_version_index,
-                                    logical_index = ?index,
-                                    min_visible_timestamp = ?min_timestamp,
-                                    next.visible_until = ?next_version.visible_until(),
-                                    next.visible_since = ?next_version.visible_from(),
-                                    visible_until = ?page_guard.visible_until(),
-                                    visible_from = ?page_guard.visible_from(),
-                                    "freeing page"
+                            *page_guard = *next_version;
+                            page_guard.set_previous_version(None);
+
+                            if let Some(ref mut next_next) = next_next {
+                                assert!(
+                                    page_guard.next_version() == Some(next_next.physical_index())
                                 );
-                                drop(next_version.reset());
 
-                                drop(next_next);
-                                drop(page_guard);
-
-                                self.freemap.set(next_version_index.0).unwrap();
-                                freed_count += 1;
+                                next_next.set_previous_version(Some(index));
+                            } else {
+                                assert!(page_guard.next_version().is_none());
                             }
-                        } else {
-                            debug!(physical_index=?index, "freeing page");
-                            drop(page_guard.reset());
 
-                            self.freemap.set(index.0).unwrap();
+                            assert!(next_version_index != index);
+                            assert!(next_version.physical_index() != index);
+
+                            debug!(
+                                physical_index=?next_version_index,
+                                logical_index = ?index,
+                                min_visible_timestamp = ?min_timestamp,
+                                next.visible_until = ?next_version.visible_until(),
+                                next.visible_since = ?next_version.visible_from(),
+                                visible_until = ?page_guard.visible_until(),
+                                visible_from = ?page_guard.visible_from(),
+                                "freeing page"
+                            );
+                            drop(next_version.reset());
+
+                            drop(next_next);
+                            drop(page_guard);
+
+                            self.freemap.set(next_version_index.0).unwrap();
                             freed_count += 1;
                         }
+                    } else {
+                        debug!(physical_index=?index, "freeing page");
+                        drop(page_guard.reset());
+
+                        self.freemap.set(index.0).unwrap();
+                        freed_count += 1;
                     }
                 }
             }

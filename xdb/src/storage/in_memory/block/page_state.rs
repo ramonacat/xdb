@@ -62,6 +62,8 @@ impl PageStateValue {
         (self.0 & Self::MASK_ID_LOCKS) >> Self::SHIFT_ID_LOCKS
     }
 
+    // TODO do we actually care about locking the id, while not taking a read or write lock? or
+    // should we just use PageGuard (allowing it to upgrade if needed) and get rid of PageRef entirely?
     const fn lock_id(self) -> Self {
         let locks = self.id_locks() + 1;
         let locks = locks << Self::SHIFT_ID_LOCKS;

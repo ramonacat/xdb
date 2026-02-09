@@ -1,6 +1,9 @@
 use crate::storage::in_memory::{
     block::{PageGuard, PageGuardRead},
-    version_manager::{get_matching_version, transaction_log::TransactionLogEntryHandle},
+    version_manager::{
+        TransactionPage, TransactionPageAction, get_matching_version,
+        transaction_log::TransactionLogEntryHandle,
+    },
 };
 use std::{
     collections::HashMap,
@@ -15,17 +18,14 @@ use crate::{
     page::Page,
     storage::{
         PageIndex, StorageError, TransactionId,
-        in_memory::{
-            block::UninitializedPageGuard,
-            version_manager::{CowPage, VersionManager},
-        },
+        in_memory::{block::UninitializedPageGuard, version_manager::VersionManager},
     },
     sync::Mutex,
 };
 
 pub struct VersionManagedTransaction<'storage> {
     id: TransactionId,
-    pages: HashMap<PageIndex, CowPage>,
+    pages: HashMap<PageIndex, TransactionPage>,
     version_manager: &'storage VersionManager,
     last_free_page_scan: Mutex<Option<Instant>>,
     log_entry: TransactionLogEntryHandle<'storage>,
@@ -209,26 +209,39 @@ impl<'storage> VersionManagedTransaction<'storage> {
         index: PageIndex,
     ) -> Result<PageGuardRead<'storage>, StorageError> {
         if let Some(entry) = self.pages.get(&index) {
-            if let Some(cow) = &entry.cow {
-                let cow_page = self.version_manager.data.get(Some(index), *cow);
+            match entry.action {
+                crate::storage::in_memory::version_manager::TransactionPageAction::Read
+                | crate::storage::in_memory::version_manager::TransactionPageAction::Insert => {
+                    let lock = get_matching_version(
+                        &self.version_manager.data,
+                        entry.logical_index,
+                        self.log_entry.start_timestamp(),
+                    )
+                    .lock_read();
 
-                return Ok(cow_page.lock_read());
+                    Ok(lock)
+                }
+                crate::storage::in_memory::version_manager::TransactionPageAction::Delete => {
+                    Err(StorageError::PageNotFound(entry.logical_index))
+                }
+                crate::storage::in_memory::version_manager::TransactionPageAction::Update(
+                    cow_index,
+                ) => {
+                    let lock = self
+                        .version_manager
+                        .data
+                        .get(Some(entry.logical_index), cow_index)
+                        .lock_read();
+
+                    Ok(lock)
+                }
             }
-
-            let main = get_matching_version(
-                &self.version_manager.data,
-                entry.main,
-                self.log_entry.start_timestamp(),
-            );
-            Ok(main.lock_read())
         } else {
             self.pages.insert(
                 index,
-                CowPage {
-                    main: index,
-                    cow: None,
-                    deleted: false,
-                    inserted: false,
+                TransactionPage {
+                    logical_index: index,
+                    action: TransactionPageAction::Read,
                 },
             );
 
@@ -243,64 +256,57 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     pub(crate) fn write(&mut self, index: PageIndex) -> Result<PageGuard<'storage>, StorageError> {
-        if let Some(entry) = self.pages.get(&index) {
-            assert!(!entry.deleted);
+        if let Some(entry) = self.pages.get_mut(&index) {
+            assert!(entry.logical_index == index);
 
-            if entry.inserted {
-                let main = get_matching_version(
-                    &self.version_manager.data,
-                    entry.main,
-                    self.log_entry.start_timestamp(),
-                );
+            match entry.action {
+                TransactionPageAction::Read => {}
+                TransactionPageAction::Delete => {
+                    return Err(StorageError::PageNotFound(index));
+                }
+                TransactionPageAction::Update(page_index) => {
+                    let cow_page = self
+                        .version_manager
+                        .data
+                        .get(Some(entry.logical_index), page_index);
 
-                return Ok(main.lock());
+                    return Ok(cow_page.lock());
+                }
+                TransactionPageAction::Insert => {
+                    let main = get_matching_version(
+                        &self.version_manager.data,
+                        entry.logical_index,
+                        self.log_entry.start_timestamp(),
+                    );
+
+                    return Ok(main.lock());
+                }
             }
-
-            if let Some(cow) = &entry.cow {
-                let cow_page = self.version_manager.data.get(Some(index), *cow);
-                return Ok(cow_page.lock());
-            }
-
-            let main = get_matching_version(
-                &self.version_manager.data,
-                index,
-                self.log_entry.start_timestamp(),
-            );
-
-            let cow = self.allocate_cow_copy(Some(index))?;
-            let cow = cow.initialize(*main.lock_read());
-            self.pages.get_mut(&index).unwrap().cow = Some(cow.physical_index());
-
-            let cow_lock = cow.lock();
-            Ok(cow_lock)
-        } else {
-            let page = get_matching_version(
-                &self.version_manager.data,
-                index,
-                self.log_entry.start_timestamp(),
-            );
-            let cow = self.allocate_cow_copy(Some(index))?;
-            let page_lock = page.lock_read();
-            if page_lock.next_version().is_some() {
-                // TODO not a deadlock, but optimistic concurrency failure
-                return Err(StorageError::Deadlock(index));
-            }
-            let cow = cow.initialize(*page_lock);
-            assert!(page.logical_index() == Some(index));
-
-            self.pages.insert(
-                index,
-                CowPage {
-                    main: index,
-                    cow: Some(cow.physical_index()),
-                    deleted: false,
-                    inserted: false,
-                },
-            );
-
-            let cow_lock = cow.lock();
-            Ok(cow_lock)
         }
+
+        let main = get_matching_version(
+            &self.version_manager.data,
+            index,
+            self.log_entry.start_timestamp(),
+        );
+
+        if main.lock_read().next_version().is_some() {
+            // TODO not a deadlock, but optimistic concurrency failure
+            return Err(StorageError::Deadlock(index));
+        }
+
+        let cow = self.allocate_cow_copy(Some(index))?;
+        let cow = cow.initialize(*main.lock_read());
+        self.pages.insert(
+            index,
+            TransactionPage {
+                logical_index: index,
+                action: TransactionPageAction::Update(cow.physical_index()),
+            },
+        );
+
+        let cow_lock = cow.lock();
+        Ok(cow_lock)
     }
 
     #[instrument(skip(self))]
@@ -321,38 +327,39 @@ impl<'storage> VersionManagedTransaction<'storage> {
             .unwrap_or_else(|| page_guard.physical_index());
         page_guard.initialize(page);
 
-        self.pages.insert(
+        let previous = self.pages.insert(
             logical_index,
-            CowPage {
-                main: logical_index,
-                cow: None,
-                deleted: false,
-                inserted: true,
+            TransactionPage {
+                logical_index,
+                action: TransactionPageAction::Insert,
             },
         );
+        assert!(previous.is_none());
 
         Ok(())
     }
 
     #[instrument(skip(self), fields(logical_index = ?page))]
     pub(crate) fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
-        if let Some(page) = self.pages.get_mut(&page) {
-            // TODO this should really be an enum describing various possible states of a page,
-            // instead of this boolean flag
-            page.deleted = true;
-
-            return Ok(());
-        }
-
-        self.pages.insert(
+        let inserted = self.pages.insert(
             page,
-            CowPage {
-                main: page,
-                cow: None,
-                deleted: true,
-                inserted: false,
+            TransactionPage {
+                logical_index: page,
+                action: TransactionPageAction::Delete,
             },
         );
+
+        if let Some(previous) = inserted {
+            match previous.action {
+                TransactionPageAction::Update(cow) => {
+                    let mut cow_page = self.version_manager.data.get(Some(page), cow).lock();
+                    cow_page.mark_free();
+                }
+                TransactionPageAction::Read
+                | TransactionPageAction::Delete
+                | TransactionPageAction::Insert => {}
+            }
+        }
 
         Ok(())
     }
@@ -371,26 +378,27 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     #[instrument(skip(self), fields(id = ?self.id))]
-    #[allow(clippy::needless_pass_by_ref_mut)] // TODO make const if we really don't need it
     pub fn rollback(&mut self) {
+        // TODO instead of dealing with this directly here, we should send a request to committer
         debug!("rolling back");
         for (index, page) in self.pages.drain() {
-            if let Some(cow) = page.cow {
-                let cow_page = self.version_manager.data.get(Some(index), cow);
+            match page.action {
+                TransactionPageAction::Read
+                | TransactionPageAction::Delete
+                | TransactionPageAction::Insert => {}
+                TransactionPageAction::Update(cow) => {
+                    let cow_page = self.version_manager.data.get(Some(index), cow);
 
-                debug!(
-                    logical_index = ?cow_page.logical_index(),
-                    physical_index = ?cow_page.physical_index(),
-                    "setting page up to be freed"
-                );
-                // TODO we should probably have a better way of freeing these pages
-                let mut cow_lock = cow_page.lock();
-                cow_lock.set_next_version(None);
-                cow_lock.set_previous_version(None);
-                cow_lock.set_visible_until(Some(self.log_entry.start_timestamp()));
+                    debug!(
+                        logical_index = ?cow_page.logical_index(),
+                        physical_index = ?cow_page.physical_index(),
+                        "setting page up to be freed"
+                    );
+                    let mut cow_lock = cow_page.lock();
+                    cow_lock.mark_free();
+                }
             }
         }
-        // TODO do we need to do anything more here?
 
         self.log_entry.rollback();
     }

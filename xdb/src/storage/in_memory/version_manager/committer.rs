@@ -1,4 +1,6 @@
-use crate::storage::in_memory::version_manager::get_matching_version;
+use crate::storage::in_memory::version_manager::{
+    TransactionPage, TransactionPageAction, get_matching_version,
+};
 use tracing::{debug, info_span, instrument, trace};
 
 use crate::storage::in_memory::block::Block;
@@ -8,7 +10,6 @@ use std::fmt::Display;
 use std::pin::Pin;
 
 use crate::platform::futex::Futex;
-use crate::storage::in_memory::version_manager::CowPage;
 use crate::storage::{PageIndex, StorageError, TransactionId};
 use crate::{
     sync::{
@@ -24,7 +25,7 @@ pub struct CommitRequest {
     is_done: Pin<Arc<Futex>>,
     response: Arc<Mutex<Option<Result<(), StorageError>>>>,
     id: TransactionId,
-    pages: HashMap<PageIndex, CowPage>,
+    pages: HashMap<PageIndex, TransactionPage>,
 }
 
 impl CommitRequest {
@@ -35,7 +36,7 @@ impl CommitRequest {
         self.is_done.as_ref().wake_one();
     }
 
-    fn take_pages(&mut self) -> HashMap<PageIndex, CowPage> {
+    fn take_pages(&mut self) -> HashMap<PageIndex, TransactionPage> {
         self.pages.drain().collect()
     }
 }
@@ -61,14 +62,7 @@ impl Display for CommitRequest {
 
         if self.pages.len() < 100 {
             for page in self.pages.values() {
-                write!(
-                    f,
-                    "(main: {:?} cow: {:?} {}{}) ",
-                    page.main.0,
-                    page.cow,
-                    if page.deleted { "[deleted]" } else { "" },
-                    if page.inserted { "[inserted]" } else { "" },
-                )?;
+                write!(f, "{page:?}",)?;
             }
         } else {
             write!(f, "{} pages", self.pages.len()).unwrap();
@@ -92,7 +86,7 @@ pub struct Committer {
 fn do_commit(
     log: &TransactionLog,
     id: TransactionId,
-    mut pages: HashMap<PageIndex, CowPage>,
+    mut pages: HashMap<PageIndex, TransactionPage>,
     block: &Block,
 ) -> Result<(), StorageError> {
     let commit_handle = log.start_commit(id).unwrap();
@@ -101,7 +95,7 @@ fn do_commit(
     let mut rollback = None;
 
     for (index, page) in &pages {
-        let lock = get_matching_version(block, page.main, commit_handle.started()).lock();
+        let lock = get_matching_version(block, page.logical_index, commit_handle.started()).lock();
 
         if lock.next_version().is_some() {
             debug!(
@@ -121,35 +115,45 @@ fn do_commit(
 
     if let Some(rollback_index) = rollback {
         for page in pages.values_mut() {
-            if let Some(cow) = page.cow.take() {
-                let cow_page = block.get(Some(page.main), cow);
+            match page.action {
+                TransactionPageAction::Read
+                | TransactionPageAction::Delete
+                | TransactionPageAction::Insert => {}
+                TransactionPageAction::Update(cow) => {
+                    let cow_page = block.get(Some(page.logical_index), cow);
 
-                debug!(
-                    physical_index = ?cow_page.physical_index(),
-                    logical_index = ?cow_page.logical_index(),
-                    "clearing page"
-                );
-                let mut cow_lock = cow_page.lock();
-                cow_lock.set_previous_version(None);
-                cow_lock.set_next_version(None);
-                cow_lock.set_visible_until(Some(commit_handle.timestamp()));
+                    debug!(
+                        physical_index = ?cow_page.physical_index(),
+                        logical_index = ?cow_page.logical_index(),
+                        "clearing page"
+                    );
+
+                    // TODO this is a hack, create a flag that sets the page up as ready to be
+                    // collected instead
+                    let mut cow_lock = cow_page.lock();
+                    cow_lock.mark_free();
+                }
             }
         }
 
         for lock in locks {
             let page = pages.remove(&lock.0).unwrap();
 
-            if let Some(cow) = page.cow {
-                let cow_page = block.get(Some(page.main), cow);
-                debug!(
-                    physical_index = ?cow_page.physical_index(),
-                    logical_index = ?cow_page.logical_index(),
-                    "clearing page"
-                );
-                let mut cow_lock = cow_page.lock();
-                cow_lock.set_previous_version(None);
-                cow_lock.set_next_version(None);
-                cow_lock.set_visible_until(Some(commit_handle.timestamp()));
+            match page.action {
+                TransactionPageAction::Read
+                | TransactionPageAction::Delete
+                | TransactionPageAction::Insert => {}
+                TransactionPageAction::Update(cow) => {
+                    let cow_page = block.get(Some(page.logical_index), cow);
+                    debug!(
+                        physical_index = ?cow_page.physical_index(),
+                        logical_index = ?cow_page.logical_index(),
+                        "clearing page"
+                    );
+
+                    let mut cow_lock = cow_page.lock();
+                    cow_lock.mark_free();
+                }
             }
         }
 
@@ -165,63 +169,55 @@ fn do_commit(
     );
 
     for (index, page) in pages {
+        assert!(index == page.logical_index);
+
         // It's very tempting to change this `get_mut` to `remove`, but that would be
         // incorrect, as we'd be unlocking locks while still modifying the stored data.
         // We can only start unlocking after this loop is done.
         let lock = locks.get_mut(&index).unwrap();
 
-        if page.deleted {
-            debug!(
-                logical_index = ?index,
-                cow.logical_index = ?page.cow,
-                "deleted"
-            );
-
-            lock.set_visible_until(Some(commit_handle.timestamp()));
-
-            if let Some(cow) = page.cow {
-                let cow_page = block.get(Some(page.main), cow);
-                let mut cow = cow_page.lock();
-
-                cow.set_visible_until(Some(commit_handle.timestamp()));
-                cow.set_next_version(None);
-                cow.set_previous_version(None);
+        match page.action {
+            TransactionPageAction::Read => {
+                trace!(
+                    logical_index = ?page.logical_index,
+                    "page not modified"
+                );
             }
-        } else if let Some(cow) = page.cow {
-            let cow_page = block.get(Some(page.main), cow);
-            assert!(!page.inserted);
-            debug!(
-                logical_index = ?page.main,
-                cow.logical_index = ?cow_page.logical_index(),
-                cow.physical_index = ?cow_page.physical_index(),
-                logical_index=?index, "updated"
-            );
+            TransactionPageAction::Delete => {
+                debug!(
+                    logical_index = ?page.logical_index,
+                    "deleted"
+                );
 
-            let mut cow_lock = cow_page.lock();
+                lock.set_visible_until(Some(commit_handle.timestamp()));
+            }
+            TransactionPageAction::Update(cow) => {
+                let cow_page = block.get(Some(page.logical_index), cow);
+                debug!(
+                    logical_index = ?page.logical_index,
+                    cow.physical_index = ?cow_page.physical_index(),
+                    logical_index=?index, "updated"
+                );
 
-            assert!(cow_page.logical_index() == Some(index));
+                let mut cow_lock = cow_page.lock();
 
-            lock.set_next_version(Some(cow_page.physical_index()));
-            lock.set_visible_until(Some(commit_handle.timestamp()));
+                lock.set_next_version(Some(cow_page.physical_index()));
+                lock.set_visible_until(Some(commit_handle.timestamp()));
 
-            cow_lock.set_visible_from(Some(commit_handle.timestamp()));
-            cow_lock.set_visible_until(None);
-            cow_lock.set_previous_version(Some(lock.physical_index()));
-            cow_lock.set_next_version(None);
-        } else if page.inserted {
-            debug!(
-                logical_index = ?page.main,
-                "inserted"
-            );
-            assert!(page.cow.is_none());
+                cow_lock.set_visible_from(Some(commit_handle.timestamp()));
+                cow_lock.set_visible_until(None);
+                cow_lock.set_previous_version(Some(lock.physical_index()));
+                cow_lock.set_next_version(None);
+            }
+            TransactionPageAction::Insert => {
+                debug!(
+                    logical_index = ?page.logical_index,
+                    "inserted"
+                );
 
-            lock.set_visible_from(Some(commit_handle.timestamp()));
-            lock.set_visible_until(None);
-        } else {
-            trace!(
-                logical_index = ?page.main,
-                "page not modified"
-            );
+                lock.set_visible_from(Some(commit_handle.timestamp()));
+                lock.set_visible_until(None);
+            }
         }
     }
 
@@ -267,7 +263,7 @@ impl Committer {
     pub fn request(
         &self,
         id: TransactionId,
-        pages: HashMap<PageIndex, CowPage>,
+        pages: HashMap<PageIndex, TransactionPage>,
     ) -> Result<(), StorageError> {
         let is_done = Arc::pin(Futex::new(0));
         let response = Arc::new(Mutex::new(None));

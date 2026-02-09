@@ -21,13 +21,18 @@ pub mod transaction_log;
 mod vacuum;
 
 #[derive(Debug)]
-// TODO rename -> "TransactionPage" or something
-struct CowPage {
-    // We only keep the logical index, physical can be figured out from that
-    main: PageIndex,
-    cow: Option<PageIndex>,
-    deleted: bool,
-    inserted: bool,
+enum TransactionPageAction {
+    Read,
+    Delete,
+    // TODO this is a physical index of the CoWed page, clean the types up so that it's obvious
+    Update(PageIndex),
+    Insert,
+}
+
+#[derive(Debug)]
+struct TransactionPage {
+    logical_index: PageIndex,
+    action: TransactionPageAction,
 }
 
 #[derive(Debug)]
