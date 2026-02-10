@@ -8,25 +8,25 @@ use crate::{
             leaf::{LeafNodeHeader, entries::LeafNodeEntries},
         },
     },
-    storage::PageId,
+    storage::SENTINEL_PAGE_ID,
 };
 
-pub(in crate::bplustree) trait Topology<TPageId: PageId> {
-    fn parent(&self) -> Option<InteriorNodeId<TPageId>>;
-    fn previous(&self) -> Option<LeafNodeId<TPageId>>;
-    fn next(&self) -> Option<LeafNodeId<TPageId>>;
+pub(in crate::bplustree) trait Topology {
+    fn parent(&self) -> Option<InteriorNodeId>;
+    fn previous(&self) -> Option<LeafNodeId>;
+    fn next(&self) -> Option<LeafNodeId>;
 }
 
-pub(in crate::bplustree) struct MaterializedTopology<TPageId: PageId> {
-    parent: Option<InteriorNodeId<TPageId>>,
-    previous: Option<LeafNodeId<TPageId>>,
-    next: Option<LeafNodeId<TPageId>>,
+pub(in crate::bplustree) struct MaterializedTopology {
+    parent: Option<InteriorNodeId>,
+    previous: Option<LeafNodeId>,
+    next: Option<LeafNodeId>,
 }
-impl<TPageId: PageId> MaterializedTopology<TPageId> {
+impl MaterializedTopology {
     pub(crate) const fn new(
-        parent: Option<InteriorNodeId<TPageId>>,
-        previous: Option<LeafNodeId<TPageId>>,
-        next: Option<LeafNodeId<TPageId>>,
+        parent: Option<InteriorNodeId>,
+        previous: Option<LeafNodeId>,
+        next: Option<LeafNodeId>,
     ) -> Self {
         Self {
             parent,
@@ -36,25 +36,24 @@ impl<TPageId: PageId> MaterializedTopology<TPageId> {
     }
 }
 
-impl<TPageId: PageId> Topology<TPageId> for MaterializedTopology<TPageId> {
-    fn parent(&self) -> Option<InteriorNodeId<TPageId>> {
+impl Topology for MaterializedTopology {
+    fn parent(&self) -> Option<InteriorNodeId> {
         self.parent
     }
 
-    fn previous(&self) -> Option<LeafNodeId<TPageId>> {
+    fn previous(&self) -> Option<LeafNodeId> {
         self.previous
     }
 
-    fn next(&self) -> Option<LeafNodeId<TPageId>> {
+    fn next(&self) -> Option<LeafNodeId> {
         self.next
     }
 }
 
-pub(in crate::bplustree) struct LeafNodeBuilder<TKey, TPageId: PageId, TTopology, TData> {
+pub(in crate::bplustree) struct LeafNodeBuilder<TKey, TTopology, TData> {
     topology: TTopology,
     data: TData,
     _key: PhantomData<TKey>,
-    _page_id: PhantomData<TPageId>,
 }
 
 pub(in crate::bplustree) trait Data<'data, TKey> {
@@ -90,24 +89,23 @@ impl<'data, TKey> Data<'data, TKey> for MaterializedData<'data, TKey> {
     }
 }
 
-impl<TKey, TPageId: PageId> LeafNodeBuilder<TKey, TPageId, (), ()> {
+impl<TKey> LeafNodeBuilder<TKey, (), ()> {
     pub const fn new() -> Self {
         Self {
             topology: (),
             data: (),
             _key: PhantomData,
-            _page_id: PhantomData,
         }
     }
 }
 
-impl<TKey, TPageId: PageId, TTopology, TData> LeafNodeBuilder<TKey, TPageId, TTopology, TData> {
+impl<TKey, TTopology, TData> LeafNodeBuilder<TKey, TTopology, TData> {
     pub fn with_topology(
         self,
-        parent: Option<InteriorNodeId<TPageId>>,
-        previous: Option<LeafNodeId<TPageId>>,
-        next: Option<LeafNodeId<TPageId>>,
-    ) -> LeafNodeBuilder<TKey, TPageId, MaterializedTopology<TPageId>, TData> {
+        parent: Option<InteriorNodeId>,
+        previous: Option<LeafNodeId>,
+        next: Option<LeafNodeId>,
+    ) -> LeafNodeBuilder<TKey, MaterializedTopology, TData> {
         LeafNodeBuilder {
             topology: MaterializedTopology {
                 parent,
@@ -116,44 +114,39 @@ impl<TKey, TPageId: PageId, TTopology, TData> LeafNodeBuilder<TKey, TPageId, TTo
             },
             data: self.data,
             _key: PhantomData,
-            _page_id: PhantomData,
         }
     }
 }
 
-impl<TKey, TPageId: PageId, TTopology, TData> LeafNodeBuilder<TKey, TPageId, TTopology, TData> {
+impl<TKey, TTopology, TData> LeafNodeBuilder<TKey, TTopology, TData> {
     pub fn with_data<'data, TNewData: Data<'data, TKey>>(
         self,
         data: TNewData,
-    ) -> LeafNodeBuilder<TKey, TPageId, TTopology, TNewData> {
+    ) -> LeafNodeBuilder<TKey, TTopology, TNewData> {
         LeafNodeBuilder {
             topology: self.topology,
             data,
             _key: PhantomData,
-            _page_id: PhantomData,
         }
     }
 }
 
-impl<'data, TKey: TreeKey, TPageId: PageId, TTopology: Topology<TPageId>, TData: Data<'data, TKey>>
-    LeafNodeBuilder<TKey, TPageId, TTopology, TData>
+impl<'data, TKey: TreeKey, TTopology: Topology, TData: Data<'data, TKey>>
+    LeafNodeBuilder<TKey, TTopology, TData>
 {
-    pub fn build(self) -> LeafNode<TKey, TPageId> {
+    pub fn build(self) -> LeafNode<TKey> {
         LeafNode {
             header: NodeHeader::new_leaf(
                 self.topology
                     .parent()
-                    .map_or_else(TPageId::sentinel, |x| x.page()),
+                    .map_or(SENTINEL_PAGE_ID, |x| x.page()),
             ),
             leaf_header: LeafNodeHeader {
                 previous: self
                     .topology
                     .previous()
-                    .map_or_else(TPageId::sentinel, |x| x.page()),
-                next: self
-                    .topology
-                    .next()
-                    .map_or_else(TPageId::sentinel, |x| x.page()),
+                    .map_or(SENTINEL_PAGE_ID, |x| x.page()),
+                next: self.topology.next().map_or(SENTINEL_PAGE_ID, |x| x.page()),
             },
             data: LeafNodeEntries::from_data(self.data.entry_count(), self.data.data()),
         }

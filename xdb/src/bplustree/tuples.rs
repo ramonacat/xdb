@@ -1,24 +1,24 @@
 use crate::bplustree::NodeId;
-use crate::storage::PageId;
+use crate::storage::SerializedPageId;
 use crate::{bplustree::TreeKey, page::Page};
 
-pub(super) trait NodeIds<const N: usize, TPageId: PageId> {
+pub(super) trait NodeIds<const N: usize> {
     type Nodes<'a, TKey: TreeKey>;
     type NodesMut<'a, TKey: TreeKey>;
 
-    fn to_page_indices(self) -> [TPageId; N];
+    fn to_page_indices(self) -> [SerializedPageId; N];
     fn pages_to_nodes<TKey: TreeKey>(pages: [&'_ Page; N]) -> Self::Nodes<'_, TKey>;
     fn pages_to_nodes_mut<TKey: TreeKey>(pages: [&'_ mut Page; N]) -> Self::NodesMut<'_, TKey>;
 }
 
-impl<T, TPageId: PageId> NodeIds<1, TPageId> for T
+impl<T> NodeIds<1> for T
 where
-    T: NodeId<TPageId>,
+    T: NodeId,
 {
     type Nodes<'a, TKey: TreeKey> = &'a T::Node<TKey>;
     type NodesMut<'a, TKey: TreeKey> = &'a mut T::Node<TKey>;
 
-    fn to_page_indices(self) -> [TPageId; 1] {
+    fn to_page_indices(self) -> [SerializedPageId; 1] {
         [self.page()]
     }
 
@@ -31,15 +31,15 @@ where
     }
 }
 
-impl<T1, T2, TPageId: PageId> NodeIds<2, TPageId> for (T1, T2)
+impl<T1, T2> NodeIds<2> for (T1, T2)
 where
-    T1: NodeId<TPageId>,
-    T2: NodeId<TPageId>,
+    T1: NodeId,
+    T2: NodeId,
 {
     type Nodes<'a, TKey: TreeKey> = (&'a T1::Node<TKey>, &'a T2::Node<TKey>);
     type NodesMut<'a, TKey: TreeKey> = (&'a mut T1::Node<TKey>, &'a mut T2::Node<TKey>);
 
-    fn to_page_indices(self) -> [TPageId; 2] {
+    fn to_page_indices(self) -> [SerializedPageId; 2] {
         let (i0, i1) = self;
 
         [i0.page(), i1.page()]
@@ -57,11 +57,11 @@ where
     }
 }
 
-impl<T1, T2, T3, TPageId: PageId> NodeIds<3, TPageId> for (T1, T2, T3)
+impl<T1, T2, T3> NodeIds<3> for (T1, T2, T3)
 where
-    T1: NodeId<TPageId>,
-    T2: NodeId<TPageId>,
-    T3: NodeId<TPageId>,
+    T1: NodeId,
+    T2: NodeId,
+    T3: NodeId,
 {
     type Nodes<'a, TKey: TreeKey> = (&'a T1::Node<TKey>, &'a T2::Node<TKey>, &'a T3::Node<TKey>);
     type NodesMut<'a, TKey: TreeKey> = (
@@ -70,7 +70,7 @@ where
         &'a mut T3::Node<TKey>,
     );
 
-    fn to_page_indices(self) -> [TPageId; 3] {
+    fn to_page_indices(self) -> [SerializedPageId; 3] {
         let (i0, i1, i2) = self;
 
         [i0.page(), i1.page(), i2.page()]

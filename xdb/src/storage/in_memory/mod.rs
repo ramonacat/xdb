@@ -3,11 +3,11 @@ mod block;
 mod transaction;
 mod version_manager;
 
-use bytemuck::{Pod, Zeroable};
+use bytemuck::Zeroable;
 
-use crate::storage::PageId;
 use crate::storage::in_memory::bitmap::Bitmap;
 use crate::storage::in_memory::version_manager::VersionManager;
+use crate::storage::{PageId, SerializedPageId};
 use crate::sync::Arc;
 
 use crate::storage::in_memory::transaction::InMemoryTransaction;
@@ -22,7 +22,7 @@ pub struct InMemoryPageReservation<'storage> {
     page_guard: UninitializedPageGuard<'storage>,
 }
 
-#[derive(Debug, Zeroable, Pod, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct InMemoryPageId(PageIndex);
 
@@ -35,8 +35,12 @@ impl PageId for InMemoryPageId {
         Self(PageIndex::zeroed())
     }
 
-    fn value(&self) -> u64 {
-        self.0.value()
+    fn serialize(&self) -> SerializedPageId {
+        SerializedPageId(self.0.value().to_le_bytes())
+    }
+
+    fn deserialize(raw: SerializedPageId) -> Self {
+        Self(PageIndex::from_value(u64::from_le_bytes(raw.0)))
     }
 }
 

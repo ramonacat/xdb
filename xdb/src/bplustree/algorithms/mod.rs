@@ -3,7 +3,6 @@ pub mod insert;
 
 use crate::bplustree::{TreeKey, node::AnyNodeKind};
 
-use crate::storage::PageId;
 use crate::{
     bplustree::{
         TreeError, TreeTransaction,
@@ -26,16 +25,16 @@ pub fn find<TStorage: Storage, TKey: TreeKey>(
     })
 }
 
-enum LeafSearchResult<T: PageId> {
-    Recurse(AnyNodeId<T>),
-    Done(LeafNodeId<T>),
+enum LeafSearchResult {
+    Recurse(AnyNodeId),
+    Done(LeafNodeId),
 }
 
 pub(super) fn leaf_search<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    start_id: AnyNodeId<TStorage::PageId>,
+    start_id: AnyNodeId,
     key: TKey,
-) -> Result<LeafNodeId<TStorage::PageId>, TreeError<TStorage::PageId>> {
+) -> Result<LeafNodeId, TreeError<TStorage::PageId>> {
     let result = transaction.read_nodes(start_id, |node| {
         match node.as_any() {
             AnyNodeKind::Interior(node) => {
@@ -65,8 +64,8 @@ pub(super) fn leaf_search<TStorage: Storage, TKey: TreeKey>(
 
 pub(super) fn first_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    root: AnyNodeId<TStorage::PageId>,
-) -> Result<LeafNodeId<TStorage::PageId>, TreeError<TStorage::PageId>> {
+    root: AnyNodeId,
+) -> Result<LeafNodeId, TreeError<TStorage::PageId>> {
     let result = transaction.read_nodes(root, |node| match node.as_any() {
         AnyNodeKind::Interior(interior_node_reader) => {
             LeafSearchResult::Recurse(interior_node_reader.first_value().unwrap())
@@ -82,8 +81,8 @@ pub(super) fn first_leaf<TStorage: Storage, TKey: TreeKey>(
 
 pub(super) fn last_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    root: AnyNodeId<TStorage::PageId>,
-) -> Result<LeafNodeId<TStorage::PageId>, TreeError<TStorage::PageId>> {
+    root: AnyNodeId,
+) -> Result<LeafNodeId, TreeError<TStorage::PageId>> {
     let result = transaction.read_nodes(root, |node| match node.as_any() {
         AnyNodeKind::Interior(interior_node_reader) => {
             LeafSearchResult::Recurse(interior_node_reader.last_value().unwrap())

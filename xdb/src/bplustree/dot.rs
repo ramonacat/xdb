@@ -1,6 +1,5 @@
 use crate::bplustree::node::AnyNodeKind;
 use crate::bplustree::{AnyNodeId, Node, NodeId, TreeKey, TreeTransaction};
-use crate::storage::PageId;
 use crate::{
     bplustree::{Tree, TreeError},
     storage::Storage,
@@ -26,7 +25,7 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 
     fn node_to_dot(
         transaction: &mut TreeTransaction<'_, T, TKey>,
-        node_index: AnyNodeId<T::PageId>,
+        node_index: AnyNodeId,
         stringify_value: &impl Fn(&[u8]) -> String,
     ) -> Result<String, TreeError<T::PageId>> {
         let (mut output, children) = transaction.read_nodes(node_index, |node| {
@@ -49,7 +48,12 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 
                     let label = label.join("\\n");
 
-                    writeln!(output, "N{}[label=\"{label}\"];", node_index.page().value()).unwrap();
+                    writeln!(
+                        output,
+                        "N{}[label=\"{label}\"];",
+                        u64::from_le_bytes(node_index.page().raw())
+                    )
+                    .unwrap();
 
                     Some(node.values().collect::<Vec<_>>())
                 }
@@ -81,7 +85,12 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 
                     let label = label.join("\\n");
 
-                    writeln!(output, "N{}[label=\"{label}\"];", node_index.page().value()).unwrap();
+                    writeln!(
+                        output,
+                        "N{}[label=\"{label}\"];",
+                        u64::from_le_bytes(node_index.page().raw())
+                    )
+                    .unwrap();
 
                     None
                 }
@@ -95,8 +104,8 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
                 writeln!(
                     output,
                     "N{} -> N{}[label=\"{index:?}\"];",
-                    node_index.page().value(),
-                    value.page().value()
+                    u64::from_le_bytes(node_index.page().raw()),
+                    u64::from_le_bytes(value.page().raw())
                 )
                 .unwrap();
 

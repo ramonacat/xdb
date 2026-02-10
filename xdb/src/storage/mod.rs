@@ -83,13 +83,38 @@ impl TransactionalTimestamp {
     }
 }
 
-// TODO instead of making this type Pod, could/should it have `serialize` and `deserialize`
-// methods?
-pub trait PageId: Pod + Debug + Into<[Self; 1]> + Eq + Hash {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Pod, Zeroable, Hash)]
+#[repr(transparent)]
+#[must_use]
+pub struct SerializedPageId([u8; 8]);
+
+impl From<SerializedPageId> for [SerializedPageId; 1] {
+    fn from(value: SerializedPageId) -> Self {
+        [value]
+    }
+}
+
+impl SerializedPageId {
+    pub const fn new(raw: [u8; 8]) -> Self {
+        Self(raw)
+    }
+
+    #[must_use]
+    pub const fn raw(self) -> [u8; 8] {
+        self.0
+    }
+}
+
+pub const SENTINEL_PAGE_ID: SerializedPageId = SerializedPageId([0xFF; _]);
+pub const FIRST_PAGE_ID: SerializedPageId = SerializedPageId([0x00; _]);
+
+pub trait PageId: Debug + Into<[Self; 1]> + Eq + Hash {
     fn sentinel() -> Self;
     fn first() -> Self;
 
-    fn value(&self) -> u64;
+    // TODO should the serialze/deserialize be happening in transaction instead?
+    fn serialize(&self) -> SerializedPageId;
+    fn deserialize(raw: SerializedPageId) -> Self;
 }
 
 type PageIdOf<T> = <T as Storage>::PageId;

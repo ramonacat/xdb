@@ -1,4 +1,8 @@
-use crate::{Size, page::PAGE_DATA_SIZE, storage::PageId};
+use crate::{
+    Size,
+    page::PAGE_DATA_SIZE,
+    storage::{SENTINEL_PAGE_ID, SerializedPageId},
+};
 use std::marker::PhantomData;
 
 use bytemuck::{Pod, Zeroable, bytes_of, cast_slice, cast_slice_mut};
@@ -10,15 +14,15 @@ const INTERIOR_NODE_DATA_SIZE: Size = PAGE_DATA_SIZE.subtract(Size::of::<u64>().
 
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
-pub struct InteriorNodeEntries<TKey, TPageId> {
+pub struct InteriorNodeEntries<TKey> {
     key_count: u16,
     _unused1: u16,
     _unused2: u32,
 
-    data: InteriorNodeData<TKey, TPageId>,
+    data: InteriorNodeData<TKey>,
 }
 
-impl<TKey: TreeKey, TPageId: PageId> InteriorNodeEntries<TKey, TPageId> {
+impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     pub(crate) fn debug(&self) -> String {
         self.data.debug(self.key_count())
     }
@@ -26,21 +30,21 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNodeEntries<TKey, TPageId> {
 
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
 // automatically if not for the PhantomData
-unsafe impl<TKey: TreeKey, TPageId: PageId> Pod for InteriorNodeEntries<TKey, TPageId> {}
+unsafe impl<TKey: TreeKey> Pod for InteriorNodeEntries<TKey> {}
 
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
-struct InteriorNodeData<TKey, TPageId> {
+struct InteriorNodeData<TKey> {
     data: [u8; INTERIOR_NODE_DATA_SIZE.as_bytes()],
     _key: PhantomData<TKey>,
-    _page_id: PhantomData<TPageId>,
+    _page_id: PhantomData<SerializedPageId>,
 }
 
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
 // automatically if not for the PhantomData
-unsafe impl<TKey: TreeKey, TPageId: PageId> Pod for InteriorNodeData<TKey, TPageId> {}
+unsafe impl<TKey: TreeKey> Pod for InteriorNodeData<TKey> {}
 
-impl<TKey: TreeKey, TPageId: PageId> InteriorNodeData<TKey, TPageId> {
+impl<TKey: TreeKey> InteriorNodeData<TKey> {
     const VALUES_OFFSET: Size = Size::of::<TKey>().multiply(Self::KEY_CAPACITY);
 
     // n - max number of keys
@@ -49,10 +53,10 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNodeData<TKey, TPageId> {
     // size = key_size*n + value_size*n + value_size
     // size - value_size = key_size*n + value_size*n
     // (size - value_size)/(key_size + value_size) = n
-    const KEY_CAPACITY: usize = (INTERIOR_NODE_DATA_SIZE.subtract(Size::of::<TPageId>()))
-        .divide(Size::of::<TKey>().add(Size::of::<TPageId>()));
+    const KEY_CAPACITY: usize = (INTERIOR_NODE_DATA_SIZE.subtract(Size::of::<SerializedPageId>()))
+        .divide(Size::of::<TKey>().add(Size::of::<SerializedPageId>()));
 
-    fn from_raw_data(keys: &[TKey], values: &[TPageId]) -> Self {
+    fn from_raw_data(keys: &[TKey], values: &[SerializedPageId]) -> Self {
         assert!(Size::of_val(keys) < Self::VALUES_OFFSET);
 
         let mut data = [0; _];
@@ -73,7 +77,7 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNodeData<TKey, TPageId> {
         cast_slice(&self.data[..Self::VALUES_OFFSET.as_bytes()])
     }
 
-    fn values(&self) -> &[TPageId] {
+    fn values(&self) -> &[SerializedPageId] {
         cast_slice(&self.data[Self::VALUES_OFFSET.as_bytes()..])
     }
 
@@ -81,7 +85,7 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNodeData<TKey, TPageId> {
         cast_slice_mut(&mut self.data[..Self::VALUES_OFFSET.as_bytes()])
     }
 
-    fn values_mut(&mut self) -> &mut [TPageId] {
+    fn values_mut(&mut self) -> &mut [SerializedPageId] {
         cast_slice_mut(&mut self.data[Self::VALUES_OFFSET.as_bytes()..])
     }
 
@@ -157,8 +161,8 @@ impl ValueIndex {
     }
 }
 
-impl<TKey: TreeKey, TPageId: PageId> InteriorNodeEntries<TKey, TPageId> {
-    pub fn new(left: TPageId, key: TKey, right: TPageId) -> Self {
+impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
+    pub fn new(left: SerializedPageId, key: TKey, right: SerializedPageId) -> Self {
         Self {
             key_count: 1,
             _unused1: 0,
@@ -172,7 +176,7 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNodeEntries<TKey, TPageId> {
     }
 
     pub fn has_spare_capacity(&self) -> bool {
-        self.key_count() + 1 < InteriorNodeData::<TKey, TPageId>::KEY_CAPACITY
+        self.key_count() + 1 < InteriorNodeData::<TKey>::KEY_CAPACITY
     }
 
     pub fn split(&mut self) -> (TKey, Self) {
@@ -224,8 +228,8 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNodeEntries<TKey, TPageId> {
         self.key_count += entries.key_count + 1;
     }
 
-    pub fn insert_at(&mut self, index: KeyIndex, key: TKey, value: TPageId) {
-        assert!(self.key_count() < InteriorNodeData::<TKey, TPageId>::KEY_CAPACITY);
+    pub fn insert_at(&mut self, index: KeyIndex, key: TKey, value: SerializedPageId) {
+        assert!(self.key_count() < InteriorNodeData::<TKey>::KEY_CAPACITY);
 
         debug_assert!(bytes_of(&key) != vec![0; size_of::<TKey>()]);
 
@@ -256,14 +260,14 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNodeEntries<TKey, TPageId> {
             .copy_from_slice(&values_to_move);
     }
 
-    pub fn value_at(&self, index: ValueIndex) -> Option<TPageId> {
+    pub fn value_at(&self, index: ValueIndex) -> Option<SerializedPageId> {
         if index.0 > self.key_count() {
             return None;
         }
 
         let value = self.data.values()[index.0];
 
-        assert!(value != TPageId::sentinel());
+        assert!(value != SENTINEL_PAGE_ID);
 
         Some(value)
     }
@@ -278,11 +282,11 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNodeEntries<TKey, TPageId> {
     }
 
     pub fn needs_merge(&self) -> bool {
-        2 * self.key_count() <= InteriorNodeData::<TKey, TPageId>::KEY_CAPACITY
+        2 * self.key_count() <= InteriorNodeData::<TKey>::KEY_CAPACITY
     }
 
     pub fn can_fit_merge(&self, right: &Self) -> bool {
-        self.key_count() + right.key_count() < InteriorNodeData::<TKey, TPageId>::KEY_CAPACITY
+        self.key_count() + right.key_count() < InteriorNodeData::<TKey>::KEY_CAPACITY
     }
 
     pub fn key_at(&self, index: KeyIndex) -> Option<TKey> {

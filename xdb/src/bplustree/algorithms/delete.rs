@@ -25,8 +25,8 @@ enum MergeError<T: PageId> {
 
 fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<'_, TStorage, TKey>,
-    left_id: LeafNodeId<TStorage::PageId>,
-    right_id: LeafNodeId<TStorage::PageId>,
+    left_id: LeafNodeId,
+    right_id: LeafNodeId,
 ) -> Result<(), MergeError<TStorage::PageId>> {
     transaction.read_nodes((left_id, right_id), |(left, right)| {
         if left.parent() != right.parent() {
@@ -62,9 +62,9 @@ fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
 
 fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    left_id: InteriorNodeId<TStorage::PageId>,
-    right_id: InteriorNodeId<TStorage::PageId>,
-    parent_id: InteriorNodeId<TStorage::PageId>,
+    left_id: InteriorNodeId,
+    right_id: InteriorNodeId,
+    parent_id: InteriorNodeId,
 ) -> Result<(), MergeError<TStorage::PageId>> {
     let last_right_leaf = last_leaf(transaction, right_id.into())?;
     let next = transaction.read_nodes(last_right_leaf, LeafNode::next)?;
@@ -116,7 +116,7 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
 
 fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    node_id: InteriorNodeId<TStorage::PageId>,
+    node_id: InteriorNodeId,
 ) -> Result<(), TreeError<TStorage::PageId>> {
     if !transaction.read_nodes(node_id, InteriorNode::needs_merge)? {
         return Ok(());
@@ -133,7 +133,11 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
             // TODO the error here happens because we're doing READ COMMITTED isolation and not
             // snapshot, panic once that's fixed
         })?
-        .ok_or_else(|| TreeError::StorageError(StorageError::Deadlock(node_id.page())))?;
+        .ok_or_else(|| {
+            TreeError::StorageError(StorageError::Deadlock(TStorage::PageId::deserialize(
+                node_id.page(),
+            )))
+        })?;
 
     if let Some(value_before) = index_in_parent.value_before() {
         let left = transaction.read_nodes(
@@ -153,7 +157,7 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
                 // TODO this can happen due to the fact that our isolation level is currently `READ
                 // COMMITTED`. panic here once we're able to do snapshot
                 return Err(TreeError::StorageError(StorageError::Deadlock(
-                    node_id.page(),
+                    TStorage::PageId::deserialize(node_id.page()),
                 )));
             }
             Err(MergeError::Tree(err)) => return Err(err),
@@ -177,7 +181,7 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
                 // TODO this can happen due to the fact that our isolation level is currently `READ
                 // COMMITTED`. panic here once we're able to do snapshot
                 return Err(TreeError::StorageError(StorageError::Deadlock(
-                    node_id.page(),
+                    TStorage::PageId::deserialize(node_id.page()),
                 )));
             }
             Err(MergeError::Tree(err)) => return Err(err),
@@ -189,7 +193,7 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
 
 fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    leaf_id: LeafNodeId<TStorage::PageId>,
+    leaf_id: LeafNodeId,
 ) -> Result<(), TreeError<TStorage::PageId>> {
     let (next, previous, parent) =
         transaction.read_nodes(leaf_id, |x| (x.next(), x.previous(), x.parent()))?;

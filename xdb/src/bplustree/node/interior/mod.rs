@@ -6,7 +6,7 @@ use crate::{
         TreeKey,
         node::interior::entries::{InteriorNodeEntries, KeyIndex, ValueIndex},
     },
-    storage::PageId,
+    storage::SENTINEL_PAGE_ID,
 };
 
 use bytemuck::{AnyBitPattern, NoUninit};
@@ -18,44 +18,41 @@ use crate::bplustree::{
 
 #[derive(Debug, AnyBitPattern, Clone, Copy)]
 #[repr(C, align(8))]
-pub(in crate::bplustree) struct InteriorNode<TKey, TPageId>
+pub(in crate::bplustree) struct InteriorNode<TKey>
 where
     TKey: TreeKey,
-    TPageId: PageId,
 {
-    header: NodeHeader<TPageId>,
-    entries: InteriorNodeEntries<TKey, TPageId>,
+    header: NodeHeader,
+    entries: InteriorNodeEntries<TKey>,
 }
 
-unsafe impl<TKey: TreeKey + 'static, TPageId: PageId> NoUninit for InteriorNode<TKey, TPageId> {}
+unsafe impl<TKey: TreeKey + 'static> NoUninit for InteriorNode<TKey> {}
 
-impl<TKey: TreeKey, TPageId: PageId> InteriorNode<TKey, TPageId> {
+impl<TKey: TreeKey> InteriorNode<TKey> {
     pub fn new(
-        parent: Option<InteriorNodeId<TPageId>>,
-        left: AnyNodeId<TPageId>,
+        parent: Option<InteriorNodeId>,
+        left: AnyNodeId,
         key: TKey,
-        right: AnyNodeId<TPageId>,
+        right: AnyNodeId,
     ) -> Self {
         Self {
-            header: NodeHeader::new_interior(parent.map_or_else(TPageId::sentinel, |x| x.page())),
+            header: NodeHeader::new_interior(parent.map_or(SENTINEL_PAGE_ID, |x| x.page())),
             entries: InteriorNodeEntries::new(left.page(), key, right.page()),
         }
     }
 
     // TODO construct the entries in pre-allocated memory?
     #[allow(clippy::large_types_passed_by_value)]
-    fn from_entries(
-        parent: Option<InteriorNodeId<TPageId>>,
-        entries: InteriorNodeEntries<TKey, TPageId>,
-    ) -> Self {
+    fn from_entries(parent: Option<InteriorNodeId>, entries: InteriorNodeEntries<TKey>) -> Self {
         Self {
-            header: NodeHeader::new_interior(parent.map_or_else(TPageId::sentinel, |x| x.page())),
+            header: NodeHeader::new_interior(parent.map_or(SENTINEL_PAGE_ID, |x| x.page())),
             entries,
         }
     }
 
-    pub(in crate::bplustree) fn set_parent(&mut self, parent: Option<InteriorNodeId<TPageId>>) {
-        self.header.parent = parent.map_or_else(TPageId::sentinel, |x| x.page());
+    pub(in crate::bplustree) fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
+        // TODO implement From<> InteriorNodeId/AnyNodeId/LeafNodeId for SerializedPageId
+        self.header.parent = parent.map_or(SENTINEL_PAGE_ID, |x| x.page());
     }
 
     pub(in crate::bplustree) fn keys(&self) -> impl Iterator<Item = (KeyIndex, TKey)> {
@@ -69,7 +66,7 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNode<TKey, TPageId> {
         self.entries.has_spare_capacity()
     }
 
-    pub(crate) fn insert_node(&mut self, key: TKey, value: AnyNodeId<TPageId>) {
+    pub(crate) fn insert_node(&mut self, key: TKey, value: AnyNodeId) {
         let mut insert_at = self.entries.key_after_last();
 
         assert!(
@@ -97,25 +94,25 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNode<TKey, TPageId> {
         )
     }
 
-    pub(in crate::bplustree) fn value_at(&self, index: ValueIndex) -> Option<AnyNodeId<TPageId>> {
+    pub(in crate::bplustree) fn value_at(&self, index: ValueIndex) -> Option<AnyNodeId> {
         self.entries.value_at(index).map(AnyNodeId::new)
     }
 
-    pub(crate) fn first_value(&self) -> Option<AnyNodeId<TPageId>> {
+    pub(crate) fn first_value(&self) -> Option<AnyNodeId> {
         self.value_at(ValueIndex::new(0))
     }
 
-    pub(crate) fn last_value(&self) -> Option<AnyNodeId<TPageId>> {
+    pub(crate) fn last_value(&self) -> Option<AnyNodeId> {
         self.value_at(self.entries.last_value())
     }
 
-    pub(crate) fn values(&self) -> impl Iterator<Item = (ValueIndex, AnyNodeId<TPageId>)> {
+    pub(crate) fn values(&self) -> impl Iterator<Item = (ValueIndex, AnyNodeId)> {
         (0..=self.entries.key_count())
             .map(ValueIndex::new)
             .map(|x| (x, self.value_at(x).unwrap()))
     }
 
-    pub(crate) fn delete(&mut self, child: AnyNodeId<TPageId>) {
+    pub(crate) fn delete(&mut self, child: AnyNodeId) {
         let mut delete_index = None;
         for (index, value) in self.values() {
             if value == child {
@@ -133,7 +130,7 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNode<TKey, TPageId> {
         self.entries.needs_merge()
     }
 
-    pub(crate) fn find_value_index(&self, node_id: AnyNodeId<TPageId>) -> Option<ValueIndex> {
+    pub(crate) fn find_value_index(&self, node_id: AnyNodeId) -> Option<ValueIndex> {
         for (index, value) in self.values() {
             if value == node_id {
                 return Some(index);
@@ -171,22 +168,22 @@ impl<TKey: TreeKey, TPageId: PageId> InteriorNode<TKey, TPageId> {
     }
 }
 
-impl<TKey: TreeKey, TPageId: PageId> Node<TKey, TPageId> for InteriorNode<TKey, TPageId> {
-    fn parent(&self) -> Option<InteriorNodeId<TPageId>> {
+impl<TKey: TreeKey> Node<TKey> for InteriorNode<TKey> {
+    fn parent(&self) -> Option<InteriorNodeId> {
         self.header.parent()
     }
 
-    fn set_parent(&mut self, parent: Option<InteriorNodeId<TPageId>>) {
+    fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
         self.header.set_parent(parent);
     }
 }
 
-struct InteriorNodeKeysIterator<'node, TKey: TreeKey, TPageId: PageId> {
-    node: &'node InteriorNode<TKey, TPageId>,
+struct InteriorNodeKeysIterator<'node, TKey: TreeKey> {
+    node: &'node InteriorNode<TKey>,
     index: usize,
 }
 
-impl<TKey: TreeKey, TPageId: PageId> Iterator for InteriorNodeKeysIterator<'_, TKey, TPageId> {
+impl<TKey: TreeKey> Iterator for InteriorNodeKeysIterator<'_, TKey> {
     type Item = (KeyIndex, TKey);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -206,22 +203,22 @@ impl<TKey: TreeKey, TPageId: PageId> Iterator for InteriorNodeKeysIterator<'_, T
 mod test {
     use crate::{
         bplustree::{AnyNodeId, InteriorNode},
-        storage::in_memory::InMemoryPageId,
+        storage::SerializedPageId,
     };
 
     #[test]
     fn merge_with() {
         let mut node_a = InteriorNode::new(
             None,
-            AnyNodeId::new(InMemoryPageId::from_value(1)),
+            AnyNodeId::new(SerializedPageId::new(1u64.to_le_bytes())),
             1usize,
-            AnyNodeId::new(InMemoryPageId::from_value(2)),
+            AnyNodeId::new(SerializedPageId::new(2u64.to_le_bytes())),
         );
         let node_b = InteriorNode::new(
             None,
-            AnyNodeId::new(InMemoryPageId::from_value(3)),
+            AnyNodeId::new(SerializedPageId::new(3u64.to_le_bytes())),
             3usize,
-            AnyNodeId::new(InMemoryPageId::from_value(4)),
+            AnyNodeId::new(SerializedPageId::new(4u64.to_le_bytes())),
         );
 
         node_a.merge_from(&node_b, 2usize);
@@ -233,10 +230,10 @@ mod test {
         assert_eq!(
             values.iter().map(|x| x.1).collect::<Vec<_>>(),
             vec![
-                AnyNodeId::new(InMemoryPageId::from_value(1)),
-                AnyNodeId::new(InMemoryPageId::from_value(2)),
-                AnyNodeId::new(InMemoryPageId::from_value(3)),
-                AnyNodeId::new(InMemoryPageId::from_value(4)),
+                AnyNodeId::new(SerializedPageId::new(1u64.to_le_bytes())),
+                AnyNodeId::new(SerializedPageId::new(2u64.to_le_bytes())),
+                AnyNodeId::new(SerializedPageId::new(3u64.to_le_bytes())),
+                AnyNodeId::new(SerializedPageId::new(4u64.to_le_bytes())),
             ]
         );
     }

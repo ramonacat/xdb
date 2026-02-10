@@ -10,9 +10,9 @@ pub(super) type TreeIteratorItem<TKey, TPageId> = Result<(TKey, Vec<u8>), TreeEr
 
 pub(super) struct TreeIterator<'tree, T: Storage, TKey> {
     transaction: TreeTransaction<'tree, T, TKey>,
-    current_forward_leaf: LeafNodeId<T::PageId>,
+    current_forward_leaf: LeafNodeId,
     forward_index: usize,
-    current_backward_leaf: LeafNodeId<T::PageId>,
+    current_backward_leaf: LeafNodeId,
     backward_index: usize,
 }
 
@@ -39,7 +39,7 @@ impl<'tree, T: Storage, TKey: TreeKey> TreeIterator<'tree, T, TKey> {
 
 enum IteratorResult<TKey, TPageId: PageId> {
     Value(TreeIteratorItem<TKey, TPageId>),
-    Next(LeafNodeId<TPageId>),
+    Next(LeafNodeId),
     None,
 }
 

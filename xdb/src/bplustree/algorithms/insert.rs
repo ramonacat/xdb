@@ -7,18 +7,18 @@ use crate::{
         AnyNodeId, InteriorNode, InteriorNodeId, LeafNodeId, Node, NodeId as _, TreeError, TreeKey,
         TreeTransaction, algorithms::leaf_search, node::leaf::builder::MaterializedTopology,
     },
-    storage::{PageReservation as _, Storage},
+    storage::{PageId, PageReservation as _, Storage},
 };
 
 fn create_new_root<'storage, TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<'storage, TStorage, TKey>,
     reservation: <TStorage as Storage>::PageReservation<'storage>,
-    left: AnyNodeId<TStorage::PageId>,
+    left: AnyNodeId,
     key: TKey,
-    right: AnyNodeId<TStorage::PageId>,
+    right: AnyNodeId,
 ) -> Result<(), TreeError<TStorage::PageId>> {
-    let new_root_id = InteriorNodeId::new(reservation.index());
-    let new_root = InteriorNode::<TKey, TStorage::PageId>::new(None, left, key, right);
+    let new_root_id = InteriorNodeId::new(reservation.index().serialize());
+    let new_root = InteriorNode::<TKey>::new(None, left, key, right);
 
     transaction.insert_reserved(reservation, new_root)?;
     transaction.write_header(|header| header.root = new_root_id.page())?;
@@ -36,10 +36,10 @@ fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
     let root_id = LeafNodeId::from_any(root_id);
 
     let new_root_reservation = transaction.reserve_node()?;
-    let new_root_id = InteriorNodeId::new(new_root_reservation.index());
+    let new_root_id = InteriorNodeId::new(new_root_reservation.index().serialize());
 
     let new_leaf_reservation = transaction.reserve_node()?;
-    let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
+    let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index().serialize());
 
     let new_leaf = transaction.write_nodes(root_id, |root| {
         root.split(&MaterializedTopology::new(
@@ -65,7 +65,7 @@ fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
 
 fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    split_id: InteriorNodeId<TStorage::PageId>,
+    split_id: InteriorNodeId,
 ) -> Result<bool, TreeError<TStorage::PageId>> {
     let parent_id = transaction.read_nodes(split_id, Node::parent)?;
 
@@ -78,7 +78,7 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
     }
 
     let new_node_reservation = transaction.reserve_node()?;
-    let new_node_id = InteriorNodeId::new(new_node_reservation.index());
+    let new_node_id = InteriorNodeId::new(new_node_reservation.index().serialize());
 
     let (split_key, new_node) = transaction.write_nodes(split_id, InteriorNode::split)?;
 
@@ -109,7 +109,7 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
         insert_child(transaction, parent_id, split_key, new_node_id.into())?;
     } else {
         let new_root_reservation = transaction.reserve_node()?;
-        let new_root_id = InteriorNodeId::new(new_root_reservation.index());
+        let new_root_id = InteriorNodeId::new(new_root_reservation.index().serialize());
 
         transaction.write_nodes(split_id, |node| node.set_parent(Some(new_root_id)))?;
         transaction.write_nodes(new_node_id, |node| node.set_parent(Some(new_root_id)))?;
@@ -136,9 +136,9 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
 
 fn insert_child<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    parent_id: InteriorNodeId<TStorage::PageId>,
+    parent_id: InteriorNodeId,
     key: TKey,
-    child_id: AnyNodeId<TStorage::PageId>,
+    child_id: AnyNodeId,
 ) -> Result<(), TreeError<TStorage::PageId>> {
     transaction.write_nodes(parent_id, |node| node.insert_node(key, child_id))?;
     transaction.write_nodes(child_id, |x| x.set_parent(Some(parent_id)))?;
@@ -148,7 +148,7 @@ fn insert_child<TStorage: Storage, TKey: TreeKey>(
 
 fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    leaf_id: LeafNodeId<TStorage::PageId>,
+    leaf_id: LeafNodeId,
 ) -> Result<(), TreeError<TStorage::PageId>> {
     let parent_id = transaction.read_nodes(leaf_id, Node::parent)?.unwrap();
 
@@ -161,7 +161,7 @@ fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     );
 
     let new_leaf_reservation = transaction.reserve_node()?;
-    let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
+    let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index().serialize());
 
     let new_leaf = transaction.write_nodes(leaf_id, |target_node| {
         let next = target_node.next();

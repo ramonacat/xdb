@@ -18,7 +18,7 @@ use crate::{
         },
     },
     page::PAGE_DATA_SIZE,
-    storage::PageId,
+    storage::{SENTINEL_PAGE_ID, SerializedPageId},
 };
 
 // TODO magic numbers depending on size of PageId!
@@ -30,26 +30,26 @@ const LEAF_NODE_DATA_SIZE: Size = PAGE_DATA_SIZE.subtract(
 
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
-pub(in crate::bplustree) struct LeafNode<TKey, TPageId>
+pub(in crate::bplustree) struct LeafNode<TKey>
 where
     TKey: TreeKey,
 {
-    header: NodeHeader<TPageId>,
-    leaf_header: LeafNodeHeader<TPageId>,
+    header: NodeHeader,
+    leaf_header: LeafNodeHeader,
     data: LeafNodeEntries<TKey>,
 }
 
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
 // automatically if not for the PhantomData
-unsafe impl<TKey: TreeKey, TPageId: PageId> Pod for LeafNode<TKey, TPageId> {}
+unsafe impl<TKey: TreeKey> Pod for LeafNode<TKey> {}
 
-impl<TKey: TreeKey, TPageId: PageId> LeafNode<TKey, TPageId> {
-    pub fn new(parent: Option<InteriorNodeId<TPageId>>) -> Self {
+impl<TKey: TreeKey> LeafNode<TKey> {
+    pub fn new(parent: Option<InteriorNodeId>) -> Self {
         Self {
-            header: NodeHeader::new_leaf(parent.map_or_else(TPageId::sentinel, |x| x.page())),
+            header: NodeHeader::new_leaf(parent.map_or(SENTINEL_PAGE_ID, |x| x.page())),
             leaf_header: LeafNodeHeader {
-                previous: TPageId::sentinel(),
-                next: TPageId::sentinel(),
+                previous: SENTINEL_PAGE_ID,
+                next: SENTINEL_PAGE_ID,
             },
             data: LeafNodeEntries::new(),
         }
@@ -63,20 +63,20 @@ impl<TKey: TreeKey, TPageId: PageId> LeafNode<TKey, TPageId> {
         self.data.entry(index)
     }
 
-    pub fn previous(&self) -> Option<LeafNodeId<TPageId>> {
+    pub fn previous(&self) -> Option<LeafNodeId> {
         let previous = self.leaf_header.previous;
 
-        if previous == TPageId::sentinel() {
+        if previous == SENTINEL_PAGE_ID {
             None
         } else {
             Some(LeafNodeId::new(previous))
         }
     }
 
-    pub fn next(&self) -> Option<LeafNodeId<TPageId>> {
+    pub fn next(&self) -> Option<LeafNodeId> {
         let next = self.leaf_header.next;
 
-        if next == TPageId::sentinel() {
+        if next == SENTINEL_PAGE_ID {
             None
         } else {
             Some(LeafNodeId::new(next))
@@ -148,8 +148,8 @@ impl<TKey: TreeKey, TPageId: PageId> LeafNode<TKey, TPageId> {
 
     pub fn split(
         &'_ mut self,
-        new_topology: &MaterializedTopology<TPageId>,
-    ) -> LeafNodeBuilder<TKey, TPageId, (), MaterializedData<'_, TKey>> {
+        new_topology: &MaterializedTopology,
+    ) -> LeafNodeBuilder<TKey, (), MaterializedData<'_, TKey>> {
         self.set_parent(new_topology.parent());
         self.set_previous(new_topology.previous());
         self.set_next(new_topology.next());
@@ -159,12 +159,12 @@ impl<TKey: TreeKey, TPageId: PageId> LeafNode<TKey, TPageId> {
         LeafNodeBuilder::new().with_data(new_node_entries)
     }
 
-    pub fn set_previous(&mut self, previous: Option<LeafNodeId<TPageId>>) {
-        self.leaf_header.previous = previous.map_or_else(TPageId::sentinel, |x| x.page());
+    pub fn set_previous(&mut self, previous: Option<LeafNodeId>) {
+        self.leaf_header.previous = previous.map_or(SENTINEL_PAGE_ID, |x| x.page());
     }
 
-    pub fn set_next(&mut self, next: Option<LeafNodeId<TPageId>>) {
-        self.leaf_header.next = next.map_or_else(TPageId::sentinel, |x| x.page());
+    pub fn set_next(&mut self, next: Option<LeafNodeId>) {
+        self.leaf_header.next = next.map_or(SENTINEL_PAGE_ID, |x| x.page());
     }
 
     pub(in crate::bplustree) fn first_key(&self) -> Option<TKey> {
@@ -192,40 +192,36 @@ impl<TKey: TreeKey, TPageId: PageId> LeafNode<TKey, TPageId> {
     }
 }
 
-impl<TKey: TreeKey, TPageId: PageId> Node<TKey, TPageId> for LeafNode<TKey, TPageId> {
-    fn parent(&self) -> Option<InteriorNodeId<TPageId>> {
-        if self.header.parent == TPageId::sentinel() {
+impl<TKey: TreeKey> Node<TKey> for LeafNode<TKey> {
+    fn parent(&self) -> Option<InteriorNodeId> {
+        if self.header.parent == SENTINEL_PAGE_ID {
             None
         } else {
             Some(InteriorNodeId::new(self.header.parent))
         }
     }
 
-    fn set_parent(&mut self, parent: Option<InteriorNodeId<TPageId>>) {
+    fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
         self.header.set_parent(parent);
     }
 }
 
 #[derive(Zeroable, Debug, Clone, Copy)]
 #[repr(C, align(8))]
-struct LeafNodeHeader<TPageId> {
-    previous: TPageId,
-    next: TPageId,
+struct LeafNodeHeader {
+    previous: SerializedPageId,
+    next: SerializedPageId,
 }
 
-unsafe impl<TPageId: PageId> Pod for LeafNodeHeader<TPageId> {}
+unsafe impl Pod for LeafNodeHeader {}
 
-// TODO const _: () = assert!(Size::of::<LeafNodeHeader>().is_equal(Size::of::<u64>().multiply(2)));
+const _: () = assert!(Size::of::<LeafNodeHeader>().is_equal(Size::of::<u64>().multiply(2)));
 
 #[cfg(test)]
 mod test {
-    use crate::storage::in_memory::InMemoryPageId;
-
     use super::*;
 
-    fn collect_entries<TKey: TreeKey, TPageId: PageId>(
-        node: &LeafNode<TKey, TPageId>,
-    ) -> Vec<(TKey, Vec<u8>)> {
+    fn collect_entries<TKey: TreeKey>(node: &LeafNode<TKey>) -> Vec<(TKey, Vec<u8>)> {
         node.entries()
             .map(|x| (x.key(), x.value().to_vec()))
             .collect::<Vec<_>>()
@@ -233,7 +229,7 @@ mod test {
 
     #[test]
     fn insert_reverse() {
-        let mut node = LeafNode::<_, InMemoryPageId>::new(None);
+        let mut node = LeafNode::new(None);
         let _ = node.insert(1, &[0]);
         let _ = node.insert(0, &[0]);
 
@@ -242,7 +238,7 @@ mod test {
 
     #[test]
     fn same_key_overrides() {
-        let mut node = LeafNode::<_, InMemoryPageId>::new(None);
+        let mut node = LeafNode::new(None);
         let _ = node.insert(0, &[0]);
         let _ = node.insert(0, &[1]);
 
@@ -251,7 +247,7 @@ mod test {
 
     #[test]
     fn same_key_same_overrides_with_intermediate() {
-        let mut node = LeafNode::<_, InMemoryPageId>::new(None);
+        let mut node = LeafNode::new(None);
         let _ = node.insert(1, &[0]);
         let _ = node.insert(2, &[0]);
         let _ = node.insert(1, &[0]);
