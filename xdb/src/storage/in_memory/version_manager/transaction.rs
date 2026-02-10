@@ -74,7 +74,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         }
     }
 
-    // TODO all page allocations should go through this
+    // TODO this should be moved to `VersionAwareBlock`
     fn get_recycled_page(
         &self,
         logical_index: Option<PageIndex>,
@@ -151,6 +151,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     // TODO we lose a lot of performance by always creating a cow page, we should do this only
     // when there's an actual write
     // TODO rename -> recycle_or_allocate
+    // TODO this should be moved to `VersionAwareBlock`
     #[allow(clippy::large_types_passed_by_value)]
     fn allocate_cow_copy(
         &self,

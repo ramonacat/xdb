@@ -79,6 +79,8 @@ impl VersionManager {
 }
 
 #[instrument(skip(data))]
+// TODO this should not be a free function, but instead a method on `VersionAwareBlock` or
+// something like that.
 fn get_matching_version(
     data: &'_ Block,
     logical_index: PageIndex,
