@@ -1,9 +1,10 @@
 mod page_state;
 
-use crate::platform::allocation::Allocation;
+// TODO this should not be at all aware of InMemoryPageId
 use crate::platform::allocation::uncommitted::UncommittedAllocation;
 use crate::storage::StorageError;
 use crate::storage::in_memory::block::page_state::PageStateValue;
+use crate::{platform::allocation::Allocation, storage::in_memory::InMemoryPageId};
 use std::ops::DerefMut;
 #[cfg(debug_assertions)]
 use std::time::{Duration, Instant};
@@ -444,7 +445,7 @@ impl Block {
         &'_ self,
         physical_index: PageIndex,
         // TODO do we want a version of this that returns a read-only lock?
-    ) -> Result<PageWriteGuard<'_>, StorageError> {
+    ) -> Result<PageWriteGuard<'_>, StorageError<InMemoryPageId>> {
         while physical_index.0 >= self.allocated_page_count.load(Ordering::Acquire) {
             let allocated = self.allocate()?.initialize(Page::new());
 
@@ -505,7 +506,7 @@ impl Block {
     }
 
     #[instrument]
-    pub fn allocate(&self) -> Result<UninitializedPageGuard<'_>, StorageError> {
+    pub fn allocate(&self) -> Result<UninitializedPageGuard<'_>, StorageError<InMemoryPageId>> {
         let index = self.latest_page.fetch_add(1, Ordering::AcqRel);
 
         let index = PageIndex(index);
@@ -530,7 +531,10 @@ impl Block {
     }
 
     #[instrument]
-    fn allocate_housekeeping(&self, index: PageIndex) -> Result<NonNull<PageState>, StorageError> {
+    fn allocate_housekeeping(
+        &self,
+        index: PageIndex,
+    ) -> Result<NonNull<PageState>, StorageError<InMemoryPageId>> {
         if index.0 >= Self::PAGE_COUNT as u64 {
             return Err(StorageError::OutOfSpace);
         }

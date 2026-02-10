@@ -1,9 +1,9 @@
 use crate::{
     page::Page,
     storage::{
-        PageIndex, StorageError, Transaction,
+        StorageError, Transaction,
         in_memory::{
-            InMemoryPageReservation, InMemoryStorage,
+            InMemoryPageId, InMemoryPageReservation, InMemoryStorage,
             version_manager::transaction::VersionManagedTransaction,
         },
     },
@@ -31,15 +31,15 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
 
     fn read<T, const N: usize>(
         &mut self,
-        indices: impl Into<[PageIndex; N]>,
+        indices: impl Into<[InMemoryPageId; N]>,
         read: impl FnOnce([&Page; N]) -> T,
-    ) -> Result<T, StorageError> {
-        let indices: [PageIndex; N] = indices.into();
+    ) -> Result<T, StorageError<InMemoryPageId>> {
+        let indices: [InMemoryPageId; N] = indices.into();
 
         let guards: [_; N] = indices
-            .map(|x| self.version_manager.read(x))
+            .map(|x| self.version_manager.read(x.0))
             .into_iter()
-            .collect::<Result<Vec<_>, StorageError>>()?
+            .collect::<Result<Vec<_>, StorageError<InMemoryPageId>>>()?
             .try_into()
             .unwrap();
 
@@ -49,22 +49,24 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
     // TODO do we actually need to differentiate between read() and write()???
     fn write<T, const N: usize>(
         &mut self,
-        indices: impl Into<[PageIndex; N]>,
+        indices: impl Into<[InMemoryPageId; N]>,
         write: impl FnOnce([&mut Page; N]) -> T,
-    ) -> Result<T, StorageError> {
-        let indices: [PageIndex; N] = indices.into();
+    ) -> Result<T, StorageError<InMemoryPageId>> {
+        let indices: [InMemoryPageId; N] = indices.into();
 
         let mut guards: [_; N] = indices
-            .map(|x| self.version_manager.write(x))
+            .map(|x| self.version_manager.write(x.0))
             .into_iter()
-            .collect::<Result<Vec<_>, StorageError>>()?
+            .collect::<Result<Vec<_>, StorageError<InMemoryPageId>>>()?
             .try_into()
             .unwrap();
 
         Ok(write(guards.each_mut().map(|x| &mut **x)))
     }
 
-    fn reserve(&mut self) -> Result<InMemoryPageReservation<'storage>, StorageError> {
+    fn reserve(
+        &mut self,
+    ) -> Result<InMemoryPageReservation<'storage>, StorageError<InMemoryPageId>> {
         let page_guard = self.version_manager.reserve()?;
 
         Ok(InMemoryPageReservation { page_guard })
@@ -74,7 +76,7 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
         &mut self,
         reservation: InMemoryPageReservation<'storage>,
         page: Page,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), StorageError<InMemoryPageId>> {
         let InMemoryPageReservation { page_guard } = reservation;
 
         self.version_manager.insert_reserved(page_guard, page)?;
@@ -82,27 +84,27 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
         Ok(())
     }
 
-    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
+    fn insert(&mut self, page: Page) -> Result<InMemoryPageId, StorageError<InMemoryPageId>> {
         let reserved = self.version_manager.reserve()?;
         let physical_index = reserved.physical_index();
         self.version_manager.insert_reserved(reserved, page)?;
 
-        Ok(physical_index)
+        Ok(InMemoryPageId(physical_index))
     }
 
-    fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
-        self.version_manager.delete(page)?;
+    fn delete(&mut self, page: InMemoryPageId) -> Result<(), StorageError<InMemoryPageId>> {
+        self.version_manager.delete(page.0)?;
 
         Ok(())
     }
 
-    fn commit(mut self) -> Result<(), StorageError> {
+    fn commit(mut self) -> Result<(), StorageError<InMemoryPageId>> {
         self.version_manager.commit()?;
 
         Ok(())
     }
 
-    fn rollback(mut self) -> Result<(), StorageError> {
+    fn rollback(mut self) -> Result<(), StorageError<InMemoryPageId>> {
         self.version_manager.rollback();
 
         Ok(())

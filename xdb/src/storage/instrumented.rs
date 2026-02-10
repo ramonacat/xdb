@@ -1,69 +1,82 @@
-use crate::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
+use crate::{
+    storage::PageReservation,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use std::marker::PhantomData;
 
-use super::{Page, PageIndex, StorageError, Transaction};
+use super::{Page, StorageError, Transaction};
 use crate::storage::Storage;
 
+pub struct InstrumentedPageReservation<'a, TStorage: Storage + 'a>(TStorage::PageReservation<'a>);
+
+impl<'a, TStorage: Storage + 'a> PageReservation<'a> for InstrumentedPageReservation<'a, TStorage> {
+    type Storage = InstrumentedStorage<TStorage>;
+
+    fn index(&self) -> <<Self as PageReservation<'a>>::Storage as Storage>::PageId {
+        self.0.index()
+    }
+}
+
 #[derive(Debug)]
-pub struct InstrumentedTransaction<'a, T: Transaction<'a>, TStorage: Storage>(
-    T,
+pub struct InstrumentedTransaction<'a, TStorage: Storage>(
+    TStorage::Transaction<'a>,
     Arc<AtomicUsize>,
     PhantomData<&'a TStorage>,
 );
 
-impl<'a, TTx: Transaction<'a, Storage = TStorage>, TStorage: Storage> Transaction<'a>
-    for InstrumentedTransaction<'a, TTx, TStorage>
-{
+impl<'a, TStorage: Storage> Transaction<'a> for InstrumentedTransaction<'a, TStorage> {
     type Storage = InstrumentedStorage<TStorage>;
 
     fn read<TReturn, const N: usize>(
         &mut self,
-        indices: impl Into<[PageIndex; N]>,
+        indices: impl Into<[TStorage::PageId; N]>,
         read: impl FnOnce([&Page; N]) -> TReturn,
-    ) -> Result<TReturn, StorageError> {
+    ) -> Result<TReturn, StorageError<TStorage::PageId>> {
         self.0.read(indices, read)
     }
 
     fn write<TReturn, const N: usize>(
         &mut self,
-        indices: impl Into<[PageIndex; N]>,
+        indices: impl Into<[TStorage::PageId; N]>,
         write: impl FnOnce([&mut Page; N]) -> TReturn,
-    ) -> Result<TReturn, StorageError> {
+    ) -> Result<TReturn, StorageError<TStorage::PageId>> {
         self.0.write(indices, write)
     }
 
-    fn reserve(&mut self) -> Result<TStorage::PageReservation<'a>, StorageError> {
-        self.0.reserve()
+    fn reserve(
+        &mut self,
+    ) -> Result<InstrumentedPageReservation<'a, TStorage>, StorageError<TStorage::PageId>> {
+        Ok(InstrumentedPageReservation(self.0.reserve()?))
     }
 
     fn insert_reserved(
         &mut self,
-        reservation: TStorage::PageReservation<'a>,
+        reservation: InstrumentedPageReservation<'a, TStorage>,
         page: Page,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), StorageError<TStorage::PageId>> {
         self.1.fetch_add(1, Ordering::Relaxed);
 
-        self.0.insert_reserved(reservation, page)
+        self.0.insert_reserved(reservation.0, page)
     }
 
-    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
+    fn insert(&mut self, page: Page) -> Result<TStorage::PageId, StorageError<TStorage::PageId>> {
         self.1.fetch_add(1, Ordering::Relaxed);
 
         self.0.insert(page)
     }
 
-    fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
+    fn delete(&mut self, page: TStorage::PageId) -> Result<(), StorageError<TStorage::PageId>> {
         self.0.delete(page)
     }
 
-    fn commit(self) -> Result<(), StorageError> {
+    fn commit(self) -> Result<(), StorageError<TStorage::PageId>> {
         self.0.commit()
     }
 
-    fn rollback(self) -> Result<(), StorageError> {
+    fn rollback(self) -> Result<(), StorageError<TStorage::PageId>> {
         self.0.rollback()
     }
 
@@ -88,16 +101,18 @@ impl<T: Storage> InstrumentedStorage<T> {
 
 impl<T: Storage> Storage for InstrumentedStorage<T> {
     type PageReservation<'a>
-        = T::PageReservation<'a>
+        = InstrumentedPageReservation<'a, T>
     where
         T: 'a;
 
     type Transaction<'a>
-        = InstrumentedTransaction<'a, T::Transaction<'a>, T>
+        = InstrumentedTransaction<'a, T>
     where
         T: 'a;
 
-    fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError> {
+    type PageId = T::PageId;
+
+    fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError<T::PageId>> {
         Ok(InstrumentedTransaction(
             self.inner.transaction()?,
             self.page_count.clone(),

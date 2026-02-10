@@ -8,48 +8,48 @@ use bytemuck::{Pod, Zeroable};
 use crate::{
     Size,
     bplustree::{
-        LeafNodeId, TreeKey,
+        LeafNodeId, NodeId, TreeKey,
         node::{
-            InteriorNodeId, NODE_DATA_SIZE, Node, NodeHeader,
+            InteriorNodeId, Node, NodeHeader,
             leaf::{
                 builder::{LeafNodeBuilder, MaterializedData, MaterializedTopology, Topology},
                 entries::{LeafNodeEntries, LeafNodeEntry},
             },
         },
     },
-    storage::PageIndex,
+    page::PAGE_DATA_SIZE,
+    storage::PageId,
 };
 
-impl From<Option<LeafNodeId>> for PageIndex {
-    fn from(value: Option<LeafNodeId>) -> Self {
-        value.map_or_else(Self::max, |x| x.0)
-    }
-}
-
-const LEAF_NODE_DATA_SIZE: Size = NODE_DATA_SIZE.subtract(Size::of::<LeafNodeHeader>());
+// TODO magic numbers depending on size of PageId!
+const LEAF_NODE_DATA_SIZE: Size = PAGE_DATA_SIZE.subtract(
+    Size::of::<u64>()
+        .multiply(2)
+        .add(Size::of::<u64>().multiply(2)),
+);
 
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
-pub(in crate::bplustree) struct LeafNode<TKey>
+pub(in crate::bplustree) struct LeafNode<TKey, TPageId>
 where
     TKey: TreeKey,
 {
-    header: NodeHeader,
-    leaf_header: LeafNodeHeader,
+    header: NodeHeader<TPageId>,
+    leaf_header: LeafNodeHeader<TPageId>,
     data: LeafNodeEntries<TKey>,
 }
 
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
 // automatically if not for the PhantomData
-unsafe impl<TKey: TreeKey> Pod for LeafNode<TKey> {}
+unsafe impl<TKey: TreeKey, TPageId: PageId> Pod for LeafNode<TKey, TPageId> {}
 
-impl<TKey: TreeKey> LeafNode<TKey> {
-    pub fn new(parent: Option<InteriorNodeId>) -> Self {
+impl<TKey: TreeKey, TPageId: PageId> LeafNode<TKey, TPageId> {
+    pub fn new(parent: Option<InteriorNodeId<TPageId>>) -> Self {
         Self {
-            header: NodeHeader::new_leaf(parent.into()),
+            header: NodeHeader::new_leaf(parent.map_or_else(TPageId::sentinel, |x| x.page())),
             leaf_header: LeafNodeHeader {
-                previous: PageIndex::max(),
-                next: PageIndex::max(),
+                previous: TPageId::sentinel(),
+                next: TPageId::sentinel(),
             },
             data: LeafNodeEntries::new(),
         }
@@ -63,20 +63,20 @@ impl<TKey: TreeKey> LeafNode<TKey> {
         self.data.entry(index)
     }
 
-    pub fn previous(&self) -> Option<LeafNodeId> {
+    pub fn previous(&self) -> Option<LeafNodeId<TPageId>> {
         let previous = self.leaf_header.previous;
 
-        if previous == PageIndex::max() {
+        if previous == TPageId::sentinel() {
             None
         } else {
             Some(LeafNodeId::new(previous))
         }
     }
 
-    pub fn next(&self) -> Option<LeafNodeId> {
+    pub fn next(&self) -> Option<LeafNodeId<TPageId>> {
         let next = self.leaf_header.next;
 
-        if next == PageIndex::max() {
+        if next == TPageId::sentinel() {
             None
         } else {
             Some(LeafNodeId::new(next))
@@ -133,7 +133,8 @@ impl<TKey: TreeKey> LeafNode<TKey> {
 
         assert!(
             self.data.can_fit(size_increase),
-            "not enough capacity for the value, split node before inserting"
+            "not enough capacity for the value, split node before inserting: {:?}",
+            tracing::Span::current()
         );
 
         if let Some(delete_index) = delete_index {
@@ -147,8 +148,8 @@ impl<TKey: TreeKey> LeafNode<TKey> {
 
     pub fn split(
         &'_ mut self,
-        new_topology: &MaterializedTopology,
-    ) -> LeafNodeBuilder<TKey, (), MaterializedData<'_, TKey>> {
+        new_topology: &MaterializedTopology<TPageId>,
+    ) -> LeafNodeBuilder<TKey, TPageId, (), MaterializedData<'_, TKey>> {
         self.set_parent(new_topology.parent());
         self.set_previous(new_topology.previous());
         self.set_next(new_topology.next());
@@ -158,12 +159,12 @@ impl<TKey: TreeKey> LeafNode<TKey> {
         LeafNodeBuilder::new().with_data(new_node_entries)
     }
 
-    pub fn set_previous(&mut self, previous: Option<LeafNodeId>) {
-        self.leaf_header.previous = previous.into();
+    pub fn set_previous(&mut self, previous: Option<LeafNodeId<TPageId>>) {
+        self.leaf_header.previous = previous.map_or_else(TPageId::sentinel, |x| x.page());
     }
 
-    pub fn set_next(&mut self, next: Option<LeafNodeId>) {
-        self.leaf_header.next = next.into();
+    pub fn set_next(&mut self, next: Option<LeafNodeId<TPageId>>) {
+        self.leaf_header.next = next.map_or_else(TPageId::sentinel, |x| x.page());
     }
 
     pub(in crate::bplustree) fn first_key(&self) -> Option<TKey> {
@@ -191,34 +192,40 @@ impl<TKey: TreeKey> LeafNode<TKey> {
     }
 }
 
-impl<TKey: TreeKey> Node<TKey> for LeafNode<TKey> {
-    fn parent(&self) -> Option<InteriorNodeId> {
-        if self.header.parent == PageIndex::max() {
+impl<TKey: TreeKey, TPageId: PageId> Node<TKey, TPageId> for LeafNode<TKey, TPageId> {
+    fn parent(&self) -> Option<InteriorNodeId<TPageId>> {
+        if self.header.parent == TPageId::sentinel() {
             None
         } else {
             Some(InteriorNodeId::new(self.header.parent))
         }
     }
 
-    fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
+    fn set_parent(&mut self, parent: Option<InteriorNodeId<TPageId>>) {
         self.header.set_parent(parent);
     }
 }
 
-#[derive(Zeroable, Pod, Debug, Clone, Copy)]
+#[derive(Zeroable, Debug, Clone, Copy)]
 #[repr(C, align(8))]
-struct LeafNodeHeader {
-    previous: PageIndex,
-    next: PageIndex,
+struct LeafNodeHeader<TPageId> {
+    previous: TPageId,
+    next: TPageId,
 }
 
-const _: () = assert!(Size::of::<LeafNodeHeader>().is_equal(Size::of::<u64>().multiply(2)));
+unsafe impl<TPageId: PageId> Pod for LeafNodeHeader<TPageId> {}
+
+// TODO const _: () = assert!(Size::of::<LeafNodeHeader>().is_equal(Size::of::<u64>().multiply(2)));
 
 #[cfg(test)]
 mod test {
+    use crate::storage::in_memory::InMemoryPageId;
+
     use super::*;
 
-    fn collect_entries<TKey: TreeKey>(node: &LeafNode<TKey>) -> Vec<(TKey, Vec<u8>)> {
+    fn collect_entries<TKey: TreeKey, TPageId: PageId>(
+        node: &LeafNode<TKey, TPageId>,
+    ) -> Vec<(TKey, Vec<u8>)> {
         node.entries()
             .map(|x| (x.key(), x.value().to_vec()))
             .collect::<Vec<_>>()
@@ -226,7 +233,7 @@ mod test {
 
     #[test]
     fn insert_reverse() {
-        let mut node = LeafNode::new(None);
+        let mut node = LeafNode::<_, InMemoryPageId>::new(None);
         let _ = node.insert(1, &[0]);
         let _ = node.insert(0, &[0]);
 
@@ -235,7 +242,7 @@ mod test {
 
     #[test]
     fn same_key_overrides() {
-        let mut node = LeafNode::new(None);
+        let mut node = LeafNode::<_, InMemoryPageId>::new(None);
         let _ = node.insert(0, &[0]);
         let _ = node.insert(0, &[1]);
 
@@ -244,7 +251,7 @@ mod test {
 
     #[test]
     fn same_key_same_overrides_with_intermediate() {
-        let mut node = LeafNode::new(None);
+        let mut node = LeafNode::<_, InMemoryPageId>::new(None);
         let _ = node.insert(1, &[0]);
         let _ = node.insert(2, &[0]);
         let _ = node.insert(1, &[0]);

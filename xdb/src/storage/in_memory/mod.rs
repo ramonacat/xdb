@@ -3,6 +3,9 @@ mod block;
 mod transaction;
 mod version_manager;
 
+use bytemuck::{Pod, Zeroable};
+
+use crate::storage::PageId;
 use crate::storage::in_memory::bitmap::Bitmap;
 use crate::storage::in_memory::version_manager::VersionManager;
 use crate::sync::Arc;
@@ -19,9 +22,42 @@ pub struct InMemoryPageReservation<'storage> {
     page_guard: UninitializedPageGuard<'storage>,
 }
 
+#[derive(Debug, Zeroable, Pod, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct InMemoryPageId(PageIndex);
+
+impl PageId for InMemoryPageId {
+    fn sentinel() -> Self {
+        Self(PageIndex::max())
+    }
+
+    fn first() -> Self {
+        Self(PageIndex::zeroed())
+    }
+
+    fn value(&self) -> u64 {
+        self.0.value()
+    }
+}
+
+impl InMemoryPageId {
+    #[must_use]
+    pub const fn from_value(value: u64) -> Self {
+        Self(PageIndex::from_value(value))
+    }
+}
+
+impl From<InMemoryPageId> for [InMemoryPageId; 1] {
+    fn from(value: InMemoryPageId) -> Self {
+        [value]
+    }
+}
+
 impl<'storage> PageReservation<'storage> for InMemoryPageReservation<'storage> {
-    fn index(&self) -> PageIndex {
-        self.page_guard.physical_index()
+    type Storage = InMemoryStorage;
+
+    fn index(&self) -> InMemoryPageId {
+        InMemoryPageId(self.page_guard.physical_index())
     }
 }
 
@@ -54,10 +90,11 @@ impl InMemoryStorage {
 }
 
 impl Storage for InMemoryStorage {
-    type Transaction<'a> = InMemoryTransaction<'a>;
     type PageReservation<'a> = InMemoryPageReservation<'a>;
+    type Transaction<'a> = InMemoryTransaction<'a>;
+    type PageId = InMemoryPageId;
 
-    fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError> {
+    fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError<Self::PageId>> {
         Ok(InMemoryTransaction::new(self))
     }
 }

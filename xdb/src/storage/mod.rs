@@ -2,7 +2,7 @@ pub mod in_memory;
 pub mod instrumented;
 
 use crate::sync::atomic::{AtomicU64, Ordering};
-use std::{fmt::Debug, num::NonZeroU64};
+use std::{fmt::Debug, hash::Hash, num::NonZeroU64};
 
 use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
 use thiserror::Error;
@@ -10,12 +10,12 @@ use thiserror::Error;
 use crate::page::Page;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
-pub enum StorageError {
+pub enum StorageError<T: PageId> {
     #[error("The page at index {0:?} does not exist")]
-    PageNotFound(PageIndex),
+    PageNotFound(T),
     #[error("Would deadlock when locking {0:?}")]
     // TODO this should also have a transaction ID
-    Deadlock(PageIndex),
+    Deadlock(T),
 
     #[error("out of space")]
     OutOfSpace,
@@ -27,6 +27,7 @@ pub enum StorageError {
 // that should simplify the matters of logical/physical indices
 // TODO the index should have some sort of storage id (can we have a type-level [lifetime?] tag that ties it to
 // an instance of a block?)
+// TODO move this deeper, this should be only used internally for the storage implementation
 pub struct PageIndex(u64);
 
 impl PageIndex {
@@ -51,13 +52,9 @@ impl PageIndex {
 }
 
 pub trait PageReservation<'storage> {
-    fn index(&self) -> PageIndex;
-}
+    type Storage: Storage;
 
-impl From<PageIndex> for [PageIndex; 1] {
-    fn from(value: PageIndex) -> Self {
-        [value]
-    }
+    fn index(&self) -> <<Self as PageReservation<'storage>>::Storage as Storage>::PageId;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -86,10 +83,18 @@ impl TransactionalTimestamp {
     }
 }
 
-// TODO we should get rid of PageIndices in the public API here - it's up to the storage to talk
-// with the lower layers using PageIndex, but the higher levels don't need to know all the
-// mechanics of that (e.g. multiple versions of the page existing), and just need to be able to
-// refer to a page
+// TODO instead of making this type Pod, could/should it have `serialize` and `deserialize`
+// methods?
+pub trait PageId: Pod + Debug + Into<[Self; 1]> + Eq + Hash {
+    fn sentinel() -> Self;
+    fn first() -> Self;
+
+    fn value(&self) -> u64;
+}
+
+type PageIdOf<T> = <T as Storage>::PageId;
+type ErrorOf<T> = StorageError<PageIdOf<T>>;
+
 pub trait Transaction<'storage>: Send + Debug {
     type Storage: Storage + 'storage;
 
@@ -97,43 +102,46 @@ pub trait Transaction<'storage>: Send + Debug {
     // TODO unify get and write, don't take callbacks, return a ref with the same lifetime as &self
     fn read<T, const N: usize>(
         &mut self,
-        indices: impl Into<[PageIndex; N]>,
+        indices: impl Into<[PageIdOf<Self::Storage>; N]>,
         read: impl FnOnce([&Page; N]) -> T,
-    ) -> Result<T, StorageError>;
+    ) -> Result<T, ErrorOf<Self::Storage>>;
 
     fn write<T, const N: usize>(
         &mut self,
-        indices: impl Into<[PageIndex; N]>,
+        indices: impl Into<[PageIdOf<Self::Storage>; N]>,
         write: impl FnOnce([&mut Page; N]) -> T,
-    ) -> Result<T, StorageError>;
+    ) -> Result<T, ErrorOf<Self::Storage>>;
 
     fn reserve(
         &mut self,
-    ) -> Result<<Self::Storage as Storage>::PageReservation<'storage>, StorageError>;
+    ) -> Result<<Self::Storage as Storage>::PageReservation<'storage>, ErrorOf<Self::Storage>>;
 
     fn insert_reserved(
         &mut self,
         reservation: <Self::Storage as Storage>::PageReservation<'storage>,
         page: Page,
-    ) -> Result<(), StorageError>;
+    ) -> Result<(), ErrorOf<Self::Storage>>;
 
-    fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError>;
+    fn insert(&mut self, page: Page) -> Result<PageIdOf<Self::Storage>, ErrorOf<Self::Storage>>;
 
-    fn delete(&mut self, page: PageIndex) -> Result<(), StorageError>;
+    fn delete(&mut self, page: PageIdOf<Self::Storage>) -> Result<(), ErrorOf<Self::Storage>>;
 
-    fn commit(self) -> Result<(), StorageError>;
-    fn rollback(self) -> Result<(), StorageError>;
+    fn commit(self) -> Result<(), ErrorOf<Self::Storage>>;
+    fn rollback(self) -> Result<(), ErrorOf<Self::Storage>>;
 }
 
 pub trait Storage: Send + Sync + Debug {
-    type PageReservation<'storage>: PageReservation<'storage>
+    type PageReservation<'storage>: PageReservation<'storage, Storage = Self>
     where
         Self: 'storage;
+
     type Transaction<'storage>: Transaction<'storage, Storage = Self>
     where
         Self: 'storage;
 
-    fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError>
+    type PageId: PageId;
+
+    fn transaction(&self) -> Result<Self::Transaction<'_>, ErrorOf<Self>>
     where
         Self: Sized;
 }

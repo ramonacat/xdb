@@ -56,7 +56,7 @@ fn execute_actions<TStorage: Storage, TKey: TreeKey, const KEY_SIZE: usize>(
     actions: impl Iterator<Item = TreeAction<TKey, KEY_SIZE>>,
     after_action: impl Fn(),
     transaction_commit: impl Fn(Vec<TransactionAction<TKey>>),
-) -> Result<(), TreeError> {
+) -> Result<(), TreeError<TStorage::PageId>> {
     let mut transaction = tree.transaction().unwrap();
 
     let mut current_transaction_actions = vec![];

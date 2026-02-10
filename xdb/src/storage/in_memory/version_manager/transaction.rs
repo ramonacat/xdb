@@ -1,4 +1,5 @@
 use crate::storage::in_memory::{
+    InMemoryPageId,
     block::{PageReadGuard, PageWriteGuard},
     version_manager::{
         TransactionPage, TransactionPageAction, get_matching_version,
@@ -146,7 +147,9 @@ impl<'storage> VersionManagedTransaction<'storage> {
     // page)
     // TODO this should be moved to some allocator struct probably?
     #[allow(clippy::large_types_passed_by_value)]
-    fn allocate_cow_copy(&self) -> Result<UninitializedPageGuard<'storage>, StorageError> {
+    fn allocate_cow_copy(
+        &self,
+    ) -> Result<UninitializedPageGuard<'storage>, StorageError<InMemoryPageId>> {
         if let Some(recycled) = self.get_recycled_page() {
             debug!(
                 physical_index = ?recycled.physical_index(),
@@ -195,7 +198,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     pub(crate) fn read(
         &mut self,
         index: PageIndex,
-    ) -> Result<PageReadGuard<'storage>, StorageError> {
+    ) -> Result<PageReadGuard<'storage>, StorageError<InMemoryPageId>> {
         if let Some(entry) = self.pages.get(&index) {
             match entry.action {
                 crate::storage::in_memory::version_manager::TransactionPageAction::Read
@@ -208,9 +211,9 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
                     Ok(lock)
                 }
-                crate::storage::in_memory::version_manager::TransactionPageAction::Delete => {
-                    Err(StorageError::PageNotFound(entry.logical_index))
-                }
+                crate::storage::in_memory::version_manager::TransactionPageAction::Delete => Err(
+                    StorageError::PageNotFound(InMemoryPageId(entry.logical_index)),
+                ),
                 crate::storage::in_memory::version_manager::TransactionPageAction::Update(
                     cow_index,
                 ) => {
@@ -241,14 +244,14 @@ impl<'storage> VersionManagedTransaction<'storage> {
     pub(crate) fn write(
         &mut self,
         index: PageIndex,
-    ) -> Result<PageWriteGuard<'storage>, StorageError> {
+    ) -> Result<PageWriteGuard<'storage>, StorageError<InMemoryPageId>> {
         if let Some(entry) = self.pages.get_mut(&index) {
             assert!(entry.logical_index == index);
 
             match entry.action {
                 TransactionPageAction::Read => {}
                 TransactionPageAction::Delete => {
-                    return Err(StorageError::PageNotFound(index));
+                    return Err(StorageError::PageNotFound(InMemoryPageId(index)));
                 }
                 TransactionPageAction::Update(cow_page_index) => {
                     let cow_page = self.version_manager.data.get(cow_page_index);
@@ -275,7 +278,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
         if main.next_version().is_some() {
             // TODO not a deadlock, but optimistic concurrency failure
-            return Err(StorageError::Deadlock(index));
+            return Err(StorageError::Deadlock(InMemoryPageId(index)));
         }
 
         let cow = self.allocate_cow_copy()?;
@@ -292,7 +295,9 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     #[instrument(skip(self))]
-    pub(crate) fn reserve(&self) -> Result<UninitializedPageGuard<'storage>, StorageError> {
+    pub(crate) fn reserve(
+        &self,
+    ) -> Result<UninitializedPageGuard<'storage>, StorageError<InMemoryPageId>> {
         self.allocate_cow_copy()
     }
 
@@ -303,7 +308,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         &mut self,
         page_guard: UninitializedPageGuard<'storage>,
         page: Page,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), StorageError<InMemoryPageId>> {
         let logical_index = page_guard.physical_index();
         page_guard.initialize(page);
 
@@ -320,7 +325,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     #[instrument(skip(self), fields(logical_index = ?page))]
-    pub(crate) fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {
+    pub(crate) fn delete(&mut self, page: PageIndex) -> Result<(), StorageError<InMemoryPageId>> {
         let inserted = self.pages.insert(
             page,
             TransactionPage {
@@ -346,7 +351,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     #[instrument(skip(self), fields(id = ?self.id))]
-    pub(crate) fn commit(&mut self) -> Result<(), StorageError> {
+    pub(crate) fn commit(&mut self) -> Result<(), StorageError<InMemoryPageId>> {
         self.committed = true;
 
         // TODO make the commit consistent in event of a crash:

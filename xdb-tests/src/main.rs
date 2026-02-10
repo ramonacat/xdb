@@ -18,6 +18,7 @@ use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::find;
 use xdb::bplustree::algorithms::insert::insert;
 use xdb::bplustree::debug::assert_properties;
+use xdb::storage::in_memory::InMemoryPageId;
 
 use arbitrary::{Arbitrary, Unstructured};
 use xdb::{
@@ -61,7 +62,10 @@ enum Command<T: TreeKey + for<'a> Arbitrary<'a>> {
 }
 
 impl<T: TreeKey + for<'a> Arbitrary<'a>> Command<T> {
-    fn run(&self, transaction: &mut TreeTransaction<InMemoryStorage, T>) -> Result<(), TreeError> {
+    fn run(
+        &self,
+        transaction: &mut TreeTransaction<InMemoryStorage, T>,
+    ) -> Result<(), TreeError<InMemoryPageId>> {
         match self {
             Command::Insert(key, value) => insert(transaction, *key, &value.0).map(|_| ())?,
             Command::Delete(key) => {
@@ -92,7 +96,10 @@ impl<T: TreeKey + for<'a> Arbitrary<'a>> TransactionCommands<T> {
         TransactionCommands::arbitrary(&mut unstructured).unwrap()
     }
 
-    fn run(&self, mut transaction: TreeTransaction<InMemoryStorage, T>) -> Result<(), TreeError> {
+    fn run(
+        &self,
+        mut transaction: TreeTransaction<InMemoryStorage, T>,
+    ) -> Result<(), TreeError<InMemoryPageId>> {
         for command in &self.commands {
             command.run(&mut transaction)?;
         }
@@ -111,8 +118,8 @@ impl<T: TreeKey + for<'a> Arbitrary<'a>> TransactionCommands<T> {
 // handle the latter here)
 fn retry_on_deadlock<T: TreeKey + for<'a> Arbitrary<'a>>(
     tree: &Tree<InMemoryStorage, T>,
-    callable: impl Fn(TreeTransaction<InMemoryStorage, T>) -> Result<(), TreeError>,
-) -> Result<(), TreeError> {
+    callable: impl Fn(TreeTransaction<InMemoryStorage, T>) -> Result<(), TreeError<InMemoryPageId>>,
+) -> Result<(), TreeError<InMemoryPageId>> {
     for i in 0..128 {
         let transaction = tree.transaction().unwrap();
 

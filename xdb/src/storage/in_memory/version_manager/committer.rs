@@ -1,3 +1,4 @@
+use crate::storage::in_memory::InMemoryPageId;
 use crate::storage::in_memory::version_manager::{
     TransactionPage, TransactionPageAction, get_matching_version,
 };
@@ -23,13 +24,14 @@ use crate::{
 #[derive(Debug)]
 pub struct CommitRequest {
     is_done: Pin<Arc<Futex>>,
-    response: Arc<Mutex<Option<Result<(), StorageError>>>>,
+    #[allow(clippy::type_complexity)]
+    response: Arc<Mutex<Option<Result<(), StorageError<InMemoryPageId>>>>>,
     id: TransactionId,
     pages: HashMap<PageIndex, TransactionPage>,
 }
 
 impl CommitRequest {
-    fn respond(self, response: Result<(), StorageError>) {
+    fn respond(self, response: Result<(), StorageError<InMemoryPageId>>) {
         *self.response.lock().unwrap() = Some(response);
 
         self.is_done.as_ref().atomic().store(1, Ordering::Release);
@@ -108,7 +110,7 @@ impl CommitterThread<'_, '_> {
         &self,
         id: TransactionId,
         pages: HashMap<PageIndex, TransactionPage>,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), StorageError<InMemoryPageId>> {
         let commit_handle = self.log.start_commit(id).unwrap();
         let mut locks = HashMap::new();
 
@@ -141,7 +143,7 @@ impl CommitterThread<'_, '_> {
             self.rollback(pages, commit_handle);
 
             // TODO this is not a deadlock, but an optimistic concurrency race
-            return Err(StorageError::Deadlock(rollback_index));
+            return Err(StorageError::Deadlock(InMemoryPageId(rollback_index)));
         }
 
         trace!(
@@ -256,7 +258,7 @@ impl Committer {
         &self,
         id: TransactionId,
         pages: HashMap<PageIndex, TransactionPage>,
-    ) -> Result<(), StorageError> {
+    ) -> Result<(), StorageError<InMemoryPageId>> {
         let is_done = Arc::pin(Futex::new(0));
         let response = Arc::new(Mutex::new(None));
         self.tx

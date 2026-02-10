@@ -1,3 +1,5 @@
+// TODO nodes should no know about PageId at all and just use a simple representation (u64 or
+// somethings) that can be deserialized as needed
 pub(super) mod interior;
 pub(super) mod leaf;
 
@@ -7,100 +9,100 @@ use crate::Size;
 use crate::bplustree::node::leaf::LeafNode;
 use crate::bplustree::{TreeKey, node::interior::InteriorNode};
 use crate::page::PAGE_DATA_SIZE;
-use crate::storage::PageIndex;
+use crate::storage::PageId;
 use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, must_cast_ref};
 
-pub(super) trait NodeId: Copy + PartialEq {
-    type Node<TKey>: Node<TKey>
+pub(super) trait NodeId<TPageId: PageId>: Copy + PartialEq {
+    type Node<TKey>: Node<TKey, TPageId>
     where
         TKey: TreeKey;
 
-    fn page(&self) -> PageIndex;
+    fn page(&self) -> TPageId;
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub(super) struct AnyNodeId(PageIndex);
+pub(super) struct AnyNodeId<T: PageId>(T);
 
-impl From<LeafNodeId> for AnyNodeId {
-    fn from(value: LeafNodeId) -> Self {
+impl<TPageId: PageId> From<LeafNodeId<TPageId>> for AnyNodeId<TPageId> {
+    fn from(value: LeafNodeId<TPageId>) -> Self {
         Self(value.page())
     }
 }
 
-impl From<InteriorNodeId> for AnyNodeId {
-    fn from(value: InteriorNodeId) -> Self {
+impl<T: PageId> From<InteriorNodeId<T>> for AnyNodeId<T> {
+    fn from(value: InteriorNodeId<T>) -> Self {
         Self(value.page())
     }
 }
 
-impl AnyNodeId {
-    pub fn new(index: PageIndex) -> Self {
-        assert!(index != PageIndex::max());
+impl<T: PageId> AnyNodeId<T> {
+    pub fn new(index: T) -> Self {
+        assert!(index != T::sentinel());
 
         Self(index)
     }
 }
 
-impl NodeId for AnyNodeId {
+impl<T: PageId> NodeId<T> for AnyNodeId<T> {
     type Node<TKey>
-        = AnyNode<TKey>
+        = AnyNode<TKey, T>
     where
         TKey: TreeKey;
 
-    fn page(&self) -> PageIndex {
+    fn page(&self) -> T {
         self.0
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub(super) struct LeafNodeId(PageIndex);
+pub(super) struct LeafNodeId<T: PageId>(T);
 
-impl LeafNodeId {
+impl<T: PageId> LeafNodeId<T> {
     // TODO is there a way to enforce validity in this API?
-    pub const fn from_any(unknown: AnyNodeId) -> Self {
+    pub const fn from_any(unknown: AnyNodeId<T>) -> Self {
         Self(unknown.0)
     }
 
-    pub fn new(index: PageIndex) -> Self {
-        assert!(index != PageIndex::max());
+    pub fn new(index: T) -> Self {
+        assert!(index != T::sentinel());
 
         Self(index)
     }
 }
 
-impl NodeId for LeafNodeId {
+impl<T: PageId> NodeId<T> for LeafNodeId<T> {
     type Node<TKey>
-        = LeafNode<TKey>
+        = LeafNode<TKey, T>
     where
         TKey: TreeKey;
 
-    fn page(&self) -> PageIndex {
+    fn page(&self) -> T {
         self.0
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub(super) struct InteriorNodeId(PageIndex);
+pub(super) struct InteriorNodeId<T: PageId>(T);
 
-impl InteriorNodeId {
-    pub(crate) fn new(index: PageIndex) -> Self {
-        assert!(index != PageIndex::max());
+impl<T: PageId> InteriorNodeId<T> {
+    pub(crate) fn new(index: T) -> Self {
+        assert!(index != T::sentinel());
 
         Self(index)
     }
 
-    pub(crate) fn from_any(other: AnyNodeId) -> Self {
+    pub(crate) fn from_any(other: AnyNodeId<T>) -> Self {
         Self::new(other.0)
     }
 }
 
-impl NodeId for InteriorNodeId {
+impl<T: PageId> NodeId<T> for InteriorNodeId<T> {
     type Node<TKey>
-        = InteriorNode<TKey>
+        = InteriorNode<TKey, T>
     where
         TKey: TreeKey;
 
-    fn page(&self) -> PageIndex {
+    fn page(&self) -> T {
         self.0
     }
 }
@@ -113,18 +115,23 @@ bitflags::bitflags! {
     }
 }
 
-#[derive(Debug, Pod, Zeroable, Clone, Copy)]
+#[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
-pub(super) struct NodeHeader {
+pub(super) struct NodeHeader<T> {
     flags: NodeFlags,
     _unused1: u16,
     _unused2: u32,
-    parent: PageIndex,
+    parent: T,
 }
-const _: () = assert!(Size::of::<NodeHeader>().is_equal(Size::of::<u64>().multiply(2)));
 
-impl NodeHeader {
-    const fn new_interior(parent: PageIndex) -> Self {
+// TODO we should add a size check here probably, so that padding doesn't get messed up?
+unsafe impl<T: Pod + Copy + Clone> Pod for NodeHeader<T> {}
+
+impl<T: PageId> NodeHeader<T> {
+    const _SIZE_AS_EXPECTED: () =
+        assert!(Size::of::<Self>().is_equal(Size::of::<u64>().multiply(2)));
+
+    const fn new_interior(parent: T) -> Self {
         Self {
             flags: NodeFlags::INTERIOR,
             _unused1: 0,
@@ -133,7 +140,7 @@ impl NodeHeader {
         }
     }
 
-    const fn new_leaf(parent: PageIndex) -> Self {
+    const fn new_leaf(parent: T) -> Self {
         Self {
             flags: NodeFlags::empty(),
             _unused1: 0,
@@ -142,62 +149,63 @@ impl NodeHeader {
         }
     }
 
-    fn parent(&self) -> Option<InteriorNodeId> {
-        if self.parent == PageIndex::max() {
+    fn parent(&self) -> Option<InteriorNodeId<T>> {
+        if self.parent == T::sentinel() {
             None
         } else {
             Some(InteriorNodeId::new(self.parent))
         }
     }
 
-    fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
-        self.parent = parent.map_or_else(PageIndex::max, |x| x.page());
+    fn set_parent(&mut self, parent: Option<InteriorNodeId<T>>) {
+        self.parent = parent.map_or_else(T::sentinel, |x| x.page());
     }
 }
 
-const NODE_DATA_SIZE: Size = PAGE_DATA_SIZE.subtract(Size::of::<NodeHeader>());
-
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
-pub(super) struct AnyNode<TKey> {
-    header: NodeHeader,
-    data: [u8; NODE_DATA_SIZE.as_bytes()],
+pub(super) struct AnyNode<TKey, TPageId> {
+    header: NodeHeader<TPageId>,
+    // TODO the size here is hardcoded with the assumption that TPageId's size is u64
+    data: [u8; PAGE_DATA_SIZE
+        .subtract(Size::of::<u64>().multiply(2))
+        .as_bytes()],
     _key: PhantomData<TKey>,
 }
 
 // SAFETY: this struct does not have padding and can be initialized to zero, but can't
 // automatically derive Pod since it contains a PhantomData (which does not actually affect the
 // layout)
-unsafe impl<TKey: TreeKey> Pod for AnyNode<TKey> {}
+unsafe impl<TKey: TreeKey, TPageId: PageId> Pod for AnyNode<TKey, TPageId> {}
 
-pub(super) trait Node<TKey>: AnyBitPattern + NoUninit {
+pub(super) trait Node<TKey, TPageId: PageId>: AnyBitPattern + NoUninit {
     const _ASSERT_SIZE: () = assert!(Size::of::<Self>().is_equal(PAGE_DATA_SIZE));
 
-    fn parent(&self) -> Option<InteriorNodeId>;
-    fn set_parent(&mut self, parent: Option<InteriorNodeId>);
+    fn parent(&self) -> Option<InteriorNodeId<TPageId>>;
+    fn set_parent(&mut self, parent: Option<InteriorNodeId<TPageId>>);
 }
 
-impl<TKey: TreeKey> Node<TKey> for AnyNode<TKey> {
-    fn parent(&self) -> Option<InteriorNodeId> {
+impl<TKey: TreeKey, TPageId: PageId> Node<TKey, TPageId> for AnyNode<TKey, TPageId> {
+    fn parent(&self) -> Option<InteriorNodeId<TPageId>> {
         self.header.parent()
     }
 
-    fn set_parent(&mut self, parent: Option<InteriorNodeId>) {
+    fn set_parent(&mut self, parent: Option<InteriorNodeId<TPageId>>) {
         self.header.set_parent(parent);
     }
 }
 
-pub(super) enum AnyNodeKind<'node, TKey: TreeKey> {
-    Interior(&'node InteriorNode<TKey>),
-    Leaf(&'node LeafNode<TKey>),
+pub(super) enum AnyNodeKind<'node, TKey: TreeKey, TPageId: PageId> {
+    Interior(&'node InteriorNode<TKey, TPageId>),
+    Leaf(&'node LeafNode<TKey, TPageId>),
 }
 
-impl<TKey: TreeKey> AnyNode<TKey> {
+impl<TKey: TreeKey, TPageId: PageId> AnyNode<TKey, TPageId> {
     pub const fn is_leaf(&self) -> bool {
         !self.header.flags.contains(NodeFlags::INTERIOR)
     }
 
-    pub(crate) const fn as_any(&self) -> AnyNodeKind<'_, TKey> {
+    pub(crate) const fn as_any(&self) -> AnyNodeKind<'_, TKey, TPageId> {
         if self.is_leaf() {
             AnyNodeKind::Leaf(must_cast_ref(self))
         } else {

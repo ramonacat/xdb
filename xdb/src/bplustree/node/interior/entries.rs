@@ -1,25 +1,24 @@
-use crate::Size;
+use crate::{Size, page::PAGE_DATA_SIZE, storage::PageId};
 use std::marker::PhantomData;
 
 use bytemuck::{Pod, Zeroable, bytes_of, cast_slice, cast_slice_mut};
 
-use crate::{
-    bplustree::{TreeKey, node::NODE_DATA_SIZE},
-    storage::PageIndex,
-};
+use crate::bplustree::TreeKey;
 
-const INTERIOR_NODE_DATA_SIZE: Size = NODE_DATA_SIZE.subtract(Size::of::<u64>());
+// TODO this hardcodes magic number and depends on specific size of NodeHeader and TPageId, fix it
+const INTERIOR_NODE_DATA_SIZE: Size = PAGE_DATA_SIZE.subtract(Size::of::<u64>().multiply(3));
+
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
-pub struct InteriorNodeEntries<TKey> {
+pub struct InteriorNodeEntries<TKey, TPageId> {
     key_count: u16,
     _unused1: u16,
     _unused2: u32,
 
-    data: InteriorNodeData<TKey>,
+    data: InteriorNodeData<TKey, TPageId>,
 }
 
-impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
+impl<TKey: TreeKey, TPageId: PageId> InteriorNodeEntries<TKey, TPageId> {
     pub(crate) fn debug(&self) -> String {
         self.data.debug(self.key_count())
     }
@@ -27,20 +26,21 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
 
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
 // automatically if not for the PhantomData
-unsafe impl<TKey: TreeKey> Pod for InteriorNodeEntries<TKey> {}
+unsafe impl<TKey: TreeKey, TPageId: PageId> Pod for InteriorNodeEntries<TKey, TPageId> {}
 
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]
-struct InteriorNodeData<TKey> {
+struct InteriorNodeData<TKey, TPageId> {
     data: [u8; INTERIOR_NODE_DATA_SIZE.as_bytes()],
     _key: PhantomData<TKey>,
+    _page_id: PhantomData<TPageId>,
 }
 
 // SAFETY: this is sound, because the struct has no padding and would be able to derive Pod
 // automatically if not for the PhantomData
-unsafe impl<TKey: TreeKey> Pod for InteriorNodeData<TKey> {}
+unsafe impl<TKey: TreeKey, TPageId: PageId> Pod for InteriorNodeData<TKey, TPageId> {}
 
-impl<TKey: TreeKey> InteriorNodeData<TKey> {
+impl<TKey: TreeKey, TPageId: PageId> InteriorNodeData<TKey, TPageId> {
     const VALUES_OFFSET: Size = Size::of::<TKey>().multiply(Self::KEY_CAPACITY);
 
     // n - max number of keys
@@ -49,10 +49,10 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
     // size = key_size*n + value_size*n + value_size
     // size - value_size = key_size*n + value_size*n
     // (size - value_size)/(key_size + value_size) = n
-    const KEY_CAPACITY: usize = (INTERIOR_NODE_DATA_SIZE.subtract(Size::of::<PageIndex>()))
-        .divide(Size::of::<TKey>().add(Size::of::<PageIndex>()));
+    const KEY_CAPACITY: usize = (INTERIOR_NODE_DATA_SIZE.subtract(Size::of::<TPageId>()))
+        .divide(Size::of::<TKey>().add(Size::of::<TPageId>()));
 
-    fn from_raw_data(keys: &[TKey], values: &[PageIndex]) -> Self {
+    fn from_raw_data(keys: &[TKey], values: &[TPageId]) -> Self {
         assert!(Size::of_val(keys) < Self::VALUES_OFFSET);
 
         let mut data = [0; _];
@@ -65,6 +65,7 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
         Self {
             data,
             _key: PhantomData,
+            _page_id: PhantomData,
         }
     }
 
@@ -72,7 +73,7 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
         cast_slice(&self.data[..Self::VALUES_OFFSET.as_bytes()])
     }
 
-    fn values(&self) -> &[PageIndex] {
+    fn values(&self) -> &[TPageId] {
         cast_slice(&self.data[Self::VALUES_OFFSET.as_bytes()..])
     }
 
@@ -80,7 +81,7 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
         cast_slice_mut(&mut self.data[..Self::VALUES_OFFSET.as_bytes()])
     }
 
-    fn values_mut(&mut self) -> &mut [PageIndex] {
+    fn values_mut(&mut self) -> &mut [TPageId] {
         cast_slice_mut(&mut self.data[Self::VALUES_OFFSET.as_bytes()..])
     }
 
@@ -156,8 +157,8 @@ impl ValueIndex {
     }
 }
 
-impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
-    pub fn new(left: PageIndex, key: TKey, right: PageIndex) -> Self {
+impl<TKey: TreeKey, TPageId: PageId> InteriorNodeEntries<TKey, TPageId> {
+    pub fn new(left: TPageId, key: TKey, right: TPageId) -> Self {
         Self {
             key_count: 1,
             _unused1: 0,
@@ -171,7 +172,7 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     pub fn has_spare_capacity(&self) -> bool {
-        self.key_count() + 1 < InteriorNodeData::<TKey>::KEY_CAPACITY
+        self.key_count() + 1 < InteriorNodeData::<TKey, TPageId>::KEY_CAPACITY
     }
 
     pub fn split(&mut self) -> (TKey, Self) {
@@ -223,8 +224,8 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
         self.key_count += entries.key_count + 1;
     }
 
-    pub fn insert_at(&mut self, index: KeyIndex, key: TKey, value: PageIndex) {
-        assert!(self.key_count() < InteriorNodeData::<TKey>::KEY_CAPACITY);
+    pub fn insert_at(&mut self, index: KeyIndex, key: TKey, value: TPageId) {
+        assert!(self.key_count() < InteriorNodeData::<TKey, TPageId>::KEY_CAPACITY);
 
         debug_assert!(bytes_of(&key) != vec![0; size_of::<TKey>()]);
 
@@ -255,14 +256,14 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
             .copy_from_slice(&values_to_move);
     }
 
-    pub fn value_at(&self, index: ValueIndex) -> Option<PageIndex> {
+    pub fn value_at(&self, index: ValueIndex) -> Option<TPageId> {
         if index.0 > self.key_count() {
             return None;
         }
 
         let value = self.data.values()[index.0];
 
-        assert!(value != PageIndex::max());
+        assert!(value != TPageId::sentinel());
 
         Some(value)
     }
@@ -277,11 +278,11 @@ impl<TKey: TreeKey> InteriorNodeEntries<TKey> {
     }
 
     pub fn needs_merge(&self) -> bool {
-        2 * self.key_count() <= InteriorNodeData::<TKey>::KEY_CAPACITY
+        2 * self.key_count() <= InteriorNodeData::<TKey, TPageId>::KEY_CAPACITY
     }
 
     pub fn can_fit_merge(&self, right: &Self) -> bool {
-        self.key_count() + right.key_count() < InteriorNodeData::<TKey>::KEY_CAPACITY
+        self.key_count() + right.key_count() < InteriorNodeData::<TKey, TPageId>::KEY_CAPACITY
     }
 
     pub fn key_at(&self, index: KeyIndex) -> Option<TKey> {

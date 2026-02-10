@@ -1,5 +1,6 @@
 use crate::bplustree::node::AnyNodeKind;
 use crate::bplustree::{AnyNodeId, Node, NodeId, TreeKey, TreeTransaction};
+use crate::storage::PageId;
 use crate::{
     bplustree::{Tree, TreeError},
     storage::Storage,
@@ -7,7 +8,10 @@ use crate::{
 use std::fmt::Write;
 
 impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
-    pub fn to_dot(&self, stringify_value: impl Fn(&[u8]) -> String) -> Result<String, TreeError> {
+    pub fn to_dot(
+        &self,
+        stringify_value: impl Fn(&[u8]) -> String,
+    ) -> Result<String, TreeError<T::PageId>> {
         let mut output = String::new();
 
         let mut transaction = self.transaction()?;
@@ -22,9 +26,9 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
 
     fn node_to_dot(
         transaction: &mut TreeTransaction<'_, T, TKey>,
-        node_index: AnyNodeId,
+        node_index: AnyNodeId<T::PageId>,
         stringify_value: &impl Fn(&[u8]) -> String,
-    ) -> Result<String, TreeError> {
+    ) -> Result<String, TreeError<T::PageId>> {
         let (mut output, children) = transaction.read_nodes(node_index, |node| {
             let mut output = String::new();
 

@@ -13,12 +13,12 @@ use crate::{
 fn create_new_root<'storage, TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<'storage, TStorage, TKey>,
     reservation: <TStorage as Storage>::PageReservation<'storage>,
-    left: AnyNodeId,
+    left: AnyNodeId<TStorage::PageId>,
     key: TKey,
-    right: AnyNodeId,
-) -> Result<(), TreeError> {
+    right: AnyNodeId<TStorage::PageId>,
+) -> Result<(), TreeError<TStorage::PageId>> {
     let new_root_id = InteriorNodeId::new(reservation.index());
-    let new_root = InteriorNode::<TKey>::new(None, left, key, right);
+    let new_root = InteriorNode::<TKey, TStorage::PageId>::new(None, left, key, right);
 
     transaction.insert_reserved(reservation, new_root)?;
     transaction.write_header(|header| header.root = new_root_id.page())?;
@@ -28,7 +28,7 @@ fn create_new_root<'storage, TStorage: Storage, TKey: TreeKey>(
 
 fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-) -> Result<(), TreeError> {
+) -> Result<(), TreeError<TStorage::PageId>> {
     let root_id = transaction.get_root()?;
 
     assert!(transaction.read_nodes(root_id, super::super::node::AnyNode::is_leaf)?);
@@ -65,8 +65,8 @@ fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
 
 fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    split_id: InteriorNodeId,
-) -> Result<bool, TreeError> {
+    split_id: InteriorNodeId<TStorage::PageId>,
+) -> Result<bool, TreeError<TStorage::PageId>> {
     let parent_id = transaction.read_nodes(split_id, Node::parent)?;
 
     if let Some(parent) = parent_id
@@ -136,10 +136,10 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
 
 fn insert_child<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    parent_id: InteriorNodeId,
+    parent_id: InteriorNodeId<TStorage::PageId>,
     key: TKey,
-    child_id: AnyNodeId,
-) -> Result<(), TreeError> {
+    child_id: AnyNodeId<TStorage::PageId>,
+) -> Result<(), TreeError<TStorage::PageId>> {
     transaction.write_nodes(parent_id, |node| node.insert_node(key, child_id))?;
     transaction.write_nodes(child_id, |x| x.set_parent(Some(parent_id)))?;
 
@@ -148,13 +148,17 @@ fn insert_child<TStorage: Storage, TKey: TreeKey>(
 
 fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    leaf_id: LeafNodeId,
-) -> Result<(), TreeError> {
+    leaf_id: LeafNodeId<TStorage::PageId>,
+) -> Result<(), TreeError<TStorage::PageId>> {
     let parent_id = transaction.read_nodes(leaf_id, Node::parent)?.unwrap();
 
     let has_spare_capacity = transaction.read_nodes(parent_id, InteriorNode::has_spare_capacity)?;
 
-    assert!(has_spare_capacity);
+    assert!(
+        has_spare_capacity,
+        "the node does not have spare capacity: {:?}",
+        tracing::Span::current()
+    );
 
     let new_leaf_reservation = transaction.reserve_node()?;
     let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index());
@@ -198,7 +202,7 @@ pub fn insert<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
     key: TKey,
     value: &[u8],
-) -> Result<(), TreeError> {
+) -> Result<(), TreeError<TStorage::PageId>> {
     let root_index = transaction.get_root()?;
     let target_node_id = leaf_search(transaction, root_index, key)?;
 

@@ -1,5 +1,6 @@
 use std::mem::MaybeUninit;
 use std::ptr::NonNull;
+use tracing::debug;
 use tracing::error;
 use tracing::instrument;
 use tracing::trace;
@@ -92,6 +93,13 @@ fn get_matching_version(
     assert!(main_lock.previous_version().is_none());
 
     while !main_lock.is_visible_at(timestamp) {
+        debug!(
+            "{logical_index:?}/{:?} not visible at {timestamp:?} ({:?}/{:?}), checking next",
+            main_lock.physical_index(),
+            main_lock.visible_from(),
+            main_lock.visible_until(),
+        );
+
         let Some(next) = main_lock.next_version() else {
             // TODO should we panic here? I think we should not be able to get to this
             // place if the database is in a valid state?

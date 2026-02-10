@@ -3,7 +3,10 @@ use bytemuck::{Pod, Zeroable};
 use crate::{
     Size,
     page::PAGE_DATA_SIZE,
-    storage::{PageIndex, StorageError, in_memory::block::Block},
+    storage::{
+        PageIndex, StorageError,
+        in_memory::{InMemoryPageId, block::Block},
+    },
 };
 
 #[derive(Debug, Zeroable, Pod, Clone, Copy)]
@@ -96,7 +99,7 @@ impl Bitmap {
         }
     }
 
-    pub fn set(&self, index: u64) -> Result<(), StorageError> {
+    pub fn set(&self, index: u64) -> Result<(), StorageError<InMemoryPageId>> {
         let bit_location = BitLocation::new(index);
         let mut page = self.block.get_or_allocate_zeroed(bit_location.page)?;
 

@@ -9,25 +9,25 @@ use crate::{
         algorithms::{last_leaf, leaf_search},
         node::{Node, interior::InteriorNode, leaf::LeafNode},
     },
-    storage::{Storage, StorageError},
+    storage::{PageId, Storage, StorageError},
 };
 
 #[must_use]
 #[derive(Debug, Error)]
-enum MergeError {
+enum MergeError<T: PageId> {
     #[error("nodes are not siblings")]
     NotSiblings,
     #[error("there is not enough capacity in the target node")]
     NotEnoughCapacity,
     #[error("tree error: {0:?}")]
-    Tree(#[from] TreeError),
+    Tree(#[from] TreeError<T>),
 }
 
 fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<'_, TStorage, TKey>,
-    left_id: LeafNodeId,
-    right_id: LeafNodeId,
-) -> Result<(), MergeError> {
+    left_id: LeafNodeId<TStorage::PageId>,
+    right_id: LeafNodeId<TStorage::PageId>,
+) -> Result<(), MergeError<TStorage::PageId>> {
     transaction.read_nodes((left_id, right_id), |(left, right)| {
         if left.parent() != right.parent() {
             Err(MergeError::NotSiblings)
@@ -62,10 +62,10 @@ fn merge_leaf_with<TStorage: Storage, TKey: TreeKey>(
 
 fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    left_id: InteriorNodeId,
-    right_id: InteriorNodeId,
-    parent_id: InteriorNodeId,
-) -> Result<(), MergeError> {
+    left_id: InteriorNodeId<TStorage::PageId>,
+    right_id: InteriorNodeId<TStorage::PageId>,
+    parent_id: InteriorNodeId<TStorage::PageId>,
+) -> Result<(), MergeError<TStorage::PageId>> {
     let last_right_leaf = last_leaf(transaction, right_id.into())?;
     let next = transaction.read_nodes(last_right_leaf, LeafNode::next)?;
 
@@ -116,8 +116,8 @@ fn merge_interior_node_with<TStorage: Storage, TKey: TreeKey>(
 
 fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    node_id: InteriorNodeId,
-) -> Result<(), TreeError> {
+    node_id: InteriorNodeId<TStorage::PageId>,
+) -> Result<(), TreeError<TStorage::PageId>> {
     if !transaction.read_nodes(node_id, InteriorNode::needs_merge)? {
         return Ok(());
     }
@@ -189,8 +189,8 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
 
 fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    leaf_id: LeafNodeId,
-) -> Result<(), TreeError> {
+    leaf_id: LeafNodeId<TStorage::PageId>,
+) -> Result<(), TreeError<TStorage::PageId>> {
     let (next, previous, parent) =
         transaction.read_nodes(leaf_id, |x| (x.next(), x.previous(), x.parent()))?;
 
@@ -233,7 +233,7 @@ fn merge_leaf<TStorage: Storage, TKey: TreeKey>(
 pub fn delete<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
     key: TKey,
-) -> Result<Option<Vec<u8>>, TreeError> {
+) -> Result<Option<Vec<u8>>, TreeError<TStorage::PageId>> {
     let root = transaction.get_root()?;
     let starting_leaf = leaf_search(transaction, root, key)?;
 

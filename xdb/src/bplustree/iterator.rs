@@ -3,21 +3,23 @@ use crate::{
         LeafNodeId, TreeError, TreeKey, TreeTransaction,
         algorithms::{first_leaf, last_leaf},
     },
-    storage::Storage,
+    storage::{PageId, Storage},
 };
 
-pub(super) type TreeIteratorItem<TKey> = Result<(TKey, Vec<u8>), TreeError>;
+pub(super) type TreeIteratorItem<TKey, TPageId> = Result<(TKey, Vec<u8>), TreeError<TPageId>>;
 
 pub(super) struct TreeIterator<'tree, T: Storage, TKey> {
     transaction: TreeTransaction<'tree, T, TKey>,
-    current_forward_leaf: LeafNodeId,
+    current_forward_leaf: LeafNodeId<T::PageId>,
     forward_index: usize,
-    current_backward_leaf: LeafNodeId,
+    current_backward_leaf: LeafNodeId<T::PageId>,
     backward_index: usize,
 }
 
 impl<'tree, T: Storage, TKey: TreeKey> TreeIterator<'tree, T, TKey> {
-    pub fn new(mut transaction: TreeTransaction<'tree, T, TKey>) -> Result<Self, TreeError> {
+    pub fn new(
+        mut transaction: TreeTransaction<'tree, T, TKey>,
+    ) -> Result<Self, TreeError<T::PageId>> {
         let root = transaction.get_root()?;
         let starting_leaf_forwards = first_leaf(&mut transaction, root)?;
         let starting_leaf_backwards = last_leaf(&mut transaction, root)?;
@@ -35,14 +37,14 @@ impl<'tree, T: Storage, TKey: TreeKey> TreeIterator<'tree, T, TKey> {
     }
 }
 
-enum IteratorResult<TKey> {
-    Value(TreeIteratorItem<TKey>),
-    Next(LeafNodeId),
+enum IteratorResult<TKey, TPageId: PageId> {
+    Value(TreeIteratorItem<TKey, TPageId>),
+    Next(LeafNodeId<TPageId>),
     None,
 }
 
 impl<T: Storage, TKey: TreeKey> Iterator for TreeIterator<'_, T, TKey> {
-    type Item = Result<(TKey, Vec<u8>), TreeError>;
+    type Item = Result<(TKey, Vec<u8>), TreeError<T::PageId>>;
 
     // TODO get rid of all the unwraps!
     fn next(&mut self) -> Option<Self::Item> {

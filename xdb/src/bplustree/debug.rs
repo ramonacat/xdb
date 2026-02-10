@@ -57,13 +57,14 @@ pub fn assert_properties<TStorage: Storage, TKey: TreeKey>(
 
 fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    start_id: Option<AnyNodeId>,
+    start_id: Option<AnyNodeId<TStorage::PageId>>,
     start_min_key: Option<TKey>,
     start_max_key: Option<TKey>,
 ) {
     let start_id = start_id.unwrap_or_else(|| transaction.get_root().unwrap());
 
-    let limits: Vec<(Option<TKey>, Option<TKey>, AnyNodeId)> = transaction
+    #[allow(clippy::type_complexity)]
+    let limits: Vec<(Option<TKey>, Option<TKey>, AnyNodeId<TStorage::PageId>)> = transaction
         .read_nodes(start_id, |node| {
             let mut result = vec![];
 
@@ -122,7 +123,7 @@ fn assert_keys_lower_than_parent<TStorage: Storage, TKey: TreeKey>(
 
 fn assert_tree_balanced<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    root_id: Option<AnyNodeId>,
+    root_id: Option<AnyNodeId<TStorage::PageId>>,
 ) {
     let root_id = root_id.unwrap_or_else(|| transaction.get_root().unwrap());
     let root_children = transaction
@@ -148,7 +149,7 @@ fn assert_tree_balanced<TStorage: Storage, TKey: TreeKey>(
 
 fn calculate_height<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    node_id: AnyNodeId,
+    node_id: AnyNodeId<TStorage::PageId>,
 ) -> usize {
     let children = transaction
         .read_nodes(node_id, |node| match node.as_any() {
@@ -169,10 +170,10 @@ fn calculate_height<TStorage: Storage, TKey: TreeKey>(
 
 fn assert_correct_topology<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
-    parent_id: Option<InteriorNodeId>,
-    node_id: Option<AnyNodeId>,
-    previous: Option<AnyNodeId>,
-    next: Option<AnyNodeId>,
+    parent_id: Option<InteriorNodeId<TStorage::PageId>>,
+    node_id: Option<AnyNodeId<TStorage::PageId>>,
+    previous: Option<AnyNodeId<TStorage::PageId>>,
+    next: Option<AnyNodeId<TStorage::PageId>>,
 ) {
     let node_id = node_id.unwrap_or_else(|| transaction.get_root().unwrap());
 
