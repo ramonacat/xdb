@@ -88,7 +88,7 @@ fn get_matching_version(
 ) -> PageReadGuard<'_> {
     let mut locks = vec![];
 
-    let mut main_lock = data.get(Some(logical_index), logical_index);
+    let mut main_lock = data.get(logical_index);
     assert!(main_lock.previous_version().is_none());
 
     while !main_lock.is_visible_at(timestamp) {
@@ -113,7 +113,7 @@ fn get_matching_version(
         let previous_version = main_lock.physical_index();
 
         locks.push(main_lock);
-        main_lock = data.get(Some(logical_index), next);
+        main_lock = data.get(next);
 
         assert!(main_lock.previous_version() == Some(previous_version));
     }

@@ -86,6 +86,10 @@ impl TransactionalTimestamp {
     }
 }
 
+// TODO we should get rid of PageIndices in the public API here - it's up to the storage to talk
+// with the lower layers using PageIndex, but the higher levels don't need to know all the
+// mechanics of that (e.g. multiple versions of the page existing), and just need to be able to
+// refer to a page
 pub trait Transaction<'storage>: Send + Debug {
     type Storage: Storage + 'storage;
 

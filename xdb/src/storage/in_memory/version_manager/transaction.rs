@@ -75,10 +75,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     }
 
     // TODO this should be moved to `VersionAwareBlock`
-    fn get_recycled_page(
-        &self,
-        logical_index: Option<PageIndex>,
-    ) -> Option<UninitializedPageGuard<'storage>> {
+    fn get_recycled_page(&self) -> Option<UninitializedPageGuard<'storage>> {
         // don't bother with all this if there aren't many allocated pages (TODO figure out if this
         // number makes sense)
         if self.version_manager.data.allocated_page_count() < 50000 {
@@ -95,12 +92,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 "got a page from recycled_page_queue",
             );
             return Some(unsafe {
-                UninitializedPageGuard::new(
-                    &self.version_manager.data,
-                    page.0,
-                    logical_index,
-                    page.1,
-                )
+                UninitializedPageGuard::new(&self.version_manager.data, page.0, page.1)
             });
         }
 
@@ -131,7 +123,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
             .map(|index| {
                 self.version_manager
                     .data
-                    .get_uninitialized(logical_index, PageIndex(index as u64))
+                    .get_uninitialized(PageIndex(index as u64))
             })
         {
             recycled_page_queue.push((free_page.as_ptr(), free_page.physical_index()));
@@ -143,35 +135,31 @@ impl<'storage> VersionManagedTransaction<'storage> {
         debug!(queue_length = ?recycled_page_queue.len(), "recycled page queue filled up");
 
         recycled_page_queue.pop().map(|page| unsafe {
-            UninitializedPageGuard::new(&self.version_manager.data, page.0, logical_index, page.1)
+            UninitializedPageGuard::new(&self.version_manager.data, page.0, page.1)
         })
     }
 
     // TODO avoid passing by value
     // TODO we lose a lot of performance by always creating a cow page, we should do this only
     // when there's an actual write
-    // TODO rename -> recycle_or_allocate
-    // TODO this should be moved to `VersionAwareBlock`
+    // TODO rename -> allocate (we don't really care about the inner mechanics, we just want a
+    // page)
+    // TODO this should be moved to some allocator struct probably?
     #[allow(clippy::large_types_passed_by_value)]
-    fn allocate_cow_copy(
-        &self,
-        logical_index: Option<PageIndex>,
-    ) -> Result<UninitializedPageGuard<'storage>, StorageError> {
-        if let Some(recycled) = self.get_recycled_page(logical_index) {
+    fn allocate_cow_copy(&self) -> Result<UninitializedPageGuard<'storage>, StorageError> {
+        if let Some(recycled) = self.get_recycled_page() {
             debug!(
                 physical_index = ?recycled.physical_index(),
-                logical_index = ?recycled.logical_index(),
                 "allocated a recycled page",
             );
             return Ok(recycled);
         }
 
-        let allocation_result = self.version_manager.data.allocate(logical_index);
+        let allocation_result = self.version_manager.data.allocate();
         match allocation_result {
             Ok(guard) => {
                 debug!(
                     physical_index = ?guard.physical_index(),
-                    logical_index = ?guard.logical_index(),
                     "allocated a fresh page",
                 );
                 Ok(guard)
@@ -183,10 +171,9 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 loop {
                     let waited = start.elapsed();
 
-                    if let Some(page) = self.get_recycled_page(logical_index) {
+                    if let Some(page) = self.get_recycled_page() {
                         info!(
                             physical_index = ?page.physical_index(),
-                            logical_index = ?page.logical_index(),
                             ?waited,
                             "allocated a recycled page",
                         );
@@ -227,10 +214,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 crate::storage::in_memory::version_manager::TransactionPageAction::Update(
                     cow_index,
                 ) => {
-                    let lock = self
-                        .version_manager
-                        .data
-                        .get(Some(entry.logical_index), cow_index);
+                    let lock = self.version_manager.data.get(cow_index);
 
                     Ok(lock)
                 }
@@ -266,11 +250,8 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 TransactionPageAction::Delete => {
                     return Err(StorageError::PageNotFound(index));
                 }
-                TransactionPageAction::Update(page_index) => {
-                    let cow_page = self
-                        .version_manager
-                        .data
-                        .get(Some(entry.logical_index), page_index);
+                TransactionPageAction::Update(cow_page_index) => {
+                    let cow_page = self.version_manager.data.get(cow_page_index);
 
                     return Ok(cow_page.upgrade());
                 }
@@ -297,7 +278,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
             return Err(StorageError::Deadlock(index));
         }
 
-        let cow = self.allocate_cow_copy(Some(index))?;
+        let cow = self.allocate_cow_copy()?;
         let cow = cow.initialize(*main);
         self.pages.insert(
             index,
@@ -312,20 +293,18 @@ impl<'storage> VersionManagedTransaction<'storage> {
 
     #[instrument(skip(self))]
     pub(crate) fn reserve(&self) -> Result<UninitializedPageGuard<'storage>, StorageError> {
-        self.allocate_cow_copy(None)
+        self.allocate_cow_copy()
     }
 
     // TODO can we avoid passing this by value?
     #[allow(clippy::large_types_passed_by_value)]
-    #[instrument(skip(self), fields(logical_index=?page_guard.logical_index(), physical_index = ?page_guard.physical_index()))]
+    #[instrument(skip(self), fields(physical_index = ?page_guard.physical_index()))]
     pub(crate) fn insert_reserved(
         &mut self,
         page_guard: UninitializedPageGuard<'storage>,
         page: Page,
     ) -> Result<(), StorageError> {
-        let logical_index = page_guard
-            .logical_index()
-            .unwrap_or_else(|| page_guard.physical_index());
+        let logical_index = page_guard.physical_index();
         page_guard.initialize(page);
 
         let previous = self.pages.insert(
@@ -353,7 +332,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         if let Some(previous) = inserted {
             match previous.action {
                 TransactionPageAction::Update(cow) => {
-                    let mut cow_page = self.version_manager.data.get(Some(page), cow).upgrade();
+                    let mut cow_page = self.version_manager.data.get(cow).upgrade();
 
                     cow_page.mark_free();
                 }
@@ -389,10 +368,10 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 | TransactionPageAction::Delete
                 | TransactionPageAction::Insert => {}
                 TransactionPageAction::Update(cow) => {
-                    let cow_page = self.version_manager.data.get(Some(index), cow);
+                    let cow_page = self.version_manager.data.get(cow);
 
                     debug!(
-                        logical_index = ?cow_page.logical_index(),
+                        logical_index = ?index,
                         physical_index = ?cow_page.physical_index(),
                         "setting page up to be freed"
                     );

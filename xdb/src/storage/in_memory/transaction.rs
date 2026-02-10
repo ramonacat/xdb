@@ -84,13 +84,10 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
 
     fn insert(&mut self, page: Page) -> Result<PageIndex, StorageError> {
         let reserved = self.version_manager.reserve()?;
-        // TODO do we want to expose logical/physical index here?
-        let index = reserved
-            .logical_index()
-            .unwrap_or_else(|| reserved.physical_index());
+        let physical_index = reserved.physical_index();
         self.version_manager.insert_reserved(reserved, page)?;
 
-        Ok(index)
+        Ok(physical_index)
     }
 
     fn delete(&mut self, page: PageIndex) -> Result<(), StorageError> {

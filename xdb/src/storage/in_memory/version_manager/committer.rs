@@ -85,20 +85,14 @@ impl CommitterThread<'_, '_> {
         for page in pages.into_values() {
             let to_free = match page.action {
                 TransactionPageAction::Read | TransactionPageAction::Delete => None,
-                TransactionPageAction::Insert => Some(
-                    self.block
-                        .get(Some(page.logical_index), page.logical_index)
-                        .upgrade(),
-                ),
-                TransactionPageAction::Update(cow) => {
-                    Some(self.block.get(Some(page.logical_index), cow).upgrade())
-                }
+                TransactionPageAction::Insert => Some(self.block.get(page.logical_index).upgrade()),
+                TransactionPageAction::Update(cow) => Some(self.block.get(cow).upgrade()),
             };
 
             if let Some(mut lock) = to_free {
                 debug!(
                     physical_index = ?lock.physical_index(),
-                    logical_index = ?lock.logical_index(),
+                    logical_index = ?page.logical_index,
                     "clearing page"
                 );
 
@@ -128,7 +122,7 @@ impl CommitterThread<'_, '_> {
             if lock.next_version().is_some() {
                 debug!(
                     physical_index = ?lock.physical_index(),
-                    logical_index = ?lock.logical_index(),
+                    logical_index = ?page.logical_index,
                     next_version = ?lock.next_version(),
                     "rolling back, conflict"
                 );
@@ -180,7 +174,7 @@ impl CommitterThread<'_, '_> {
                     lock.set_visible_until(Some(commit_handle.timestamp()));
                 }
                 TransactionPageAction::Update(cow) => {
-                    let cow_page = self.block.get(Some(page.logical_index), cow);
+                    let cow_page = self.block.get(cow);
                     debug!(
                         logical_index = ?page.logical_index,
                         cow.physical_index = ?cow_page.physical_index(),

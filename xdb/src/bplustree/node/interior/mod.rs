@@ -76,7 +76,8 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
 
         assert!(
             self.has_spare_capacity(),
-            "no capacity for insert, split the node first"
+            "no capacity for insert, split the node first: {:?}",
+            tracing::Span::current()
         );
 
         for (index, current_key) in self.keys() {

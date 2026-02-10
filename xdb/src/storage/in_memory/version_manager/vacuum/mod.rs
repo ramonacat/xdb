@@ -105,7 +105,7 @@ impl VacuumThread {
 
     #[instrument(skip(self))]
     fn vacuum_page(&mut self, index: PageIndex, min_live_timestamp: TransactionalTimestamp) {
-        let Some(page) = self.data.try_get(None, index) else {
+        let Some(page) = self.data.try_get(index) else {
             return;
         };
 
@@ -144,7 +144,7 @@ impl VacuumThread {
         };
         assert!(next_version_index != index);
 
-        let Some(next_version) = self.data.try_get(None, next_version_index) else {
+        let Some(next_version) = self.data.try_get(next_version_index) else {
             return;
         };
         let Ok(next_version) = next_version.try_upgrade() else {
@@ -158,7 +158,7 @@ impl VacuumThread {
         );
 
         let mut next_next = if let Some(next_next_index) = next_version.next_version() {
-            if let Some(next_next) = self.data.try_get(None, next_next_index)
+            if let Some(next_next) = self.data.try_get(next_next_index)
                 && let Ok(next_next) = next_next.try_upgrade()
             {
                 assert!(next_next.previous_version() == Some(next_version_index));
@@ -205,7 +205,6 @@ impl VacuumThread {
     fn free_page(&self, page_guard: PageWriteGuard) {
         debug!(
             physical_index=?page_guard.physical_index(),
-            logical_index=?page_guard.logical_index(),
             visible_until=?page_guard.visible_until(),
             visible_from=?page_guard.visible_from(),
             is_free=?page_guard.is_free(),

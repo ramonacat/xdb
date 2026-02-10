@@ -98,7 +98,7 @@ impl Bitmap {
 
     pub fn set(&self, index: u64) -> Result<(), StorageError> {
         let bit_location = BitLocation::new(index);
-        let mut page = self.block.get_or_allocate_zeroed(None, bit_location.page)?;
+        let mut page = self.block.get_or_allocate_zeroed(bit_location.page)?;
 
         page.data_mut::<BitmapPage>().set(bit_location);
 
@@ -117,7 +117,7 @@ impl Bitmap {
                 break;
             }
 
-            let Some(page_ref) = self.block.try_get(None, PageIndex::from_value(page_index)) else {
+            let Some(page_ref) = self.block.try_get(PageIndex::from_value(page_index)) else {
                 continue;
             };
 

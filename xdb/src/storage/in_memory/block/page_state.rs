@@ -203,7 +203,7 @@ impl PageState {
         }
     }
 
-    pub fn lock_read(self: Pin<&Self>) {
+    pub fn try_lock_read(self: Pin<&Self>) -> Result<(), LockError> {
         if !self.is_initialized() {
             error!(state = ?self.atomic().load(Ordering::Acquire), "trying to lock for read, but the page is uninitialized");
         }
@@ -221,13 +221,22 @@ impl PageState {
 
                 Some(x.with_readers(x.readers() + 1).0)
             }) {
-            Ok(_) => {}
+            Ok(_) => Ok(()),
             Err(previous) => {
                 let previous = PageStateValue(previous);
 
-                // TODO add a warning if we're waiting for too long
-                self.wait(previous);
-                self.lock_read();
+                Err(LockError::Contended(previous))
+            }
+        }
+    }
+
+    pub fn lock_read(self: Pin<&Self>) {
+        loop {
+            match self.try_lock_read() {
+                Ok(()) => return,
+                Err(LockError::Contended(previous)) => {
+                    self.wait(previous);
+                }
             }
         }
     }
