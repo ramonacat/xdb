@@ -30,7 +30,7 @@ use xdb::{
 type KeyType = BigKey<u16, 1024>;
 
 // TODO make these CLI options?
-const RUN_LENGTH: Duration = Duration::from_secs(120);
+const RUN_LENGTH: Duration = Duration::from_secs(300);
 const THREAD_COUNT: usize = 16;
 
 fn final_checks<T: TreeKey + for<'a> Arbitrary<'a>>(tree: &Tree<InMemoryStorage, T>) {
