@@ -15,13 +15,16 @@ mod tests {
             debug::assert_properties,
         },
         debug::BigKey,
-        storage::{StorageError, in_memory::InMemoryStorage},
+        storage::{
+            StorageError,
+            in_memory::{InMemoryPageId, InMemoryStorage},
+        },
     };
 
     fn test<
         TKey: TreeKey,
-        TThread1: Fn() -> Result<(), TreeError> + Send + 'static,
-        TThread2: Fn() -> Result<(), TreeError> + Send + 'static,
+        TThread1: Fn() -> Result<(), TreeError<InMemoryPageId>> + Send + 'static,
+        TThread2: Fn() -> Result<(), TreeError<InMemoryPageId>> + Send + 'static,
     >(
         thread1: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) -> TThread1 + Sync + Send + Clone + 'static,
         thread2: impl Fn(Arc<Tree<InMemoryStorage, TKey>>) -> TThread2 + Sync + Send + Clone + 'static,
