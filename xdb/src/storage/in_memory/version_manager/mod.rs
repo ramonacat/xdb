@@ -3,7 +3,6 @@ use std::ptr::NonNull;
 use tracing::debug;
 use tracing::error;
 use tracing::instrument;
-use tracing::trace;
 
 use crate::page::Page;
 use crate::storage::TransactionalTimestamp;
@@ -130,8 +129,10 @@ fn get_matching_version(
     // next_/previous_version links while we're looking at them
     drop(locks);
 
-    trace!(
+    debug!(
         physical_index = ?main_lock.physical_index(),
+        visible_from = ?main_lock.visible_from(),
+        visible_until = ?main_lock.visible_until(),
         "found",
     );
 

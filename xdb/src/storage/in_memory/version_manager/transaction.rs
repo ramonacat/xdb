@@ -200,6 +200,8 @@ impl<'storage> VersionManagedTransaction<'storage> {
         index: PageIndex,
     ) -> Result<PageReadGuard<'storage>, StorageError<InMemoryPageId>> {
         if let Some(entry) = self.pages.get(&index) {
+            assert!(entry.logical_index == index);
+
             match entry.action {
                 crate::storage::in_memory::version_manager::TransactionPageAction::Read
                 | crate::storage::in_memory::version_manager::TransactionPageAction::Insert => {

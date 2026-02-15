@@ -2,10 +2,10 @@ use crate::storage::in_memory::InMemoryPageId;
 use crate::storage::in_memory::version_manager::{
     TransactionPage, TransactionPageAction, get_matching_version,
 };
-use tracing::{debug, info_span, instrument, trace};
+use tracing::{debug, info_span, instrument, record_all, trace};
 
 use crate::storage::in_memory::block::Block;
-use crate::storage::in_memory::version_manager::transaction_log::{CommitHandle, TransactionLog};
+use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::pin::Pin;
@@ -62,15 +62,7 @@ impl Display for CommitRequest {
             ),
         )?;
 
-        if self.pages.len() < 100 {
-            for page in self.pages.values() {
-                write!(f, "{page:?}",)?;
-            }
-        } else {
-            write!(f, "{} pages", self.pages.len()).unwrap();
-        }
-
-        write!(f, "]")?;
+        write!(f, "{} pages]", self.pages.len())?;
 
         Ok(())
     }
@@ -83,7 +75,7 @@ struct CommitterThread<'log, 'storage> {
 }
 
 impl CommitterThread<'_, '_> {
-    fn rollback(&self, pages: HashMap<PageIndex, TransactionPage>, commit_handle: CommitHandle) {
+    fn rollback(&self, pages: HashMap<PageIndex, TransactionPage>, id: TransactionId) {
         for page in pages.into_values() {
             let to_free = match page.action {
                 TransactionPageAction::Read | TransactionPageAction::Delete => None,
@@ -102,23 +94,23 @@ impl CommitterThread<'_, '_> {
             }
         }
 
-        commit_handle.rollback();
+        self.log.rollback(id);
     }
 
-    #[instrument(skip(pages))]
+    #[instrument(skip(self, pages), fields(started, timestamp))]
     fn commit(
         &self,
         id: TransactionId,
         pages: HashMap<PageIndex, TransactionPage>,
     ) -> Result<(), StorageError<InMemoryPageId>> {
-        let commit_handle = self.log.start_commit(id).unwrap();
+        let handle = self.log.get_handle(id).unwrap();
         let mut locks = HashMap::new();
 
         let mut rollback = None;
 
         for (index, page) in &pages {
             let lock =
-                get_matching_version(self.block, page.logical_index, commit_handle.started())
+                get_matching_version(self.block, page.logical_index, handle.start_timestamp())
                     .upgrade();
 
             if lock.next_version().is_some() {
@@ -140,7 +132,7 @@ impl CommitterThread<'_, '_> {
         if let Some(rollback_index) = rollback {
             drop(locks);
 
-            self.rollback(pages, commit_handle);
+            self.rollback(pages, id);
 
             // TODO this is not a deadlock, but an optimistic concurrency race
             return Err(StorageError::Deadlock(InMemoryPageId(rollback_index)));
@@ -152,7 +144,16 @@ impl CommitterThread<'_, '_> {
             "collected locks for pages"
         );
 
+        // It is very important that we only start the commit in the log after we've taken the
+        // locks. Otherwise, another commit could change the pages in the time between us taking
+        // the lock and assigning a commit timestamp, which would cause inconsistencies.
+        let commit_handle = self.log.start_commit(id).unwrap();
+
+        record_all!(tracing::Span::current(), started = ?commit_handle.started(), timestamp = ?commit_handle.timestamp());
+
         for (index, page) in pages {
+            let _ = info_span!("committing page", logical_index=?index, ?page).entered();
+
             assert!(index == page.logical_index);
 
             // It's very tempting to change this `get_mut` to `remove`, but that would be
@@ -180,7 +181,9 @@ impl CommitterThread<'_, '_> {
                     debug!(
                         logical_index = ?page.logical_index,
                         cow.physical_index = ?cow_page.physical_index(),
-                        logical_index=?index, "updated"
+                        logical_index=?index,
+                        main.visible_until = ?commit_handle.timestamp(),
+                        "updated"
                     );
 
                     let mut cow_lock = cow_page.upgrade();
@@ -206,6 +209,8 @@ impl CommitterThread<'_, '_> {
         }
 
         commit_handle.commit();
+
+        drop(locks);
 
         debug!("commit completed");
 

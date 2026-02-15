@@ -56,6 +56,16 @@ impl TransactionLog {
         }
     }
 
+    pub fn get_handle(&self, id: TransactionId) -> Option<TransactionLogEntryHandle<'_>> {
+        let start_timestamp = self.transactions.lock().unwrap().get(&id)?.started;
+
+        Some(TransactionLogEntryHandle {
+            id,
+            start_timestamp,
+            log: self,
+        })
+    }
+
     pub fn start_commit(&'_ self, id: TransactionId) -> Option<CommitHandle<'_>> {
         let mut transactions = self.transactions.lock().unwrap();
         let transaction = transactions.get_mut(&id)?;
@@ -81,12 +91,24 @@ impl TransactionLog {
     fn next_timestamp(&self) -> TransactionalTimestamp {
         TransactionalTimestamp(self.next_timestamp.fetch_add(1, Ordering::AcqRel))
     }
+
+    pub fn rollback(&self, id: TransactionId) {
+        let mut transactions = self.transactions.lock().unwrap();
+        let transaction = transactions.remove(&id).unwrap();
+        drop(transactions);
+
+        self.running_transactions
+            .lock()
+            .unwrap()
+            .remove(&transaction.started);
+    }
 }
 
 pub struct CommitHandle<'log> {
+    log: &'log TransactionLog,
+
     id: TransactionId,
     timestamp: TransactionalTimestamp,
-    log: &'log TransactionLog,
     started: TransactionalTimestamp,
 }
 
@@ -95,6 +117,7 @@ impl Debug for CommitHandle<'_> {
         f.debug_struct("CommitHandle")
             .field("id", &self.id)
             .field("timestamp", &self.timestamp)
+            .field("started", &self.started)
             .finish_non_exhaustive()
     }
 }
@@ -113,21 +136,6 @@ impl CommitHandle<'_> {
             let mut transactions = self.log.transactions.lock().unwrap();
             transactions.get_mut(&self.id).unwrap().commit();
 
-            // TODO we really should not do this in reality, but the log is in memory, so we can't
-            // really keep all of it
-            transactions.remove(&self.id);
-        }
-
-        self.log
-            .running_transactions
-            .lock()
-            .unwrap()
-            .remove(&self.started);
-    }
-
-    pub fn rollback(self) {
-        {
-            let mut transactions = self.log.transactions.lock().unwrap();
             // TODO we really should not do this in reality, but the log is in memory, so we can't
             // really keep all of it
             transactions.remove(&self.id);

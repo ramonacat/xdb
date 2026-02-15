@@ -10,6 +10,7 @@ use crate::{
 };
 
 use bytemuck::{AnyBitPattern, NoUninit};
+use tracing::error;
 
 use crate::bplustree::{
     InteriorNodeId, NodeId,
@@ -69,11 +70,10 @@ impl<TKey: TreeKey> InteriorNode<TKey> {
     pub(crate) fn insert_node(&mut self, key: TKey, value: AnyNodeId) {
         let mut insert_at = self.entries.key_after_last();
 
-        assert!(
-            self.has_spare_capacity(),
-            "no capacity for insert, split the node first: {:?}",
-            tracing::Span::current()
-        );
+        if !self.has_spare_capacity() {
+            error!("no capacity for insert, split node first!");
+            panic!("no capacity for insert, split the node first",);
+        }
 
         for (index, current_key) in self.keys() {
             if key < current_key {

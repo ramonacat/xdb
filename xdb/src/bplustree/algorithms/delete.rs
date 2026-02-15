@@ -5,11 +5,11 @@ use tracing::{instrument, trace};
 
 use crate::{
     bplustree::{
-        InteriorNodeId, LeafNodeId, NodeId, TreeError, TreeKey, TreeTransaction,
+        InteriorNodeId, LeafNodeId, TreeError, TreeKey, TreeTransaction,
         algorithms::{last_leaf, leaf_search},
         node::{Node, interior::InteriorNode, leaf::LeafNode},
     },
-    storage::{PageId, Storage, StorageError},
+    storage::{PageId, Storage},
 };
 
 #[must_use]
@@ -128,16 +128,8 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
     };
 
     let index_in_parent = transaction
-        .read_nodes(parent_id, |x| {
-            x.find_value_index(node_id.into())
-            // TODO the error here happens because we're doing READ COMMITTED isolation and not
-            // snapshot, panic once that's fixed
-        })?
-        .ok_or_else(|| {
-            TreeError::StorageError(StorageError::Deadlock(TStorage::PageId::deserialize(
-                node_id.page(),
-            )))
-        })?;
+        .read_nodes(parent_id, |x| x.find_value_index(node_id.into()))?
+        .unwrap();
 
     if let Some(value_before) = index_in_parent.value_before() {
         let left = transaction.read_nodes(
@@ -154,11 +146,7 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
             }
             Err(MergeError::NotEnoughCapacity) => {}
             Err(MergeError::NotSiblings) => {
-                // TODO this can happen due to the fact that our isolation level is currently `READ
-                // COMMITTED`. panic here once we're able to do snapshot
-                return Err(TreeError::StorageError(StorageError::Deadlock(
-                    TStorage::PageId::deserialize(node_id.page()),
-                )));
+                panic!("not siblings: {:?}", tracing::Span::current());
             }
             Err(MergeError::Tree(err)) => return Err(err),
         }
@@ -178,11 +166,7 @@ fn merge_interior_node<TStorage: Storage, TKey: TreeKey>(
             }
             Err(MergeError::NotEnoughCapacity) => {}
             Err(MergeError::NotSiblings) => {
-                // TODO this can happen due to the fact that our isolation level is currently `READ
-                // COMMITTED`. panic here once we're able to do snapshot
-                return Err(TreeError::StorageError(StorageError::Deadlock(
-                    TStorage::PageId::deserialize(node_id.page()),
-                )));
+                panic!("not siblings: {:?}", tracing::Span::current());
             }
             Err(MergeError::Tree(err)) => return Err(err),
         }

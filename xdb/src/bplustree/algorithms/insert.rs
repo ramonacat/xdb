@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use tracing::{instrument, trace};
+use tracing::{error, instrument, trace};
 
 use crate::{
     bplustree::{
@@ -31,7 +31,10 @@ fn split_leaf_root<TStorage: Storage, TKey: TreeKey>(
 ) -> Result<(), TreeError<TStorage::PageId>> {
     let root_id = transaction.get_root()?;
 
-    assert!(transaction.read_nodes(root_id, super::super::node::AnyNode::is_leaf)?);
+    if !(transaction.read_nodes(root_id, super::super::node::AnyNode::is_leaf)?) {
+        error!(?root_id, "root is not a leaf");
+        panic!("root is not a leaf");
+    }
 
     let root_id = LeafNodeId::from_any(root_id);
 
@@ -134,6 +137,7 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
     Ok(true)
 }
 
+#[instrument]
 fn insert_child<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
     parent_id: InteriorNodeId,
@@ -146,6 +150,7 @@ fn insert_child<TStorage: Storage, TKey: TreeKey>(
     Ok(())
 }
 
+#[instrument]
 fn split_leaf<TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<TStorage, TKey>,
     leaf_id: LeafNodeId,
@@ -154,11 +159,10 @@ fn split_leaf<TStorage: Storage, TKey: TreeKey>(
 
     let has_spare_capacity = transaction.read_nodes(parent_id, InteriorNode::has_spare_capacity)?;
 
-    assert!(
-        has_spare_capacity,
-        "the node does not have spare capacity: {:?}",
-        tracing::Span::current()
-    );
+    if !(has_spare_capacity) {
+        error!("the node does not have spare capacity");
+        panic!("the node does not have spare capacity",);
+    }
 
     let new_leaf_reservation = transaction.reserve_node()?;
     let new_leaf_id = LeafNodeId::new(new_leaf_reservation.index().serialize());
@@ -221,7 +225,10 @@ pub fn insert<TStorage: Storage, TKey: TreeKey>(
 
             return insert(transaction, key, value);
         }
-        assert!(root_index == target_node_id.into());
+        if !(root_index == target_node_id.into()) {
+            error!(?root_index, ?target_node_id, "target node is not the root");
+            panic!("target node is not the root");
+        }
 
         split_leaf_root(transaction)?;
 
