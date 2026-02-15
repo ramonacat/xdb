@@ -2,7 +2,8 @@ use crate::sync::atomic::AtomicU32;
 use std::{marker::PhantomPinned, pin::Pin, ptr, time::Duration};
 
 use libc::{
-    EAGAIN, EFAULT, EINTR, EINVAL, ETIMEDOUT, FUTEX_WAIT, FUTEX_WAKE, SYS_futex, syscall, timespec,
+    EAGAIN, EFAULT, EINTR, EINVAL, ETIMEDOUT, FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAKE,
+    SYS_futex, syscall, timespec,
 };
 
 use crate::platform::errno;
@@ -11,7 +12,6 @@ use crate::platform::errno;
 #[repr(transparent)]
 pub struct Futex(AtomicU32, PhantomPinned);
 
-// TODO we should pass FUTEX_PRIVATE to all the futex calls
 impl Futex {
     pub const fn new(value: u32) -> Self {
         Self(AtomicU32::new(value), PhantomPinned)
@@ -27,7 +27,7 @@ impl Futex {
             syscall(
                 SYS_futex,
                 &raw const self.0,
-                FUTEX_WAIT,
+                FUTEX_WAIT | FUTEX_PRIVATE_FLAG,
                 value,
                 timeout_spec.as_ref().map_or_else(ptr::null, ptr::from_ref),
             )
@@ -58,7 +58,14 @@ impl Futex {
     }
 
     fn wake(self: Pin<&Self>, count: u32) -> u64 {
-        let callers_woken_up = unsafe { syscall(SYS_futex, &raw const self.0, FUTEX_WAKE, count) };
+        let callers_woken_up = unsafe {
+            syscall(
+                SYS_futex,
+                &raw const self.0,
+                FUTEX_WAKE | FUTEX_PRIVATE_FLAG,
+                count,
+            )
+        };
         if callers_woken_up == -1 {
             match errno() {
                 EINVAL => unreachable!("inconsistent futex state"),
