@@ -85,7 +85,7 @@ fn split_interior_node<TStorage: Storage, TKey: TreeKey>(
 
     let (split_key, new_node) = transaction.write_nodes(split_id, InteriorNode::split)?;
 
-    // TODO this assertion is expensive, probably shouldn't run in release?
+    #[cfg(debug_assertions)]
     {
         let mut target_values = HashSet::new();
 

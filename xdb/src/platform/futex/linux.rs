@@ -40,7 +40,6 @@ impl Futex {
         match errno() {
             // EAGAIN means value was not the expectedd one, EINTR means we were interrupted by a
             // signal
-            // TODO do we want to/need to let the caller know if it was a timeout?
             EAGAIN | EINTR | ETIMEDOUT => {}
 
             EFAULT => unreachable!("timespec address did not point to a valid address"),
