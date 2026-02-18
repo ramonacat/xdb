@@ -1,3 +1,4 @@
+#[cfg(debug_assertions)]
 use std::collections::HashSet;
 
 use tracing::{error, instrument, trace};

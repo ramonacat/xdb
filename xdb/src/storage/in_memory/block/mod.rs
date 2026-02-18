@@ -380,7 +380,7 @@ impl Block {
 
         let housekeeping = self.housekeeping_for(physical_index);
 
-        if !housekeeping.is_initialized() {
+        if !housekeeping.initialized() {
             error!(
                 ?physical_index,
                 ?housekeeping,
@@ -422,7 +422,7 @@ impl Block {
         }
 
         assert!(
-            !housekeeping.is_initialized(),
+            !housekeeping.initialized(),
             "[{}] trying to get as unitialized {physical_index:?}, but housekeeping says it's already initialized",
             self.name
         );
@@ -468,7 +468,7 @@ impl Block {
             return None;
         }
 
-        if !self.housekeeping_for(physical_index).is_initialized() {
+        if !self.housekeeping_for(physical_index).initialized() {
             return None;
         }
 
@@ -480,7 +480,7 @@ impl Block {
 
         let housekeeping = self.housekeeping_for(physical_index);
 
-        if !housekeeping.is_initialized() {
+        if !housekeeping.initialized() {
             error!(
                 ?physical_index,
                 ?housekeeping,
