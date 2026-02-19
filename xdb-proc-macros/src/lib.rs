@@ -223,6 +223,10 @@ pub fn atomic_state(input: TokenStream) -> TokenStream {
                 self.futex().wait(previous.0, None);
             }
 
+            fn wait_timeout(self: ::std::pin::Pin<&Self>, previous: #value_name, timeout: ::std::time::Duration) {
+                self.futex().wait(previous.0, Some(timeout));
+            }
+
             // TODO we should probably have some way of choosing who to wake (waiters for write, waiters
             // for read, etc.)
             fn wake_all(self: ::std::pin::Pin<&Self>) {

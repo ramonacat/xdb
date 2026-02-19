@@ -5,11 +5,9 @@ use std::{
 };
 
 use tracing::{instrument, trace};
+use xdb_proc_macros::atomic_state;
 
-use crate::{
-    platform::futex::Futex,
-    sync::{Mutex, atomic::Ordering},
-};
+use crate::sync::{Mutex, atomic::Ordering};
 
 #[must_use]
 pub enum RequestedState {
@@ -23,175 +21,67 @@ pub struct FreezeGuard<'scheduler> {
 
 impl Drop for FreezeGuard<'_> {
     fn drop(&mut self) {
-        // TODO create an api for change+wake?
-        self.scheduler.state.request_unfreeze();
+        self.scheduler.state.as_ref().request_unfreeze();
     }
 }
 
-#[derive(Clone, Copy)]
-// TODO generalize this pattern? this is the same thing that PageState/PageStateValue does
-struct SchedulerStateValue(u32);
-
-impl Debug for SchedulerStateValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SchedulerStateValue")
-            .field("is_running", &self.is_running())
-            .field("exit_requested", &self.is_exit_requested())
-            .field("freeze_requests", &self.freeze_requests())
-            .field("raw", &format!("{:#b}", self.0))
-            .finish()
-    }
-}
-
-impl SchedulerStateValue {
-    const MASK_IS_RUNNING: u32 = 1 << 31;
-    const MASK_EXIT_REQUESTED: u32 = 1 << 30;
-
-    const MASK_FREEZE_REQUESTS: u32 = 0x0000_FFFF;
-
-    fn freeze_requests(self) -> u16 {
-        u16::try_from(self.0 & Self::MASK_FREEZE_REQUESTS).unwrap()
+atomic_state!(
+    SchedulerState {
+        running: 1,
+        exit_requested: 1,
+        freeze_requests: 16,
     }
 
-    fn set_freeze_requests(self, value: u16) -> Self {
-        Self((self.0 & !Self::MASK_FREEZE_REQUESTS) | u32::from(value))
+    pub query freeze_requests(Ordering::Acquire);
+    pub query exit_requested(Ordering::Acquire);
+
+    pub update(Ordering::Release, Ordering::Acquire)
+        request_unfreeze()
+    {
+        action: { Some(state.with_freeze_requests(state.freeze_requests() - 1)) },
+        ok: { self.wake_all(); }
     }
 
-    fn request_unfreeze(self) -> Self {
-        self.set_freeze_requests(self.freeze_requests().strict_sub(1))
+    pub update(Ordering::Release, Ordering::Acquire)
+        freeze()
+    {
+        action: { Some(state.with_freeze_requests(state.freeze_requests() + 1)) },
+        ok: {
+            let mut state = state;
+
+            while state.running() {
+                self.wake_all();
+                self.wait(state);
+
+                state = SchedulerStateValue(self.futex().atomic().load(Ordering::Acquire));
+            }
+        },
     }
 
-    fn request_freeze(self) -> Self {
-        self.set_freeze_requests(self.freeze_requests().strict_add(1))
+    pub update(Ordering::Release, Ordering::Acquire)
+        request_exit()
+    {
+        action: { Some(state.with_exit_requested(true)) },
+        ok: { self.wake_all(); }
     }
 
-    const fn request_exit(self) -> Self {
-        Self(self.0 | Self::MASK_EXIT_REQUESTED)
+    pub update(Ordering::Release, Ordering::Acquire)
+        set_running(running: bool)
+    {
+        action: { Some(state.with_running(running)) },
+        ok: { self.wake_all(); }
     }
-
-    const fn set_running(self, value: bool) -> Self {
-        if value {
-            Self(self.0 | Self::MASK_IS_RUNNING)
-        } else {
-            Self(self.0 & !Self::MASK_IS_RUNNING)
-        }
-    }
-
-    const fn is_exit_requested(self) -> bool {
-        self.0 & Self::MASK_EXIT_REQUESTED > 0
-    }
-
-    fn is_freeze_requested(self) -> bool {
-        self.freeze_requests() > 0
-    }
-
-    const fn is_running(self) -> bool {
-        self.0 & Self::MASK_IS_RUNNING > 0
-    }
-}
-
-impl SchedulerStateValue {}
-
-#[derive(Debug)]
-struct SchedulerState(Pin<Box<Futex>>);
+);
 
 impl SchedulerState {
-    fn new() -> Self {
-        Self(Box::pin(Futex::new(0)))
-    }
-
-    fn request_unfreeze(&self) {
-        match self
-            .0
-            .as_ref()
-            .atomic()
-            .fetch_update(Ordering::Release, Ordering::Acquire, |v| {
-                let v = SchedulerStateValue(v);
-
-                Some(v.request_unfreeze().0)
-            }) {
-            Ok(_) => {
-                self.0.as_ref().wake_all();
-            }
-            Err(_) => todo!(),
-        }
-    }
-
-    fn current(&self) -> SchedulerStateValue {
-        SchedulerStateValue(self.0.as_ref().atomic().load(Ordering::Acquire))
-    }
-
-    fn freeze(&self) {
-        match self
-            .0
-            .as_ref()
-            .atomic()
-            .fetch_update(Ordering::Release, Ordering::Acquire, |v| {
-                let v = SchedulerStateValue(v);
-
-                Some(v.request_freeze().0)
-            }) {
-            Ok(previous) => {
-                let mut previous = SchedulerStateValue(previous);
-                trace!(?previous, "unfreezed");
-
-                while previous.is_running() {
-                    self.0.as_ref().wake_all();
-
-                    self.0.as_ref().wait(previous.0, None);
-
-                    previous =
-                        SchedulerStateValue(self.0.as_ref().atomic().load(Ordering::Acquire));
-                }
-            }
-            Err(_) => todo!(),
-        }
-    }
-
-    fn wait(&self, current_state: SchedulerStateValue, timeout: Option<Duration>) {
-        trace!(previous=?current_state, "waiting for state change");
-
-        self.0.as_ref().wait(current_state.0, timeout);
-    }
-
-    fn request_exit(&self) {
-        match self
-            .0
-            .as_ref()
-            .atomic()
-            .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
-                let x = SchedulerStateValue(x);
-
-                Some(x.request_exit().0)
-            }) {
-            Ok(_) => {
-                self.0.as_ref().wake_all();
-            }
-            Err(_) => todo!(),
-        }
-    }
-
-    fn set_running(&self, is_running: bool) {
-        match self
-            .0
-            .as_ref()
-            .atomic()
-            .fetch_update(Ordering::Release, Ordering::Acquire, |x| {
-                let x = SchedulerStateValue(x);
-
-                Some(x.set_running(is_running).0)
-            }) {
-            Ok(_) => {
-                self.0.as_ref().wake_all();
-            }
-            Err(_) => todo!(),
-        }
+    fn current(self: Pin<&Self>) -> SchedulerStateValue {
+        SchedulerStateValue(self.futex().atomic().load(Ordering::Acquire))
     }
 }
 
 #[derive(Debug)]
 pub(super) struct Scheduler {
-    state: SchedulerState,
+    state: Pin<Box<SchedulerState>>,
     last_finished_at: Mutex<Option<Instant>>,
 }
 
@@ -200,7 +90,7 @@ impl Scheduler {
 
     pub fn new() -> Self {
         Self {
-            state: SchedulerState::new(),
+            state: Box::pin(SchedulerState::new()),
             last_finished_at: Mutex::new(None),
         }
     }
@@ -218,14 +108,14 @@ impl Scheduler {
                 .unwrap()
                 .map_or(Duration::MAX, |x| x.elapsed());
 
-            let current_state = self.state.current();
+            let current_state = self.state.as_ref().current();
 
-            if current_state.is_exit_requested() {
+            if current_state.exit_requested() {
                 return RequestedState::Exit;
-            } else if current_state.is_freeze_requested() {
+            } else if current_state.freeze_requests() > 0 {
                 self.set_running(false);
 
-                self.state.wait(current_state, None);
+                self.state.as_ref().wait(current_state);
             } else if elapsed_since_last_run < Self::PAUSE_LENGTH {
                 trace!("{elapsed_since_last_run:?} since last run, waiting");
 
@@ -236,7 +126,7 @@ impl Scheduler {
                     .map_or(Self::PAUSE_LENGTH, |x| {
                         Self::PAUSE_LENGTH.saturating_sub(x.elapsed())
                     });
-                self.state.wait(current_state, Some(timeout));
+                self.state.as_ref().wait_timeout(current_state, timeout);
             } else {
                 self.set_running(true);
                 return RequestedState::Run;
@@ -247,13 +137,13 @@ impl Scheduler {
     #[instrument]
     pub(super) fn block_if_frozen(&self) -> RequestedState {
         loop {
-            let current_state = self.state.current();
+            let current_state = self.state.as_ref().current();
 
-            if current_state.is_exit_requested() {
+            if current_state.exit_requested() {
                 return RequestedState::Exit;
-            } else if current_state.is_freeze_requested() {
+            } else if current_state.freeze_requests() > 0 {
                 self.set_running(false);
-                self.state.wait(current_state, None);
+                self.state.as_ref().wait(current_state);
             } else {
                 // TODO should this be managed in the vacuum thread itself?
                 self.set_running(true);
@@ -264,13 +154,13 @@ impl Scheduler {
 
     #[instrument()]
     pub(super) fn request_freeze(&'_ self) -> FreezeGuard<'_> {
-        self.state.freeze();
+        self.state.as_ref().freeze();
 
         FreezeGuard { scheduler: self }
     }
 
     pub(super) fn request_exit(&'_ self) {
-        self.state.request_exit();
+        self.state.as_ref().request_exit();
     }
 
     pub fn start_full_run(&self) {
@@ -278,6 +168,6 @@ impl Scheduler {
     }
 
     fn set_running(&self, value: bool) {
-        self.state.set_running(value);
+        self.state.as_ref().set_running(value);
     }
 }
