@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{debug, info, instrument, warn};
 
 use crate::{
     page::Page,
@@ -21,14 +21,12 @@ use crate::{
         PageIndex, StorageError, TransactionId,
         in_memory::{block::UninitializedPageGuard, version_manager::VersionManager},
     },
-    sync::Mutex,
 };
 
 pub struct VersionManagedTransaction<'storage> {
     id: TransactionId,
     pages: HashMap<PageIndex, TransactionPage>,
     version_manager: &'storage VersionManager,
-    last_free_page_scan: Mutex<Option<Instant>>,
     log_entry: TransactionLogEntryHandle<'storage>,
     committed: bool,
 }
@@ -37,7 +35,6 @@ impl Debug for VersionManagedTransaction<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("VersionManagedTransaction")
             .field("id", &self.id)
-            .field("last_free_page_scan", &self.last_free_page_scan)
             .field("log_entry", &self.log_entry)
             .field("committed", &self.committed)
             .finish()
@@ -69,88 +66,15 @@ impl<'storage> VersionManagedTransaction<'storage> {
             id,
             pages: HashMap::new(),
             version_manager,
-            last_free_page_scan: Mutex::new(None),
             log_entry,
             committed: false,
         }
     }
 
-    // TODO this should be moved to `VersionAwareBlock`
-    fn get_recycled_page(&self) -> Option<UninitializedPageGuard<'storage>> {
-        // don't bother with all this if there aren't many allocated pages (TODO figure out if this
-        // number makes sense)
-        if self.version_manager.data.allocated_page_count() < 50000 {
-            trace!("not recycling pages, too few were allocated");
-
-            return None;
-        }
-
-        let mut recycled_page_queue = self.version_manager.recycled_page_queue.lock().unwrap();
-
-        if let Some(page) = recycled_page_queue.pop() {
-            debug!(
-                queue_length = recycled_page_queue.len(),
-                "got a page from recycled_page_queue",
-            );
-            return Some(unsafe {
-                UninitializedPageGuard::new(&self.version_manager.data, page.0, page.1)
-            });
-        }
-
-        let since_last_free_page_scan = self
-            .last_free_page_scan
-            .lock()
-            .unwrap()
-            .map_or(Duration::MAX, |x| x.elapsed());
-
-        // TODO we should allow the scan to happen as often as it wants to if there's no space in
-        // storage anymore
-        if since_last_free_page_scan < Duration::from_secs(1) {
-            trace!(?since_last_free_page_scan, "skipping page scan",);
-
-            return None;
-        }
-
-        // TODO we need a better API for this - we must stop vacuum from marking the page as unused
-        // again before we have a chance to reuse it, potentially resulting in multiple threads
-        // getting the same page
-        let lock = self.version_manager.vacuum.freeze();
-
-        for free_page in self
-            .version_manager
-            .freemap
-            .find_and_unset(10000)
-            .into_iter()
-            .map(|index| {
-                self.version_manager
-                    .data
-                    .get_uninitialized(PageIndex(index as u64))
-            })
-        {
-            recycled_page_queue.push((free_page.as_ptr(), free_page.physical_index()));
-        }
-
-        drop(lock);
-        *self.last_free_page_scan.lock().unwrap() = Some(Instant::now());
-
-        debug!(queue_length = ?recycled_page_queue.len(), "recycled page queue filled up");
-
-        recycled_page_queue.pop().map(|page| unsafe {
-            UninitializedPageGuard::new(&self.version_manager.data, page.0, page.1)
-        })
-    }
-
     // TODO avoid passing by value
-    // TODO we lose a lot of performance by always creating a cow page, we should do this only
-    // when there's an actual write
-    // TODO rename -> allocate (we don't really care about the inner mechanics, we just want a
-    // page)
-    // TODO this should be moved to some allocator struct probably?
     #[allow(clippy::large_types_passed_by_value)]
-    fn allocate_cow_copy(
-        &self,
-    ) -> Result<UninitializedPageGuard<'storage>, StorageError<InMemoryPageId>> {
-        if let Some(recycled) = self.get_recycled_page() {
+    fn allocate(&self) -> Result<UninitializedPageGuard<'storage>, StorageError<InMemoryPageId>> {
+        if let Some(recycled) = self.version_manager.recycled_pages.get_recycled_page() {
             debug!(
                 physical_index = ?recycled.physical_index(),
                 "allocated a recycled page",
@@ -174,7 +98,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 loop {
                     let waited = start.elapsed();
 
-                    if let Some(page) = self.get_recycled_page() {
+                    if let Some(page) = self.version_manager.recycled_pages.get_recycled_page() {
                         info!(
                             physical_index = ?page.physical_index(),
                             ?waited,
@@ -283,7 +207,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
             return Err(StorageError::Deadlock(InMemoryPageId(index)));
         }
 
-        let cow = self.allocate_cow_copy()?;
+        let cow = self.allocate()?;
         let cow = cow.initialize(*main);
         self.pages.insert(
             index,
@@ -300,7 +224,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     pub(crate) fn reserve(
         &self,
     ) -> Result<UninitializedPageGuard<'storage>, StorageError<InMemoryPageId>> {
-        self.allocate_cow_copy()
+        self.allocate()
     }
 
     // TODO can we avoid passing this by value?

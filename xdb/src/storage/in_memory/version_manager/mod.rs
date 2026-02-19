@@ -1,22 +1,21 @@
-use std::mem::MaybeUninit;
-use std::ptr::NonNull;
 use tracing::debug;
 use tracing::error;
 use tracing::instrument;
 
-use crate::page::Page;
 use crate::storage::TransactionalTimestamp;
 use crate::storage::in_memory::Bitmap;
 use crate::storage::in_memory::block::Block;
 use crate::storage::in_memory::block::PageReadGuard;
 use crate::storage::in_memory::version_manager::committer::Committer;
+use crate::storage::in_memory::version_manager::recycled_pages::Recycler;
 use crate::storage::in_memory::version_manager::transaction::VersionManagedTransaction;
 use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use crate::storage::in_memory::version_manager::vacuum::Vacuum;
 use crate::storage::{PageIndex, TransactionId};
-use crate::sync::{Arc, Mutex};
+use crate::sync::Arc;
 
 mod committer;
+mod recycled_pages;
 pub mod transaction;
 pub mod transaction_log;
 mod vacuum;
@@ -40,16 +39,12 @@ struct TransactionPage {
 pub struct VersionManager {
     data: Arc<Block>,
     // TODO rename -> freemap
-    freemap: Arc<Bitmap>,
-    #[allow(unused)]
-    vacuum: Vacuum,
     committer: Committer,
     transaction_log: Arc<TransactionLog>,
     // TODO instead of a mutex, we should probably have per-thread queues or something (a lock-free ring-buffer
     // perhaps?)
-    // TODO give it a better name, it is not really a queue
     // TODO sending raw pointers kinda sucks, we probably should just do PageIndices?
-    recycled_page_queue: Mutex<Vec<(NonNull<MaybeUninit<Page>>, PageIndex)>>,
+    recycled_pages: Recycler,
 }
 
 unsafe impl Send for VersionManager {}
@@ -58,16 +53,16 @@ unsafe impl Sync for VersionManager {}
 impl VersionManager {
     pub fn new(data: Arc<Block>, freemap: Arc<Bitmap>) -> Self {
         let log = Arc::new(TransactionLog::new());
+        let vacuum = Vacuum::start(log.clone(), data.clone(), freemap.clone());
+
         Self {
-            vacuum: Vacuum::start(log.clone(), data.clone(), freemap.clone()),
             committer: Committer::new(data.clone(), log.clone()),
             // TODO this should be an argument probably? and we should have some sorta storage
             // loader or something that'll load data from disk (or create new files/memory
             // structures)
             transaction_log: log,
-            data,
-            freemap,
-            recycled_page_queue: Mutex::new(Vec::new()),
+            data: data.clone(),
+            recycled_pages: Recycler::new(data, freemap, vacuum),
         }
     }
 

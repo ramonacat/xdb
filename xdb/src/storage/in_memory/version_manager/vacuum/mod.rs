@@ -36,7 +36,6 @@ struct VacuumThread {
 
 impl VacuumThread {
     // TODO log a warning if a freeze is taking too long
-    #[allow(clippy::too_many_lines)] // TODO there's a lot of room for improvement here
     pub fn run(&mut self) {
         loop {
             let _ = info_span!("vaccum").entered();
