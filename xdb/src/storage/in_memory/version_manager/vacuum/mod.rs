@@ -13,10 +13,7 @@ use crate::{
         in_memory::{
             Bitmap,
             block::{Block, PageWriteGuard},
-            version_manager::{
-                transaction_log::TransactionLog,
-                vacuum::scheduler::{FreezeGuard, Scheduler},
-            },
+            version_manager::{transaction_log::TransactionLog, vacuum::scheduler::Scheduler},
         },
     },
     sync::Arc,
@@ -35,7 +32,6 @@ struct VacuumThread {
 }
 
 impl VacuumThread {
-    // TODO log a warning if a freeze is taking too long
     pub fn run(&mut self) {
         loop {
             let _ = info_span!("vaccum").entered();
@@ -74,13 +70,11 @@ impl VacuumThread {
 
             while i < pages_to_check {
                 let _ = info_span!("page", physical_index = ?index).entered();
-                // TODO this is another scheduling issue, if there's a lot of pages,
-                // vacuum can spend a lot of time in this loop, preventing freezes and
-                // preventing exit when done
+
                 if i.is_multiple_of(10000) {
-                    match self.scheduler.block_if_frozen() {
+                    match self.scheduler.requested_state() {
                         scheduler::RequestedState::Exit => break,
-                        scheduler::RequestedState::Run => {}
+                        scheduler::RequestedState::Run => {},
                     }
                 }
 
@@ -251,14 +245,6 @@ impl Vacuum {
             handle: Some(handle),
             scheduler,
         }
-    }
-
-    pub(crate) fn freeze(&'_ self) -> FreezeGuard<'_> {
-        trace!("requesting vacuum freeze");
-        let guard = self.scheduler.request_freeze();
-        trace!("freeze succesfuly started");
-
-        guard
     }
 }
 

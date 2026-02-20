@@ -23,6 +23,7 @@ pub struct Recycler {
     data: Arc<Block>,
     freemap: Arc<Bitmap>,
     last_free_page_scan: Mutex<Option<Instant>>,
+    #[allow(unused)]
     vacuum: Vacuum,
 }
 
@@ -79,10 +80,6 @@ impl Recycler {
             return None;
         }
 
-        // TODO we need a better API for this - we must stop vacuum from marking the page as unused
-        // again before we have a chance to reuse it, potentially resulting in multiple threads
-        // getting the same page
-        let lock = self.vacuum.freeze();
         let mut pages = self.pages.try_lock().ok()?;
 
         for free_page in self
@@ -94,7 +91,6 @@ impl Recycler {
             pages.push((free_page.as_ptr(), free_page.physical_index()));
         }
 
-        drop(lock);
         *self.last_free_page_scan.lock().unwrap() = Some(Instant::now());
 
         debug!(queue_length = ?pages.len(), "recycled page queue filled up");
