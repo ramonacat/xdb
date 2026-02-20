@@ -95,6 +95,8 @@ pub(super) struct Bitmap {
 impl Bitmap {
     pub fn new(name: String) -> Self {
         Self {
+            // TODO we should get the block as an argument, so the user can pass whatever storage
+            // they need
             block: Block::new(name),
         }
     }

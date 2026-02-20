@@ -1,10 +1,9 @@
 use crate::storage::in_memory::InMemoryPageId;
 use crate::storage::in_memory::version_manager::{
-    TransactionPage, TransactionPageAction, get_matching_version,
+    TransactionPage, TransactionPageAction, VersionedBlock,
 };
 use tracing::{debug, info_span, instrument, record_all, trace};
 
-use crate::storage::in_memory::block::Block;
 use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -71,7 +70,7 @@ impl Display for CommitRequest {
 #[derive(Debug)]
 struct CommitterThread<'log, 'storage> {
     log: &'log TransactionLog,
-    block: &'storage Block,
+    block: &'storage VersionedBlock,
 }
 
 impl CommitterThread<'_, '_> {
@@ -109,9 +108,10 @@ impl CommitterThread<'_, '_> {
         let mut rollback = None;
 
         for (index, page) in &pages {
-            let lock =
-                get_matching_version(self.block, page.logical_index, handle.start_timestamp())
-                    .upgrade();
+            let lock = self
+                .block
+                .get_at(page.logical_index, handle.start_timestamp())
+                .upgrade();
 
             if lock.next_version().is_some() {
                 debug!(
@@ -226,7 +226,7 @@ pub struct Committer {
 }
 
 impl Committer {
-    pub(crate) fn new(block: Arc<Block>, log: Arc<TransactionLog>) -> Self {
+    pub(crate) fn new(block: Arc<VersionedBlock>, log: Arc<TransactionLog>) -> Self {
         let (tx, rx) = mpsc::channel::<CommitRequest>();
         let handle = {
             thread::Builder::new()

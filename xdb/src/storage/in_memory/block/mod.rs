@@ -295,10 +295,6 @@ impl<'block> UninitializedPageGuard<'block> {
 
         unsafe { PageWriteGuard::from_locked(initialized_page, self.block, self.physical_index) }
     }
-
-    pub(super) const fn as_ptr(&self) -> NonNull<MaybeUninit<Page>> {
-        self.page
-    }
 }
 
 impl Drop for UninitializedPageGuard<'_> {

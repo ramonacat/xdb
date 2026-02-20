@@ -2,26 +2,20 @@ use tracing::{debug, trace};
 
 use crate::{
     storage::in_memory::{
-        Bitmap,
-        block::{Block, UninitializedPageGuard},
-        version_manager::vacuum::Vacuum,
+        block::UninitializedPageGuard,
+        version_manager::{VersionedBlock, vacuum::Vacuum},
     },
     sync::{Arc, Mutex},
 };
-use std::{
-    mem::MaybeUninit,
-    ptr::NonNull,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
-use crate::{page::Page, storage::PageIndex};
+use crate::storage::PageIndex;
 
 #[derive(Debug)]
 pub struct Recycler {
-    pages: Mutex<Vec<(NonNull<MaybeUninit<Page>>, PageIndex)>>,
+    pages: Mutex<Vec<PageIndex>>,
     // TODO data and freemap together should be a struct (VersionManagedBlock or smth, idk)
-    data: Arc<Block>,
-    freemap: Arc<Bitmap>,
+    data: Arc<VersionedBlock>,
     last_free_page_scan: Mutex<Option<Instant>>,
     #[allow(unused)]
     vacuum: Vacuum,
@@ -30,11 +24,10 @@ pub struct Recycler {
 unsafe impl Send for Recycler {}
 
 impl Recycler {
-    pub const fn new(data: Arc<Block>, freemap: Arc<Bitmap>, vacuum: Vacuum) -> Self {
+    pub const fn new(data: Arc<VersionedBlock>, vacuum: Vacuum) -> Self {
         Self {
             pages: Mutex::new(vec![]),
             data,
-            freemap,
             last_free_page_scan: Mutex::new(None),
             vacuum,
         }
@@ -48,7 +41,7 @@ impl Recycler {
             "got a page from recycled_page_queue",
         );
 
-        Some(unsafe { UninitializedPageGuard::new(&self.data, page.0, page.1) })
+        Some(self.data.get_uninitialized(page))
     }
 
     pub fn get_recycled_page(&self) -> Option<UninitializedPageGuard<'_>> {
@@ -81,22 +74,12 @@ impl Recycler {
         }
 
         let mut pages = self.pages.try_lock().ok()?;
-
-        for free_page in self
-            .freemap
-            .find_and_unset(10000)
-            .into_iter()
-            .map(|index| self.data.get_uninitialized(PageIndex(index as u64)))
-        {
-            pages.push((free_page.as_ptr(), free_page.physical_index()));
-        }
+        pages.append(&mut self.data.take_free_pages(10000));
 
         *self.last_free_page_scan.lock().unwrap() = Some(Instant::now());
 
         debug!(queue_length = ?pages.len(), "recycled page queue filled up");
 
-        pages
-            .pop()
-            .map(|page| unsafe { UninitializedPageGuard::new(&self.data, page.0, page.1) })
+        pages.pop().map(|page| self.data.get_uninitialized(page))
     }
 }

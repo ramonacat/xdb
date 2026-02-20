@@ -6,15 +6,14 @@ mod version_manager;
 use bytemuck::Zeroable;
 
 use crate::storage::in_memory::bitmap::Bitmap;
-use crate::storage::in_memory::version_manager::VersionManager;
+use crate::storage::in_memory::version_manager::{VersionManager, VersionedBlock};
 use crate::storage::{PageId, SerializedPageId};
 use crate::sync::Arc;
 
 use crate::storage::in_memory::transaction::InMemoryTransaction;
 
 use crate::storage::{
-    PageIndex, PageReservation, Storage, StorageError,
-    in_memory::block::{Block, UninitializedPageGuard},
+    PageIndex, PageReservation, Storage, StorageError, in_memory::block::UninitializedPageGuard,
 };
 
 // TODO impl Drop to return the page to free pool if it doesn't get written
@@ -82,13 +81,8 @@ impl InMemoryStorage {
     // TODO give the InMemoryStorage a name so we can differentiate the blocks if we have
     // multiple storages?
     pub fn new() -> Self {
-        let freemap = Arc::new(Bitmap::new("freemap".into()));
-
         Self {
-            version_manager: VersionManager::new(
-                Arc::new(Block::new("main block".into())),
-                freemap,
-            ),
+            version_manager: VersionManager::new(Arc::new(VersionedBlock::new())),
         }
     }
 }

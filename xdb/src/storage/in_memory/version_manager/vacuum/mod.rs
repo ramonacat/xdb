@@ -11,9 +11,10 @@ use crate::{
     storage::{
         PageIndex, TransactionalTimestamp,
         in_memory::{
-            Bitmap,
-            block::{Block, PageWriteGuard},
-            version_manager::{transaction_log::TransactionLog, vacuum::scheduler::Scheduler},
+            block::PageWriteGuard,
+            version_manager::{
+                VersionedBlock, transaction_log::TransactionLog, vacuum::scheduler::Scheduler,
+            },
         },
     },
     sync::Arc,
@@ -23,8 +24,7 @@ use crate::{
 struct VacuumThread {
     // TODO we should prolly just have an Arc<VersionManager> here?
     log: Arc<TransactionLog>,
-    data: Arc<Block>,
-    freemap: Arc<Bitmap>,
+    data: Arc<VersionedBlock>,
     scheduler: Arc<Scheduler>,
 
     freed_count: AtomicU64,
@@ -74,7 +74,7 @@ impl VacuumThread {
                 if i.is_multiple_of(10000) {
                     match self.scheduler.requested_state() {
                         scheduler::RequestedState::Exit => break,
-                        scheduler::RequestedState::Run => {},
+                        scheduler::RequestedState::Run => {}
                     }
                 }
 
@@ -194,21 +194,8 @@ impl VacuumThread {
         drop(page_guard);
     }
 
-    #[instrument(skip(self))]
     fn free_page(&self, page_guard: PageWriteGuard) {
-        debug!(
-            physical_index=?page_guard.physical_index(),
-            visible_until=?page_guard.visible_until(),
-            visible_from=?page_guard.visible_from(),
-            is_free=?page_guard.is_free(),
-
-            "freeing page"
-        );
-        let physical_index = page_guard.physical_index();
-
-        drop(page_guard.reset());
-
-        self.freemap.set(physical_index.0).unwrap();
+        self.data.free_page(page_guard);
         self.freed_count.fetch_add(1, Ordering::Relaxed);
     }
 }
@@ -220,7 +207,7 @@ pub struct Vacuum {
 }
 
 impl Vacuum {
-    pub fn start(log: Arc<TransactionLog>, data: Arc<Block>, freemap: Arc<Bitmap>) -> Self {
+    pub fn start(log: Arc<TransactionLog>, data: Arc<VersionedBlock>) -> Self {
         let scheduler = Arc::new(Scheduler::new());
 
         let handle = {
@@ -232,7 +219,6 @@ impl Vacuum {
                     let mut runner = VacuumThread {
                         log,
                         data,
-                        freemap,
                         scheduler,
                         checked_count: 0,
                         freed_count: AtomicU64::new(0),

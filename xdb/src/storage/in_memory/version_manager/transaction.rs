@@ -2,8 +2,7 @@ use crate::storage::in_memory::{
     InMemoryPageId,
     block::{PageReadGuard, PageWriteGuard},
     version_manager::{
-        TransactionPage, TransactionPageAction, get_matching_version,
-        transaction_log::TransactionLogEntryHandle,
+        TransactionPage, TransactionPageAction, transaction_log::TransactionLogEntryHandle,
     },
 };
 use std::{
@@ -129,11 +128,10 @@ impl<'storage> VersionManagedTransaction<'storage> {
             match entry.action {
                 crate::storage::in_memory::version_manager::TransactionPageAction::Read
                 | crate::storage::in_memory::version_manager::TransactionPageAction::Insert => {
-                    let lock = get_matching_version(
-                        &self.version_manager.data,
-                        entry.logical_index,
-                        self.log_entry.start_timestamp(),
-                    );
+                    let lock = self
+                        .version_manager
+                        .data
+                        .get_at(entry.logical_index, self.log_entry.start_timestamp());
 
                     Ok(lock)
                 }
@@ -157,11 +155,10 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 },
             );
 
-            let main = get_matching_version(
-                &self.version_manager.data,
-                index,
-                self.log_entry.start_timestamp(),
-            );
+            let main = self
+                .version_manager
+                .data
+                .get_at(index, self.log_entry.start_timestamp());
 
             Ok(main)
         }
@@ -185,22 +182,20 @@ impl<'storage> VersionManagedTransaction<'storage> {
                     return Ok(cow_page.upgrade());
                 }
                 TransactionPageAction::Insert => {
-                    let main = get_matching_version(
-                        &self.version_manager.data,
-                        entry.logical_index,
-                        self.log_entry.start_timestamp(),
-                    );
+                    let main = self
+                        .version_manager
+                        .data
+                        .get_at(entry.logical_index, self.log_entry.start_timestamp());
 
                     return Ok(main.upgrade());
                 }
             }
         }
 
-        let main = get_matching_version(
-            &self.version_manager.data,
-            index,
-            self.log_entry.start_timestamp(),
-        );
+        let main = self
+            .version_manager
+            .data
+            .get_at(index, self.log_entry.start_timestamp());
 
         if main.next_version().is_some() {
             // TODO not a deadlock, but optimistic concurrency failure
