@@ -2,10 +2,10 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::{
     Size,
-    page::PAGE_DATA_SIZE,
     storage::{
         PageIndex, StorageError,
         in_memory::{InMemoryPageId, block::Block},
+        page::PAGE_DATA_SIZE,
     },
 };
 

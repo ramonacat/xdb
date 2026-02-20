@@ -1,13 +1,15 @@
 pub mod in_memory;
 pub mod instrumented;
+pub(super) mod page;
 
-use crate::sync::atomic::{AtomicU64, Ordering};
+use crate::{
+    storage::page::Page,
+    sync::atomic::{AtomicU64, Ordering},
+};
 use std::{fmt::Debug, hash::Hash, num::NonZeroU64};
 
 use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
 use thiserror::Error;
-
-use crate::page::Page;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
 pub enum StorageError<T: PageId> {

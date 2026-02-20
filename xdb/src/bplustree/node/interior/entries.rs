@@ -1,7 +1,6 @@
 use crate::{
     Size,
-    page::PAGE_DATA_SIZE,
-    storage::{SENTINEL_PAGE_ID, SerializedPageId},
+    storage::{SENTINEL_PAGE_ID, SerializedPageId, page::PAGE_DATA_SIZE},
 };
 use std::marker::PhantomData;
 

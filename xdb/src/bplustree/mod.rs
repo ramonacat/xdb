@@ -14,6 +14,8 @@ use crate::bplustree::tuples::NodeIds;
 use crate::storage::SENTINEL_PAGE_ID;
 use crate::storage::SerializedPageId;
 use crate::storage::TransactionId;
+use crate::storage::page::PAGE_DATA_SIZE;
+use crate::storage::page::Page;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
@@ -25,7 +27,6 @@ use crate::bplustree::node::Node;
 use crate::bplustree::node::NodeId;
 use crate::bplustree::node::interior::InteriorNode;
 use crate::bplustree::node::leaf::LeafNode;
-use crate::page::Page;
 use crate::storage::PageIndex;
 use crate::storage::PageReservation;
 use crate::storage::Storage;
@@ -33,8 +34,6 @@ use crate::storage::StorageError;
 use crate::storage::Transaction;
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
-
-use crate::page::PAGE_DATA_SIZE;
 
 pub trait TreeKey: Debug + Ord + Pod {}
 impl TreeKey for u8 {}

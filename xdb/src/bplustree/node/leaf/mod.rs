@@ -17,8 +17,7 @@ use crate::{
             },
         },
     },
-    page::PAGE_DATA_SIZE,
-    storage::{SENTINEL_PAGE_ID, SerializedPageId},
+    storage::{SENTINEL_PAGE_ID, SerializedPageId, page::PAGE_DATA_SIZE},
 };
 
 // TODO magic numbers depending on size of PageId!

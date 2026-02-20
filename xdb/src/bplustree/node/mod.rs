@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use crate::Size;
 use crate::bplustree::node::leaf::LeafNode;
 use crate::bplustree::{TreeKey, node::interior::InteriorNode};
-use crate::page::PAGE_DATA_SIZE;
+use crate::storage::page::PAGE_DATA_SIZE;
 use crate::storage::{SENTINEL_PAGE_ID, SerializedPageId};
 use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, must_cast_ref};
 

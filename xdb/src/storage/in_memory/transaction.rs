@@ -1,12 +1,10 @@
-use crate::{
-    page::Page,
-    storage::{
-        StorageError, Transaction,
-        in_memory::{
-            InMemoryPageId, InMemoryPageReservation, InMemoryStorage,
-            version_manager::transaction::VersionManagedTransaction,
-        },
+use crate::storage::{
+    StorageError, Transaction,
+    in_memory::{
+        InMemoryPageId, InMemoryPageReservation, InMemoryStorage,
+        version_manager::transaction::VersionManagedTransaction,
     },
+    page::Page,
 };
 
 #[derive(Debug)]

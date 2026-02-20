@@ -19,7 +19,6 @@ use std::ops::{Add, Div, Mul};
 pub mod bplustree;
 mod checksum;
 pub mod debug;
-mod page;
 mod platform;
 pub mod storage;
 
@@ -30,7 +29,7 @@ pub use shuttle::{hint, sync, thread};
 pub use std::{hint, sync, thread};
 
 #[derive(Debug, Clone, Copy)]
-enum Size {
+pub enum Size {
     GiB(usize),
     #[allow(unused)]
     MiB(usize),

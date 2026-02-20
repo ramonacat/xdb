@@ -239,10 +239,7 @@ impl Committer {
                     while let Ok(mut request) = rx.recv() {
                         info_span!("transaction commit", id = ?request.id, %request).in_scope(
                             || {
-                                let commit_result = thread.commit(
-                                    request.id,
-                                    request.take_pages(),
-                                );
+                                let commit_result = thread.commit(request.id, request.take_pages());
 
                                 request.respond(commit_result);
                             },

@@ -7,8 +7,8 @@ use libc::{
 
 use crate::{
     Size,
-    page::PAGE_SIZE,
     platform::{allocation::Allocation, panic_on_errno},
+    storage::page::PAGE_SIZE,
 };
 
 #[derive(Debug)]

@@ -4,6 +4,7 @@ mod page_state;
 use crate::platform::allocation::uncommitted::UncommittedAllocation;
 use crate::storage::StorageError;
 use crate::storage::in_memory::block::page_state::PageStateValue;
+use crate::storage::page::{PAGE_SIZE, Page};
 use crate::{platform::allocation::Allocation, storage::in_memory::InMemoryPageId};
 use std::ops::DerefMut;
 #[cfg(debug_assertions)]
@@ -14,7 +15,6 @@ use tracing::{debug, error, instrument, warn};
 
 use crate::{
     Size,
-    page::{PAGE_SIZE, Page},
     storage::{PageIndex, in_memory::block::page_state::PageState},
     sync::atomic::{AtomicU64, Ordering},
 };

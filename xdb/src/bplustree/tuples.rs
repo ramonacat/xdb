@@ -1,6 +1,7 @@
 use crate::bplustree::NodeId;
+use crate::bplustree::TreeKey;
 use crate::storage::SerializedPageId;
-use crate::{bplustree::TreeKey, page::Page};
+use crate::storage::page::Page;
 
 pub(super) trait NodeIds<const N: usize> {
     type Nodes<'a, TKey: TreeKey>;

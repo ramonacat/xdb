@@ -1,9 +1,12 @@
-use crate::storage::in_memory::{
-    InMemoryPageId,
-    block::{PageReadGuard, PageWriteGuard},
-    version_manager::{
-        TransactionPage, TransactionPageAction, transaction_log::TransactionLogEntryHandle,
+use crate::storage::{
+    in_memory::{
+        InMemoryPageId,
+        block::{PageReadGuard, PageWriteGuard},
+        version_manager::{
+            TransactionPage, TransactionPageAction, transaction_log::TransactionLogEntryHandle,
+        },
     },
+    page::Page,
 };
 use std::{
     collections::HashMap,
@@ -14,12 +17,9 @@ use std::{
 
 use tracing::{debug, info, instrument, warn};
 
-use crate::{
-    page::Page,
-    storage::{
-        PageIndex, StorageError, TransactionId,
-        in_memory::{block::UninitializedPageGuard, version_manager::VersionManager},
-    },
+use crate::storage::{
+    PageIndex, StorageError, TransactionId,
+    in_memory::{block::UninitializedPageGuard, version_manager::VersionManager},
 };
 
 pub struct VersionManagedTransaction<'storage> {
