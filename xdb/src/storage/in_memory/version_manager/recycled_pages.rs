@@ -14,10 +14,9 @@ use crate::storage::PageIndex;
 #[derive(Debug)]
 pub struct Recycler {
     pages: Mutex<Vec<PageIndex>>,
-    // TODO data and freemap together should be a struct (VersionManagedBlock or smth, idk)
     data: Arc<VersionedBlock>,
     last_free_page_scan: Mutex<Option<Instant>>,
-    #[allow(unused)]
+    #[allow(unused)] // TODO who should own vacuum?
     vacuum: Vacuum,
 }
 

@@ -240,7 +240,6 @@ impl Committer {
                         info_span!("transaction commit", id = ?request.id, %request).in_scope(
                             || {
                                 let commit_result = thread.commit(
-                                    // TODO just pass the whole request???
                                     request.id,
                                     request.take_pages(),
                                 );
