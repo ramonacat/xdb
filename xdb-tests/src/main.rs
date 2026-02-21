@@ -1,5 +1,6 @@
 use tracing::Level;
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+use xdb::bplustree::transaction::TreeTransaction;
 mod predictable;
 mod random_single;
 mod random_threaded;
@@ -22,7 +23,7 @@ use xdb::storage::in_memory::InMemoryPageId;
 
 use arbitrary::{Arbitrary, Unstructured};
 use xdb::{
-    bplustree::{Tree, TreeError, TreeTransaction},
+    bplustree::{Tree, TreeError},
     debug::BigKey,
     storage::{StorageError, in_memory::InMemoryStorage},
 };

@@ -1,3 +1,4 @@
+use crate::bplustree::transaction::TreeTransaction;
 use crate::storage::FIRST_PAGE_ID;
 // TODO this file is huge, split into smaller chunks
 use crate::storage::PageId;
@@ -6,14 +7,13 @@ pub mod debug;
 pub mod dot;
 mod iterator;
 mod node;
+pub mod transaction;
 mod tuples;
 
 use crate::Size;
 use crate::bplustree::iterator::TreeIterator;
 use crate::bplustree::tuples::NodeIds;
-use crate::storage::SENTINEL_PAGE_ID;
 use crate::storage::SerializedPageId;
-use crate::storage::TransactionId;
 use crate::storage::page::PAGE_DATA_SIZE;
 use crate::storage::page::Page;
 use std::fmt::Debug;
@@ -57,140 +57,6 @@ pub struct Tree<T: Storage, TKey: TreeKey> {
     _key: PhantomData<TKey>,
 }
 
-// TODO move to a separate mod
-#[derive(Debug)]
-pub struct TreeTransaction<'storage, TStorage: Storage + 'storage, TKey>
-where
-    Self: 'storage,
-{
-    transaction: TStorage::Transaction<'storage>,
-    _key: PhantomData<&'storage TKey>,
-}
-
-impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
-    TreeTransaction<'storage, TStorage, TKey>
-{
-    fn id(&self) -> TransactionId {
-        self.transaction.id()
-    }
-
-    fn get_root(&mut self) -> Result<AnyNodeId, TreeError<TStorage::PageId>> {
-        Ok(AnyNodeId::new(self.read_header(|x| x.root)?))
-    }
-
-    fn read_header<TReturn>(
-        &mut self,
-        read: impl FnOnce(&TreeHeader) -> TReturn,
-    ) -> Result<TReturn, TreeError<TStorage::PageId>> {
-        let txid = self.transaction.id();
-
-        Ok(self
-            .transaction
-            .read(TStorage::PageId::deserialize(FIRST_PAGE_ID), |[page]| {
-                let data: &TreeHeader = page.data();
-
-                assert!(
-                    data.root != SENTINEL_PAGE_ID,
-                    "root is zero! txid: {txid:?} Header: {page:?}"
-                );
-                read(data)
-            })?)
-    }
-
-    fn write_header<TReturn>(
-        &mut self,
-        write: impl FnOnce(&mut TreeHeader) -> TReturn,
-    ) -> Result<TReturn, TreeError<TStorage::PageId>> {
-        Ok(self
-            .transaction
-            .write(TStorage::PageId::deserialize(FIRST_PAGE_ID), |[page]| {
-                write(page.data_mut())
-            })?)
-    }
-
-    // TODO we should probably get rid of the callable, and just return a reference that has the
-    // same lifetime as the transaction
-    fn read_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
-        &mut self,
-        indices: TIndices,
-        read: impl for<'node> FnOnce(TIndices::Nodes<'node, TKey>) -> TReturn,
-    ) -> Result<TReturn, TreeError<TStorage::PageId>> {
-        let page_indices = indices.to_page_indices().map(TStorage::PageId::deserialize);
-        debug_assert!(
-            !page_indices
-                .iter()
-                .any(|x| x.serialize() == SENTINEL_PAGE_ID)
-        );
-
-        Ok(self.transaction.read(page_indices, |pages| {
-            read(TIndices::pages_to_nodes(pages.map(|x| x)))
-        })?)
-    }
-
-    fn write_nodes<TReturn, TIndices: NodeIds<N>, const N: usize>(
-        &mut self,
-        indices: TIndices,
-        write: impl for<'node> FnOnce(TIndices::NodesMut<'node, TKey>) -> TReturn,
-    ) -> Result<TReturn, TreeError<TStorage::PageId>> {
-        let page_indices = indices.to_page_indices().map(TStorage::PageId::deserialize);
-        debug_assert!(
-            !page_indices
-                .iter()
-                .any(|x| x.serialize() == SENTINEL_PAGE_ID)
-        );
-
-        Ok(self.transaction.write(page_indices, |pages| {
-            write(TIndices::pages_to_nodes_mut(pages.map(|x| x)))
-        })?)
-    }
-
-    // TODO separete reserve_interior_node and reserve_leaf_node, so that callers don't have to
-    // touch the ID directly?
-    fn reserve_node(
-        &mut self,
-    ) -> Result<TStorage::PageReservation<'storage>, TreeError<TStorage::PageId>> {
-        Ok(self.transaction.reserve()?)
-    }
-
-    #[allow(clippy::large_types_passed_by_value)] // TODO perhaps we should do something to avoid
-    // passing whole nodes here?
-    fn insert_reserved(
-        &mut self,
-        reservation: TStorage::PageReservation<'storage>,
-        page: impl Node<TKey>,
-    ) -> Result<(), TreeError<TStorage::PageId>> {
-        debug_assert!(reservation.index() != TStorage::PageId::sentinel());
-
-        self.transaction
-            .insert_reserved(reservation, Page::from_data(page))?;
-
-        Ok(())
-    }
-
-    fn delete_node(&mut self, node_id: AnyNodeId) -> Result<(), TreeError<TStorage::PageId>> {
-        self.transaction
-            .delete(TStorage::PageId::deserialize(node_id.page()))?;
-
-        Ok(())
-    }
-
-    pub fn commit(self) -> Result<(), TreeError<TStorage::PageId>> {
-        let Self { transaction, _key } = self;
-
-        transaction.commit()?;
-
-        Ok(())
-    }
-
-    pub fn rollback(self) -> Result<(), TreeError<TStorage::PageId>> {
-        let Self { transaction, _key } = self;
-
-        transaction.rollback()?;
-
-        Ok(())
-    }
-}
-
 impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
     // TODO also create a "new_read" method, or something like that (that reads a tree that already
     // exists from storage)
@@ -218,10 +84,7 @@ impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
     }
 
     pub fn transaction(&self) -> Result<TreeTransaction<'_, T, TKey>, TreeError<T::PageId>> {
-        Ok(TreeTransaction::<T, TKey> {
-            transaction: self.storage.transaction()?,
-            _key: PhantomData,
-        })
+        Ok(TreeTransaction::new(self.storage.transaction()?))
     }
 }
 
