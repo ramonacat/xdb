@@ -1,5 +1,6 @@
 use crate::bplustree::transaction::TreeTransaction;
 use crate::storage::FIRST_PAGE_ID;
+use crate::storage::Page as _;
 // TODO this file is huge, split into smaller chunks
 use crate::storage::PageId;
 pub mod algorithms;
@@ -14,8 +15,8 @@ use crate::Size;
 use crate::bplustree::iterator::TreeIterator;
 use crate::bplustree::tuples::NodeIds;
 use crate::storage::SerializedPageId;
+use crate::storage::in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE;
 use crate::storage::page::PAGE_DATA_SIZE;
-use crate::storage::page::Page;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
@@ -47,7 +48,7 @@ impl TreeKey for i32 {}
 impl TreeKey for i64 {}
 impl TreeKey for isize {}
 
-const ROOT_NODE_TAIL_SIZE: Size = PAGE_DATA_SIZE
+const ROOT_NODE_TAIL_SIZE: Size = VERSIONED_PAGE_DATA_SIZE
     .subtract(Size::of::<u64>())
     .subtract(Size::of::<PageIndex>());
 
@@ -118,9 +119,9 @@ impl TreeHeader {
         assert!(header_page.index().serialize() == FIRST_PAGE_ID);
 
         // TODO replace usize with actual TKey!
-        let root_index = transaction.insert(Page::from_data(LeafNode::<TKey>::new(None)))?;
+        let root_index = transaction.insert(T::Page::from_data(LeafNode::<TKey>::new(None)))?;
 
-        let page = Page::from_data(Self {
+        let page = T::Page::from_data(Self {
             key_size: size_of::<TKey>() as u64,
             root: root_index.serialize(),
             _unused: [0; _],

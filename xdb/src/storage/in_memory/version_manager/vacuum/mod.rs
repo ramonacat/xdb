@@ -11,7 +11,7 @@ use crate::{
     storage::{
         PageIndex, TransactionalTimestamp,
         in_memory::{
-            block::PageWriteGuard,
+            version_manager::transaction::PageWriteGuard,
             version_manager::{
                 VersionedBlock, transaction_log::TransactionLog, vacuum::scheduler::Scheduler,
             },

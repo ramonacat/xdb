@@ -2,7 +2,7 @@ use tracing::{debug, trace};
 
 use crate::{
     storage::in_memory::{
-        block::UninitializedPageGuard,
+        version_manager::transaction::UninitializedPageGuard,
         version_manager::{VersionedBlock, vacuum::Vacuum},
     },
     sync::{Arc, Mutex},

@@ -2,9 +2,8 @@ use crate::storage::{
     StorageError, Transaction,
     in_memory::{
         InMemoryPageId, InMemoryPageReservation, InMemoryStorage,
-        version_manager::transaction::VersionManagedTransaction,
+        version_manager::{transaction::VersionManagedTransaction, versioned_page::VersionedPage},
     },
-    page::Page,
 };
 
 #[derive(Debug)]
@@ -30,7 +29,7 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
     fn read<T, const N: usize>(
         &mut self,
         indices: impl Into<[InMemoryPageId; N]>,
-        read: impl FnOnce([&Page; N]) -> T,
+        read: impl FnOnce([&VersionedPage; N]) -> T,
     ) -> Result<T, StorageError<InMemoryPageId>> {
         let indices: [InMemoryPageId; N] = indices.into();
 
@@ -48,7 +47,7 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
     fn write<T, const N: usize>(
         &mut self,
         indices: impl Into<[InMemoryPageId; N]>,
-        write: impl FnOnce([&mut Page; N]) -> T,
+        write: impl FnOnce([&mut VersionedPage; N]) -> T,
     ) -> Result<T, StorageError<InMemoryPageId>> {
         let indices: [InMemoryPageId; N] = indices.into();
 
@@ -73,7 +72,7 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
     fn insert_reserved(
         &mut self,
         reservation: InMemoryPageReservation<'storage>,
-        page: Page,
+        page: VersionedPage,
     ) -> Result<(), StorageError<InMemoryPageId>> {
         let InMemoryPageReservation { page_guard } = reservation;
 
@@ -82,7 +81,10 @@ impl<'storage> Transaction<'storage> for InMemoryTransaction<'storage> {
         Ok(())
     }
 
-    fn insert(&mut self, page: Page) -> Result<InMemoryPageId, StorageError<InMemoryPageId>> {
+    fn insert(
+        &mut self,
+        page: VersionedPage,
+    ) -> Result<InMemoryPageId, StorageError<InMemoryPageId>> {
         let reserved = self.version_manager.reserve()?;
         let physical_index = reserved.physical_index();
         self.version_manager.insert_reserved(reserved, page)?;

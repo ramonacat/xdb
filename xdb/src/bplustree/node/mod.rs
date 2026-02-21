@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use crate::Size;
 use crate::bplustree::node::leaf::LeafNode;
 use crate::bplustree::{TreeKey, node::interior::InteriorNode};
-use crate::storage::page::PAGE_DATA_SIZE;
+use crate::storage::in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE;
 use crate::storage::{SENTINEL_PAGE_ID, SerializedPageId};
 use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, must_cast_ref};
 
@@ -167,7 +167,7 @@ impl NodeHeader {
 pub(super) struct AnyNode<TKey> {
     header: NodeHeader,
     // TODO the size here is hardcoded with the assumption that TPageId's size is u64
-    data: [u8; PAGE_DATA_SIZE
+    data: [u8; VERSIONED_PAGE_DATA_SIZE
         .subtract(Size::of::<u64>().multiply(2))
         .as_bytes()],
     _key: PhantomData<TKey>,
@@ -179,7 +179,7 @@ pub(super) struct AnyNode<TKey> {
 unsafe impl<TKey: TreeKey> Pod for AnyNode<TKey> {}
 
 pub(super) trait Node<TKey>: AnyBitPattern + NoUninit {
-    const _ASSERT_SIZE: () = assert!(Size::of::<Self>().is_equal(PAGE_DATA_SIZE));
+    const _ASSERT_SIZE: () = assert!(Size::of::<Self>().is_equal(VERSIONED_PAGE_DATA_SIZE));
 
     fn parent(&self) -> Option<InteriorNodeId>;
     fn set_parent(&mut self, parent: Option<InteriorNodeId>);

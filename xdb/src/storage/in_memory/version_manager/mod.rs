@@ -1,3 +1,4 @@
+use bytemuck::must_cast_ref;
 use tracing::debug;
 use tracing::error;
 
@@ -6,14 +7,15 @@ use crate::storage::TransactionalTimestamp;
 use crate::storage::in_memory::Bitmap;
 use crate::storage::in_memory::InMemoryPageId;
 use crate::storage::in_memory::block::Block;
-use crate::storage::in_memory::block::PageReadGuard;
-use crate::storage::in_memory::block::PageWriteGuard;
-use crate::storage::in_memory::block::UninitializedPageGuard;
 use crate::storage::in_memory::version_manager::committer::Committer;
 use crate::storage::in_memory::version_manager::recycled_pages::Recycler;
+use crate::storage::in_memory::version_manager::transaction::PageReadGuard;
+use crate::storage::in_memory::version_manager::transaction::PageWriteGuard;
+use crate::storage::in_memory::version_manager::transaction::UninitializedPageGuard;
 use crate::storage::in_memory::version_manager::transaction::VersionManagedTransaction;
 use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use crate::storage::in_memory::version_manager::vacuum::Vacuum;
+use crate::storage::in_memory::version_manager::versioned_page::VersionedPage;
 use crate::storage::{PageIndex, TransactionId};
 use crate::sync::Arc;
 
@@ -22,6 +24,7 @@ mod recycled_pages;
 pub mod transaction;
 pub mod transaction_log;
 mod vacuum;
+pub mod versioned_page;
 
 #[derive(Debug)]
 pub struct VersionedBlock {
@@ -38,7 +41,7 @@ impl VersionedBlock {
     }
 
     fn get(&'_ self, index: PageIndex) -> PageReadGuard<'_> {
-        self.block.get(index)
+        PageReadGuard::new(self.block.get(index))
     }
 
     fn get_at(
@@ -49,22 +52,24 @@ impl VersionedBlock {
         let mut locks = vec![];
 
         let mut main_lock = self.block.get(logical_index);
-        assert!(main_lock.previous_version().is_none());
+        let mut versioned_page: &VersionedPage = must_cast_ref(&*main_lock);
 
-        while !main_lock.is_visible_at(timestamp) {
+        assert!(versioned_page.previous_version().is_none());
+
+        while !versioned_page.is_visible_at(timestamp) {
             debug!(
                 "{logical_index:?}/{:?} not visible at {timestamp:?} ({:?}/{:?}), checking next",
                 main_lock.physical_index(),
-                main_lock.visible_from(),
-                main_lock.visible_until(),
+                versioned_page.visible_from(),
+                versioned_page.visible_until(),
             );
 
-            let Some(next) = main_lock.next_version() else {
+            let Some(next) = versioned_page.next_version() else {
                 // TODO should we panic here? I think we should not be able to get to this
                 // place if the database is in a valid state?
                 error!(
-                    latest_from = ?main_lock.visible_from(),
-                    latest_until = ?main_lock.visible_until(),
+                    latest_from = ?versioned_page.visible_from(),
+                    latest_until = ?versioned_page.visible_until(),
                     physical_index = ?main_lock.physical_index(),
                     "page not found"
                 );
@@ -72,8 +77,8 @@ impl VersionedBlock {
                     "page {logical_index:?}/{:?} not found (transaction timestamp: {:?}, latest version visible: {:?}/{:?})",
                     main_lock.physical_index(),
                     timestamp,
-                    main_lock.visible_from(),
-                    main_lock.visible_until()
+                    versioned_page.visible_from(),
+                    versioned_page.visible_until()
                 );
             };
 
@@ -81,8 +86,9 @@ impl VersionedBlock {
 
             locks.push(main_lock);
             main_lock = self.block.get(next);
+            versioned_page = must_cast_ref(&*main_lock);
 
-            assert!(main_lock.previous_version() == Some(previous_version));
+            assert!(versioned_page.previous_version() == Some(previous_version));
         }
 
         // keep all the locks till here to avoid situations where vacuum changes the
@@ -91,24 +97,24 @@ impl VersionedBlock {
 
         debug!(
             physical_index = ?main_lock.physical_index(),
-            visible_from = ?main_lock.visible_from(),
-            visible_until = ?main_lock.visible_until(),
+            visible_from = ?versioned_page.visible_from(),
+            visible_until = ?versioned_page.visible_until(),
             "found",
         );
 
-        main_lock
+        PageReadGuard::new(main_lock)
     }
 
     fn try_get(&'_ self, index: PageIndex) -> Option<PageReadGuard<'_>> {
-        self.block.try_get(index)
+        self.block.try_get(index).map(PageReadGuard::new)
     }
 
     fn get_uninitialized(&'_ self, index: PageIndex) -> UninitializedPageGuard<'_> {
-        self.block.get_uninitialized(index)
+        UninitializedPageGuard::new(self.block.get_uninitialized(index))
     }
 
     fn allocate(&'_ self) -> Result<UninitializedPageGuard<'_>, StorageError<InMemoryPageId>> {
-        self.block.allocate()
+        self.block.allocate().map(UninitializedPageGuard::new)
     }
 
     fn allocated_page_count(&self) -> u64 {
@@ -124,10 +130,11 @@ impl VersionedBlock {
     }
 
     fn free_page(&self, page_guard: PageWriteGuard) {
+        let versioned_page: &VersionedPage = must_cast_ref(&*page_guard);
         debug!(
             physical_index=?page_guard.physical_index(),
-            visible_until=?page_guard.visible_until(),
-            visible_from=?page_guard.visible_from(),
+            visible_until=?versioned_page.visible_until(),
+            visible_from=?versioned_page.visible_from(),
             is_free=?page_guard.is_free(),
 
             "freeing page"

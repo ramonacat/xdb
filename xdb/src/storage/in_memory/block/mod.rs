@@ -83,6 +83,8 @@ impl<'block> PageReadGuard<'block> {
         PageWriteGuard::upgrade(self)
     }
 
+    // TODO this should be just named index, as the concept of logical indices does not exist at
+    // this level
     pub const fn physical_index(&self) -> PageIndex {
         self.physical_index
     }

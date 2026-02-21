@@ -1,7 +1,7 @@
+use crate::storage::Page as _;
 use crate::storage::PageId as _;
 use std::marker::PhantomData;
 
-use crate::storage::page::Page;
 use crate::{
     bplustree::{AnyNodeId, Node, NodeId as _, NodeIds, TreeError, TreeHeader, TreeKey},
     storage::{
@@ -121,7 +121,7 @@ impl<'storage, TStorage: Storage + 'storage, TKey: TreeKey>
         debug_assert!(reservation.index() != TStorage::PageId::sentinel());
 
         self.transaction
-            .insert_reserved(reservation, Page::from_data(page))?;
+            .insert_reserved(reservation, TStorage::Page::from_data(page))?;
 
         Ok(())
     }

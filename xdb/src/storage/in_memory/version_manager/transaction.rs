@@ -1,25 +1,27 @@
-use crate::storage::{
-    in_memory::{
-        InMemoryPageId,
-        block::{PageReadGuard, PageWriteGuard},
-        version_manager::{
-            TransactionPage, TransactionPageAction, transaction_log::TransactionLogEntryHandle,
-        },
+use crate::storage::in_memory::{
+    InMemoryPageId,
+    block::{LockError, PageReadGuard as RawPageReadGuard, PageWriteGuard as RawPageWriteGuard},
+    version_manager::{
+        TransactionPage, TransactionPageAction, VersionedPage,
+        transaction_log::TransactionLogEntryHandle,
     },
-    page::Page,
 };
 use std::{
     collections::HashMap,
     fmt::Debug,
+    ops::{Deref, DerefMut},
     thread,
     time::{Duration, Instant},
 };
 
+use bytemuck::{must_cast, must_cast_mut, must_cast_ref};
 use tracing::{debug, info, instrument, warn};
 
 use crate::storage::{
     PageIndex, StorageError, TransactionId,
-    in_memory::{block::UninitializedPageGuard, version_manager::VersionManager},
+    in_memory::{
+        block::UninitializedPageGuard as RawUnitializedPageGuard, version_manager::VersionManager,
+    },
 };
 
 pub struct VersionManagedTransaction<'storage> {
@@ -52,6 +54,91 @@ impl Drop for VersionManagedTransaction<'_> {
             );
             self.rollback();
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct PageReadGuard<'storage>(RawPageReadGuard<'storage>);
+impl<'storage> PageReadGuard<'storage> {
+    pub const fn new(raw: RawPageReadGuard<'storage>) -> Self {
+        Self(raw)
+    }
+
+    pub fn upgrade(self) -> PageWriteGuard<'storage> {
+        PageWriteGuard(self.0.upgrade())
+    }
+
+    pub fn try_upgrade(self) -> Result<PageWriteGuard<'storage>, LockError> {
+        self.0.try_upgrade().map(PageWriteGuard)
+    }
+
+    pub const fn physical_index(&self) -> PageIndex {
+        self.0.physical_index()
+    }
+}
+
+impl Deref for PageReadGuard<'_> {
+    type Target = VersionedPage;
+
+    fn deref(&self) -> &Self::Target {
+        must_cast_ref(&*self.0)
+    }
+}
+
+#[derive(Debug)]
+pub struct PageWriteGuard<'storage>(RawPageWriteGuard<'storage>);
+
+impl DerefMut for PageWriteGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        must_cast_mut(&mut *self.0)
+    }
+}
+
+impl Deref for PageWriteGuard<'_> {
+    type Target = VersionedPage;
+
+    fn deref(&self) -> &Self::Target {
+        must_cast_ref(&*self.0)
+    }
+}
+
+impl<'storage> PageWriteGuard<'storage> {
+    pub const fn physical_index(&self) -> PageIndex {
+        self.0.physical_index()
+    }
+
+    // TODO this name is confusing - it should be "is_explicitly_marked_as_free" or something idk
+    pub fn is_free(&self) -> bool {
+        self.0.is_free()
+    }
+
+    pub fn reset(self) -> UninitializedPageGuard<'storage> {
+        UninitializedPageGuard(self.0.reset())
+    }
+
+    pub fn mark_free(&mut self) {
+        self.0.mark_free();
+    }
+}
+
+#[derive(Debug)]
+pub struct UninitializedPageGuard<'storage>(RawUnitializedPageGuard<'storage>);
+
+impl<'storage> UninitializedPageGuard<'storage> {
+    // TODO don't pass the whole thing by value if we can?
+    #[allow(clippy::large_types_passed_by_value)]
+    fn initialize(self, page: VersionedPage) -> PageWriteGuard<'storage> {
+        let raw_page_guard = self.0.initialize(must_cast(page));
+
+        PageWriteGuard(raw_page_guard)
+    }
+
+    pub const fn physical_index(&self) -> PageIndex {
+        self.0.physical_index()
+    }
+
+    pub(crate) const fn new(raw: RawUnitializedPageGuard<'storage>) -> Self {
+        Self(raw)
     }
 }
 
@@ -196,14 +283,16 @@ impl<'storage> VersionManagedTransaction<'storage> {
             .version_manager
             .data
             .get_at(index, self.log_entry.start_timestamp());
+        let versioned_page: &VersionedPage = must_cast_ref(&*main);
 
-        if main.next_version().is_some() {
+        if versioned_page.next_version().is_some() {
             // TODO not a deadlock, but optimistic concurrency failure
             return Err(StorageError::Deadlock(InMemoryPageId(index)));
         }
 
         let cow = self.allocate()?;
-        let cow = cow.initialize(*main);
+        let cow = cow.initialize(*versioned_page);
+
         self.pages.insert(
             index,
             TransactionPage {
@@ -228,7 +317,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     pub(crate) fn insert_reserved(
         &mut self,
         page_guard: UninitializedPageGuard<'storage>,
-        page: Page,
+        page: VersionedPage,
     ) -> Result<(), StorageError<InMemoryPageId>> {
         let logical_index = page_guard.physical_index();
         page_guard.initialize(page);

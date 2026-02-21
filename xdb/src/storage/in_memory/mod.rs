@@ -1,24 +1,23 @@
 mod bitmap;
 mod block;
 mod transaction;
-mod version_manager;
+pub(crate) mod version_manager;
 
 use bytemuck::Zeroable;
 
 use crate::storage::in_memory::bitmap::Bitmap;
+use crate::storage::in_memory::version_manager::versioned_page::VersionedPage;
 use crate::storage::in_memory::version_manager::{VersionManager, VersionedBlock};
 use crate::storage::{PageId, SerializedPageId};
 use crate::sync::Arc;
 
 use crate::storage::in_memory::transaction::InMemoryTransaction;
 
-use crate::storage::{
-    PageIndex, PageReservation, Storage, StorageError, in_memory::block::UninitializedPageGuard,
-};
+use crate::storage::{PageIndex, PageReservation, Storage, StorageError};
 
 // TODO impl Drop to return the page to free pool if it doesn't get written
 pub struct InMemoryPageReservation<'storage> {
-    page_guard: UninitializedPageGuard<'storage>,
+    page_guard: version_manager::transaction::UninitializedPageGuard<'storage>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -91,6 +90,7 @@ impl Storage for InMemoryStorage {
     type PageReservation<'a> = InMemoryPageReservation<'a>;
     type Transaction<'a> = InMemoryTransaction<'a>;
     type PageId = InMemoryPageId;
+    type Page = VersionedPage;
 
     fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError<Self::PageId>> {
         Ok(InMemoryTransaction::new(self))

@@ -173,7 +173,7 @@ mod test {
         bitmap.set(12).unwrap();
 
         assert_eq!(find_and_unset_retries(&bitmap, 10), vec![12]);
-        assert_eq!(find_and_unset_retries(&bitmap, 10), vec![]);
+        assert_eq!(find_and_unset_retries(&bitmap, 10), Vec::<usize>::new());
 
         bitmap.set(50_000).unwrap();
 

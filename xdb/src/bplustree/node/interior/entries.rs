@@ -1,6 +1,9 @@
 use crate::{
     Size,
-    storage::{SENTINEL_PAGE_ID, SerializedPageId, page::PAGE_DATA_SIZE},
+    storage::{
+        SENTINEL_PAGE_ID, SerializedPageId,
+        in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE,
+    },
 };
 use std::marker::PhantomData;
 
@@ -9,7 +12,8 @@ use bytemuck::{Pod, Zeroable, bytes_of, cast_slice, cast_slice_mut};
 use crate::bplustree::TreeKey;
 
 // TODO this hardcodes magic number and depends on specific size of NodeHeader and TPageId, fix it
-const INTERIOR_NODE_DATA_SIZE: Size = PAGE_DATA_SIZE.subtract(Size::of::<u64>().multiply(3));
+const INTERIOR_NODE_DATA_SIZE: Size =
+    VERSIONED_PAGE_DATA_SIZE.subtract(Size::of::<u64>().multiply(3));
 
 #[derive(Debug, Zeroable, Clone, Copy)]
 #[repr(C, align(8))]

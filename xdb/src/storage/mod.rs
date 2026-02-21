@@ -2,13 +2,10 @@ pub mod in_memory;
 pub mod instrumented;
 pub(super) mod page;
 
-use crate::{
-    storage::page::Page,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use crate::sync::atomic::{AtomicU64, Ordering};
 use std::{fmt::Debug, hash::Hash, num::NonZeroU64};
 
-use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
+use bytemuck::{AnyBitPattern, NoUninit, Pod, PodInOption, Zeroable, ZeroableInOption};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
@@ -122,6 +119,12 @@ pub trait PageId: Debug + Into<[Self; 1]> + Eq + Hash {
 type PageIdOf<T> = <T as Storage>::PageId;
 type ErrorOf<T> = StorageError<PageIdOf<T>>;
 
+pub trait Page: Debug {
+    fn from_data<T: AnyBitPattern + NoUninit>(data: T) -> Self;
+    fn data<T: AnyBitPattern>(&self) -> &T;
+    fn data_mut<T: AnyBitPattern + NoUninit>(&mut self) -> &mut T;
+}
+
 pub trait Transaction<'storage>: Send + Debug {
     type Storage: Storage + 'storage;
 
@@ -130,13 +133,13 @@ pub trait Transaction<'storage>: Send + Debug {
     fn read<T, const N: usize>(
         &mut self,
         indices: impl Into<[PageIdOf<Self::Storage>; N]>,
-        read: impl FnOnce([&Page; N]) -> T,
+        read: impl FnOnce([&<Self::Storage as Storage>::Page; N]) -> T,
     ) -> Result<T, ErrorOf<Self::Storage>>;
 
     fn write<T, const N: usize>(
         &mut self,
         indices: impl Into<[PageIdOf<Self::Storage>; N]>,
-        write: impl FnOnce([&mut Page; N]) -> T,
+        write: impl FnOnce([&mut <Self::Storage as Storage>::Page; N]) -> T,
     ) -> Result<T, ErrorOf<Self::Storage>>;
 
     fn reserve(
@@ -146,10 +149,13 @@ pub trait Transaction<'storage>: Send + Debug {
     fn insert_reserved(
         &mut self,
         reservation: <Self::Storage as Storage>::PageReservation<'storage>,
-        page: Page,
+        page: <Self::Storage as Storage>::Page,
     ) -> Result<(), ErrorOf<Self::Storage>>;
 
-    fn insert(&mut self, page: Page) -> Result<PageIdOf<Self::Storage>, ErrorOf<Self::Storage>>;
+    fn insert(
+        &mut self,
+        page: <Self::Storage as Storage>::Page,
+    ) -> Result<PageIdOf<Self::Storage>, ErrorOf<Self::Storage>>;
 
     fn delete(&mut self, page: PageIdOf<Self::Storage>) -> Result<(), ErrorOf<Self::Storage>>;
 
@@ -167,6 +173,7 @@ pub trait Storage: Send + Sync + Debug {
         Self: 'storage;
 
     type PageId: PageId;
+    type Page: Page;
 
     fn transaction(&self) -> Result<Self::Transaction<'_>, ErrorOf<Self>>
     where

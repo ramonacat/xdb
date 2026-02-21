@@ -17,11 +17,14 @@ use crate::{
             },
         },
     },
-    storage::{SENTINEL_PAGE_ID, SerializedPageId, page::PAGE_DATA_SIZE},
+    storage::{
+        SENTINEL_PAGE_ID, SerializedPageId,
+        in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE,
+    },
 };
 
 // TODO magic numbers depending on size of PageId!
-const LEAF_NODE_DATA_SIZE: Size = PAGE_DATA_SIZE.subtract(
+const LEAF_NODE_DATA_SIZE: Size = VERSIONED_PAGE_DATA_SIZE.subtract(
     Size::of::<u64>()
         .multiply(2)
         .add(Size::of::<u64>().multiply(2)),
