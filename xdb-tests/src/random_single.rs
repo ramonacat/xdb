@@ -2,7 +2,8 @@ use std::time::Instant;
 
 use rand::rng;
 use tracing::info;
-use xdb::{bplustree::Tree, storage::in_memory::InMemoryStorage};
+use xdb::bplustree::Tree;
+use xdb::storage::in_memory::InMemoryStorage;
 
 use crate::{KeyType, RUN_LENGTH, TransactionCommands, final_checks, retry_on_deadlock};
 

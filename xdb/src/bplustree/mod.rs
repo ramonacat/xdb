@@ -1,8 +1,7 @@
 use crate::bplustree::transaction::TreeTransaction;
-use crate::storage::FIRST_PAGE_ID;
-use crate::storage::Page as _;
 // TODO this file is huge, split into smaller chunks
 use crate::storage::PageId;
+use crate::storage::{FIRST_PAGE_ID, Page as _};
 pub mod algorithms;
 pub mod debug;
 pub mod dot;
@@ -11,30 +10,23 @@ mod node;
 pub mod transaction;
 mod tuples;
 
-use crate::Size;
-use crate::bplustree::iterator::TreeIterator;
-use crate::bplustree::tuples::NodeIds;
-use crate::storage::SerializedPageId;
-use crate::storage::in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE;
-use crate::storage::page::PAGE_DATA_SIZE;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use crate::bplustree::iterator::TreeIteratorItem;
-use crate::bplustree::node::AnyNodeId;
-use crate::bplustree::node::InteriorNodeId;
-use crate::bplustree::node::LeafNodeId;
-use crate::bplustree::node::Node;
-use crate::bplustree::node::NodeId;
-use crate::bplustree::node::interior::InteriorNode;
-use crate::bplustree::node::leaf::LeafNode;
-use crate::storage::PageIndex;
-use crate::storage::PageReservation;
-use crate::storage::Storage;
-use crate::storage::StorageError;
-use crate::storage::Transaction;
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
+
+use crate::Size;
+use crate::bplustree::iterator::{TreeIterator, TreeIteratorItem};
+use crate::bplustree::node::interior::InteriorNode;
+use crate::bplustree::node::leaf::LeafNode;
+use crate::bplustree::node::{AnyNodeId, InteriorNodeId, LeafNodeId, Node, NodeId};
+use crate::bplustree::tuples::NodeIds;
+use crate::storage::in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE;
+use crate::storage::page::PAGE_DATA_SIZE;
+use crate::storage::{
+    PageIndex, PageReservation, SerializedPageId, Storage, StorageError, Transaction,
+};
 
 pub trait TreeKey: Debug + Ord + Pod {}
 impl TreeKey for u8 {}
@@ -137,36 +129,26 @@ impl TreeHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{bplustree::debug::TransactionAction, storage::instrumented::InstrumentedStorage};
-    use crate::{
-        storage::in_memory::InMemoryPageId,
-        sync::{
-            Arc, Mutex,
-            atomic::{AtomicUsize, Ordering},
-        },
-    };
-    use std::{
-        collections::BTreeMap,
-        io::Write,
-        mem,
-        panic::{RefUnwindSafe, UnwindSafe, catch_unwind},
-    };
-    #[cfg(not(miri))]
-    use test_log::test;
+    use std::collections::BTreeMap;
+    use std::io::Write;
+    use std::mem;
+    use std::panic::{RefUnwindSafe, UnwindSafe, catch_unwind};
 
-    use crate::{
-        bplustree::{
-            algorithms::{delete::delete, insert::insert},
-            debug::{assert_properties, assert_tree_equal},
-        },
-        debug::BigKey,
-        storage::in_memory::InMemoryStorage,
-    };
     use pretty_assertions::assert_eq;
     use tempfile::NamedTempFile;
+    #[cfg(not(miri))]
+    use test_log::test;
     use tracing::info;
 
     use super::*;
+    use crate::bplustree::algorithms::delete::delete;
+    use crate::bplustree::algorithms::insert::insert;
+    use crate::bplustree::debug::{TransactionAction, assert_properties, assert_tree_equal};
+    use crate::debug::BigKey;
+    use crate::storage::in_memory::{InMemoryPageId, InMemoryStorage};
+    use crate::storage::instrumented::InstrumentedStorage;
+    use crate::sync::atomic::{AtomicUsize, Ordering};
+    use crate::sync::{Arc, Mutex};
 
     #[test]
     fn node_accessor_entries() {

@@ -1,23 +1,25 @@
 mod page_state;
 
 // TODO this should not be at all aware of InMemoryPageId
-use crate::platform::allocation::uncommitted::UncommittedAllocation;
-use crate::storage::StorageError;
-use crate::storage::in_memory::block::page_state::PageStateValue;
-use crate::storage::page::{PAGE_SIZE, Page};
-use crate::{platform::allocation::Allocation, storage::in_memory::InMemoryPageId};
-use std::ops::DerefMut;
+use std::fmt::Debug;
+use std::mem::MaybeUninit;
+use std::ops::{Deref, DerefMut};
+use std::pin::Pin;
+use std::ptr::NonNull;
 #[cfg(debug_assertions)]
 use std::time::{Duration, Instant};
-use std::{fmt::Debug, mem::MaybeUninit, ops::Deref, pin::Pin, ptr::NonNull};
+
 use thiserror::Error;
 use tracing::{debug, error, instrument, warn};
 
-use crate::{
-    Size,
-    storage::{PageIndex, in_memory::block::page_state::PageState},
-    sync::atomic::{AtomicU64, Ordering},
-};
+use crate::Size;
+use crate::platform::allocation::Allocation;
+use crate::platform::allocation::uncommitted::UncommittedAllocation;
+use crate::storage::in_memory::InMemoryPageId;
+use crate::storage::in_memory::block::page_state::{PageState, PageStateValue};
+use crate::storage::page::{PAGE_SIZE, Page};
+use crate::storage::{PageIndex, StorageError};
+use crate::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, Error)]
 // TODO make this just `struct LockContended`
@@ -342,13 +344,13 @@ impl Debug for Block {
 }
 
 impl Block {
+    const HOUSEKEEPING_BLOCK_SIZE: Size = Size::of::<PageState>().multiply(Self::PAGE_COUNT);
+    const PAGE_COUNT: usize = Self::SIZE.divide(PAGE_SIZE);
     const SIZE: Size = if cfg!(miri) {
         Size::MiB(128)
     } else {
         Size::GiB(4)
     };
-    const PAGE_COUNT: usize = Self::SIZE.divide(PAGE_SIZE);
-    const HOUSEKEEPING_BLOCK_SIZE: Size = Size::of::<PageState>().multiply(Self::PAGE_COUNT);
 
     pub fn new(name: String) -> Self {
         let housekeeping: Box<dyn Allocation> =

@@ -1,7 +1,8 @@
-use crate::sync::atomic::{AtomicU32, Ordering};
-use crate::thread;
 use std::pin::Pin;
 use std::time::Duration;
+
+use crate::sync::atomic::{AtomicU32, Ordering};
+use crate::thread;
 
 #[allow(unused)]
 #[derive(Debug)]

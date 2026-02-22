@@ -1,25 +1,17 @@
 mod scheduler;
 
-use std::{
-    sync::atomic::{AtomicU64, Ordering},
-    time::Duration,
-};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use tracing::{debug, info, info_span, instrument, trace};
 
-use crate::{
-    storage::{
-        PageIndex, TransactionalTimestamp,
-        in_memory::{
-            version_manager::transaction::PageWriteGuard,
-            version_manager::{
-                VersionedBlock, transaction_log::TransactionLog, vacuum::scheduler::Scheduler,
-            },
-        },
-    },
-    sync::Arc,
-    thread::{self, JoinHandle},
-};
+use crate::storage::in_memory::version_manager::VersionedBlock;
+use crate::storage::in_memory::version_manager::transaction::PageWriteGuard;
+use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
+use crate::storage::in_memory::version_manager::vacuum::scheduler::Scheduler;
+use crate::storage::{PageIndex, TransactionalTimestamp};
+use crate::sync::Arc;
+use crate::thread::{self, JoinHandle};
 
 struct VacuumThread {
     // TODO we should prolly just have an Arc<VersionManager> here?

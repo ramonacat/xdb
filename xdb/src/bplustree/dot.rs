@@ -1,10 +1,8 @@
-use crate::bplustree::node::AnyNodeKind;
-use crate::bplustree::{AnyNodeId, Node, NodeId, TreeKey, TreeTransaction};
-use crate::{
-    bplustree::{Tree, TreeError},
-    storage::Storage,
-};
 use std::fmt::Write;
+
+use crate::bplustree::node::AnyNodeKind;
+use crate::bplustree::{AnyNodeId, Node, NodeId, Tree, TreeError, TreeKey, TreeTransaction};
+use crate::storage::Storage;
 
 impl<T: Storage, TKey: TreeKey> Tree<T, TKey> {
     pub fn to_dot(

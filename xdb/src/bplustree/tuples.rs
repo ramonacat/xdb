@@ -1,7 +1,5 @@
-use crate::bplustree::NodeId;
-use crate::bplustree::TreeKey;
-use crate::storage::Page;
-use crate::storage::SerializedPageId;
+use crate::bplustree::{NodeId, TreeKey};
+use crate::storage::{Page, SerializedPageId};
 
 pub(super) trait NodeIds<const N: usize> {
     type Nodes<'a, TKey: TreeKey>;

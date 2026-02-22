@@ -1,11 +1,12 @@
+use std::fmt::Debug;
+use std::pin::Pin;
+use std::time::Duration;
+
 use tracing::warn;
 use xdb_proc_macros::atomic_state;
 
 use crate::storage::in_memory::block::LockError;
 use crate::sync::atomic::Ordering;
-use std::fmt::Debug;
-use std::pin::Pin;
-use std::time::Duration;
 
 #[cfg(not(feature = "shuttle"))]
 const _: () = assert!(size_of::<PageState>() == size_of::<u32>());

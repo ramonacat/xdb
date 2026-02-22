@@ -5,28 +5,22 @@ mod predictable;
 mod random_single;
 mod random_threaded;
 
-use clap::Parser;
-use clap::Subcommand;
-use rand::Rng;
 use std::fs;
-use std::{
-    thread::{self},
-    time::Duration,
-};
+use std::thread::{self};
+use std::time::Duration;
+
+use arbitrary::{Arbitrary, Unstructured};
+use clap::{Parser, Subcommand};
+use rand::Rng;
 use tracing_subscriber::util::SubscriberInitExt;
-use xdb::bplustree::TreeKey;
 use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::find;
 use xdb::bplustree::algorithms::insert::insert;
 use xdb::bplustree::debug::assert_properties;
-use xdb::storage::in_memory::InMemoryPageId;
-
-use arbitrary::{Arbitrary, Unstructured};
-use xdb::{
-    bplustree::{Tree, TreeError},
-    debug::BigKey,
-    storage::{StorageError, in_memory::InMemoryStorage},
-};
+use xdb::bplustree::{Tree, TreeError, TreeKey};
+use xdb::debug::BigKey;
+use xdb::storage::StorageError;
+use xdb::storage::in_memory::{InMemoryPageId, InMemoryStorage};
 
 type KeyType = BigKey<u16, 1024>;
 

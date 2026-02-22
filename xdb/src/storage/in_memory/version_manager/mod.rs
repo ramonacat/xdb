@@ -1,22 +1,17 @@
 use bytemuck::must_cast_ref;
-use tracing::debug;
-use tracing::error;
+use tracing::{debug, error};
 
-use crate::storage::StorageError;
-use crate::storage::TransactionalTimestamp;
-use crate::storage::in_memory::Bitmap;
-use crate::storage::in_memory::InMemoryPageId;
 use crate::storage::in_memory::block::Block;
 use crate::storage::in_memory::version_manager::committer::Committer;
 use crate::storage::in_memory::version_manager::recycled_pages::Recycler;
-use crate::storage::in_memory::version_manager::transaction::PageReadGuard;
-use crate::storage::in_memory::version_manager::transaction::PageWriteGuard;
-use crate::storage::in_memory::version_manager::transaction::UninitializedPageGuard;
-use crate::storage::in_memory::version_manager::transaction::VersionManagedTransaction;
+use crate::storage::in_memory::version_manager::transaction::{
+    PageReadGuard, PageWriteGuard, UninitializedPageGuard, VersionManagedTransaction,
+};
 use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use crate::storage::in_memory::version_manager::vacuum::Vacuum;
 use crate::storage::in_memory::version_manager::versioned_page::VersionedPage;
-use crate::storage::{PageIndex, TransactionId};
+use crate::storage::in_memory::{Bitmap, InMemoryPageId};
+use crate::storage::{PageIndex, StorageError, TransactionId, TransactionalTimestamp};
 use crate::sync::Arc;
 
 mod committer;

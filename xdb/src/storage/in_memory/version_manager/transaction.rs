@@ -1,28 +1,22 @@
-use crate::storage::in_memory::{
-    InMemoryPageId,
-    block::{LockError, PageReadGuard as RawPageReadGuard, PageWriteGuard as RawPageWriteGuard},
-    version_manager::{
-        TransactionPage, TransactionPageAction, VersionedPage,
-        transaction_log::TransactionLogEntryHandle,
-    },
-};
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    ops::{Deref, DerefMut},
-    thread,
-    time::{Duration, Instant},
-};
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::ops::{Deref, DerefMut};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use bytemuck::{must_cast, must_cast_mut, must_cast_ref};
 use tracing::{debug, info, instrument, warn};
 
-use crate::storage::{
-    PageIndex, StorageError, TransactionId,
-    in_memory::{
-        block::UninitializedPageGuard as RawUnitializedPageGuard, version_manager::VersionManager,
-    },
+use crate::storage::in_memory::InMemoryPageId;
+use crate::storage::in_memory::block::{
+    LockError, PageReadGuard as RawPageReadGuard, PageWriteGuard as RawPageWriteGuard,
+    UninitializedPageGuard as RawUnitializedPageGuard,
 };
+use crate::storage::in_memory::version_manager::transaction_log::TransactionLogEntryHandle;
+use crate::storage::in_memory::version_manager::{
+    TransactionPage, TransactionPageAction, VersionManager, VersionedPage,
+};
+use crate::storage::{PageIndex, StorageError, TransactionId};
 
 pub struct VersionManagedTransaction<'storage> {
     id: TransactionId,

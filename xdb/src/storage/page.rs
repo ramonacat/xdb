@@ -3,7 +3,8 @@ use std::fmt::Debug;
 use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, bytes_of, from_bytes_mut, must_cast};
 use thiserror::Error;
 
-use crate::{Size, checksum::Checksum};
+use crate::Size;
+use crate::checksum::Checksum;
 
 pub const PAGE_SIZE: Size = Size::B(4096);
 pub const PAGE_DATA_SIZE: Size = PAGE_SIZE.subtract(Size::of::<PageHeader>());

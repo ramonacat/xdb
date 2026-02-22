@@ -1,24 +1,20 @@
-use crate::storage::in_memory::InMemoryPageId;
-use crate::storage::in_memory::version_manager::{
-    TransactionPage, TransactionPageAction, VersionedBlock,
-};
-use tracing::{debug, info_span, instrument, record_all, trace};
-
-use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::pin::Pin;
 
+use tracing::{debug, info_span, instrument, record_all, trace};
+
 use crate::platform::futex::Futex;
-use crate::storage::{PageIndex, StorageError, TransactionId};
-use crate::{
-    sync::{
-        Arc, Mutex,
-        atomic::Ordering,
-        mpsc::{self, Sender},
-    },
-    thread::{self, JoinHandle},
+use crate::storage::in_memory::InMemoryPageId;
+use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
+use crate::storage::in_memory::version_manager::{
+    TransactionPage, TransactionPageAction, VersionedBlock,
 };
+use crate::storage::{PageIndex, StorageError, TransactionId};
+use crate::sync::atomic::Ordering;
+use crate::sync::mpsc::{self, Sender};
+use crate::sync::{Arc, Mutex};
+use crate::thread::{self, JoinHandle};
 
 #[derive(Debug)]
 pub struct CommitRequest {

@@ -1,5 +1,7 @@
-use crate::sync::atomic::AtomicU32;
-use std::{marker::PhantomPinned, pin::Pin, ptr, time::Duration};
+use std::marker::PhantomPinned;
+use std::pin::Pin;
+use std::ptr;
+use std::time::Duration;
 
 use libc::{
     EAGAIN, EFAULT, EINTR, EINVAL, ETIMEDOUT, FUTEX_PRIVATE_FLAG, FUTEX_WAIT, FUTEX_WAKE,
@@ -7,6 +9,7 @@ use libc::{
 };
 
 use crate::platform::errno;
+use crate::sync::atomic::AtomicU32;
 
 #[derive(Debug)]
 #[repr(transparent)]

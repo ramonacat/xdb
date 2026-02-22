@@ -1,9 +1,10 @@
-use crate::Size;
-use crate::storage::page::{PAGE_SIZE, PageHeader};
-use crate::storage::{Page, PageIndex, TransactionalTimestamp};
 use bytemuck::checked::from_bytes_mut;
 use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, from_bytes, must_cast};
 use tracing::debug;
+
+use crate::Size;
+use crate::storage::page::{PAGE_SIZE, PageHeader};
+use crate::storage::{Page, PageIndex, TransactionalTimestamp};
 
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 #[repr(C)]

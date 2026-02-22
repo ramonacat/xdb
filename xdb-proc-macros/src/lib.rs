@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
+use syn::parse::Parse;
 use syn::{
     Block, Expr, FnArg, Ident, LitInt, ReturnType, Token, Visibility, braced, parenthesized,
-    parse::Parse, parse_macro_input,
+    parse_macro_input,
 };
 
 struct Item {

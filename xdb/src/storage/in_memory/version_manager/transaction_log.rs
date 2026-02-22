@@ -1,15 +1,11 @@
-use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::sync::Mutex;
 
 use tracing::debug;
 
-use crate::storage::TransactionalTimestamp;
-use crate::sync::atomic::AtomicU64;
-use crate::sync::atomic::Ordering;
-
-use crate::storage::TransactionId;
+use crate::storage::{TransactionId, TransactionalTimestamp};
+use crate::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug)]
 // TODO the data structures are very wacky here in general, we need to store the log in a Storage +

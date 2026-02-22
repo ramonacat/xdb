@@ -1,15 +1,12 @@
-use tracing::{debug, trace};
-
-use crate::{
-    storage::in_memory::{
-        version_manager::transaction::UninitializedPageGuard,
-        version_manager::{VersionedBlock, vacuum::Vacuum},
-    },
-    sync::{Arc, Mutex},
-};
 use std::time::{Duration, Instant};
 
+use tracing::{debug, trace};
+
 use crate::storage::PageIndex;
+use crate::storage::in_memory::version_manager::VersionedBlock;
+use crate::storage::in_memory::version_manager::transaction::UninitializedPageGuard;
+use crate::storage::in_memory::version_manager::vacuum::Vacuum;
+use crate::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub struct Recycler {

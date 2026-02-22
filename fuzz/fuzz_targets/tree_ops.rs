@@ -1,13 +1,13 @@
-use arbitrary::Arbitrary;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::mem;
 use std::sync::{Arc, Mutex};
+
+use arbitrary::Arbitrary;
 use xdb::bplustree::algorithms::delete::delete;
 use xdb::bplustree::algorithms::find;
 use xdb::bplustree::algorithms::insert::insert;
-use xdb::bplustree::debug::TransactionAction;
-use xdb::bplustree::debug::{assert_properties, assert_tree_equal};
+use xdb::bplustree::debug::{TransactionAction, assert_properties, assert_tree_equal};
 use xdb::bplustree::{Tree, TreeError, TreeKey};
 use xdb::debug::BigKey;
 use xdb::storage::Storage;

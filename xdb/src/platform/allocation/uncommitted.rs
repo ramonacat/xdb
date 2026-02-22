@@ -5,11 +5,10 @@ use libc::{
     PROT_WRITE, mmap, mprotect, munmap,
 };
 
-use crate::{
-    Size,
-    platform::{allocation::Allocation, panic_on_errno},
-    storage::page::PAGE_SIZE,
-};
+use crate::Size;
+use crate::platform::allocation::Allocation;
+use crate::platform::panic_on_errno;
+use crate::storage::page::PAGE_SIZE;
 
 #[derive(Debug)]
 pub struct UncommittedAllocation {

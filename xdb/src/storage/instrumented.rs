@@ -1,14 +1,9 @@
-use crate::{
-    storage::PageReservation,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-};
 use std::marker::PhantomData;
 
 use super::{StorageError, Transaction};
-use crate::storage::Storage;
+use crate::storage::{PageReservation, Storage};
+use crate::sync::Arc;
+use crate::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct InstrumentedPageReservation<'a, TStorage: Storage + 'a>(TStorage::PageReservation<'a>);
 
@@ -103,18 +98,16 @@ impl<T: Storage> InstrumentedStorage<T> {
 }
 
 impl<T: Storage> Storage for InstrumentedStorage<T> {
+    type Page = T::Page;
+    type PageId = T::PageId;
     type PageReservation<'a>
         = InstrumentedPageReservation<'a, T>
     where
         T: 'a;
-
     type Transaction<'a>
         = InstrumentedTransaction<'a, T>
     where
         T: 'a;
-
-    type PageId = T::PageId;
-    type Page = T::Page;
 
     fn transaction(&self) -> Result<Self::Transaction<'_>, StorageError<T::PageId>> {
         Ok(InstrumentedTransaction(

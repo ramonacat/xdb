@@ -1,13 +1,12 @@
-use std::{
-    fmt::Debug,
-    pin::Pin,
-    time::{Duration, Instant},
-};
+use std::fmt::Debug;
+use std::pin::Pin;
+use std::time::{Duration, Instant};
 
 use tracing::trace;
 use xdb_proc_macros::atomic_state;
 
-use crate::sync::{Mutex, atomic::Ordering};
+use crate::sync::Mutex;
+use crate::sync::atomic::Ordering;
 
 #[must_use]
 pub enum RequestedState {

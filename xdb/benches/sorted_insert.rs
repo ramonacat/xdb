@@ -1,11 +1,10 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use xdb::{
-    bplustree::{Tree, algorithms::insert},
-    debug::BigKey,
-    storage::in_memory::InMemoryStorage,
-};
+use xdb::bplustree::Tree;
+use xdb::bplustree::algorithms::insert;
+use xdb::debug::BigKey;
+use xdb::storage::in_memory::InMemoryStorage;
 
 fn sorted_insert(c: &mut Criterion) {
     let storage = InMemoryStorage::new();

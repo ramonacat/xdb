@@ -5,12 +5,14 @@ pub(super) mod leaf;
 
 use std::marker::PhantomData;
 
+use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, must_cast_ref};
+
 use crate::Size;
+use crate::bplustree::TreeKey;
+use crate::bplustree::node::interior::InteriorNode;
 use crate::bplustree::node::leaf::LeafNode;
-use crate::bplustree::{TreeKey, node::interior::InteriorNode};
 use crate::storage::in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE;
 use crate::storage::{SENTINEL_PAGE_ID, SerializedPageId};
-use bytemuck::{AnyBitPattern, NoUninit, Pod, Zeroable, must_cast_ref};
 
 pub(super) trait NodeId: Copy + PartialEq {
     type Node<TKey>: Node<TKey>

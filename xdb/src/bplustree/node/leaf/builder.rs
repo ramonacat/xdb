@@ -1,15 +1,10 @@
 use std::marker::PhantomData;
 
-use crate::{
-    bplustree::{
-        InteriorNodeId, LeafNode, LeafNodeId, NodeId, TreeKey,
-        node::{
-            NodeHeader,
-            leaf::{LeafNodeHeader, entries::LeafNodeEntries},
-        },
-    },
-    storage::SENTINEL_PAGE_ID,
-};
+use crate::bplustree::node::NodeHeader;
+use crate::bplustree::node::leaf::LeafNodeHeader;
+use crate::bplustree::node::leaf::entries::LeafNodeEntries;
+use crate::bplustree::{InteriorNodeId, LeafNode, LeafNodeId, NodeId, TreeKey};
+use crate::storage::SENTINEL_PAGE_ID;
 
 pub(in crate::bplustree) trait Topology {
     fn parent(&self) -> Option<InteriorNodeId>;

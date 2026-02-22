@@ -3,14 +3,12 @@ use std::fmt::Debug;
 use thiserror::Error;
 use tracing::{instrument, trace};
 
-use crate::{
-    bplustree::{
-        InteriorNodeId, LeafNodeId, TreeError, TreeKey, TreeTransaction,
-        algorithms::{last_leaf, leaf_search},
-        node::{Node, interior::InteriorNode, leaf::LeafNode},
-    },
-    storage::{PageId, Storage},
-};
+use crate::bplustree::algorithms::{last_leaf, leaf_search};
+use crate::bplustree::node::Node;
+use crate::bplustree::node::interior::InteriorNode;
+use crate::bplustree::node::leaf::LeafNode;
+use crate::bplustree::{InteriorNodeId, LeafNodeId, TreeError, TreeKey, TreeTransaction};
+use crate::storage::{PageId, Storage};
 
 #[must_use]
 #[derive(Debug, Error)]

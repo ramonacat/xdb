@@ -3,13 +3,13 @@ use std::collections::HashSet;
 
 use tracing::{error, instrument, trace};
 
-use crate::{
-    bplustree::{
-        AnyNodeId, InteriorNode, InteriorNodeId, LeafNodeId, Node, NodeId as _, TreeError, TreeKey,
-        TreeTransaction, algorithms::leaf_search, node::leaf::builder::MaterializedTopology,
-    },
-    storage::{PageId, PageReservation as _, Storage},
+use crate::bplustree::algorithms::leaf_search;
+use crate::bplustree::node::leaf::builder::MaterializedTopology;
+use crate::bplustree::{
+    AnyNodeId, InteriorNode, InteriorNodeId, LeafNodeId, Node, NodeId as _, TreeError, TreeKey,
+    TreeTransaction,
 };
+use crate::storage::{PageId, PageReservation as _, Storage};
 
 fn create_new_root<'storage, TStorage: Storage, TKey: TreeKey>(
     transaction: &mut TreeTransaction<'storage, TStorage, TKey>,

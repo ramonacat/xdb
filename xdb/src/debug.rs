@@ -1,12 +1,10 @@
-use crate::Size;
-use std::{
-    fmt::{Debug, Display},
-    marker::PhantomData,
-};
+use std::fmt::{Debug, Display};
+use std::marker::PhantomData;
 
 use arbitrary::Arbitrary;
 use bytemuck::{Pod, Zeroable, bytes_of, pod_read_unaligned};
 
+use crate::Size;
 use crate::bplustree::TreeKey;
 
 #[derive(Clone, Copy, Pod, Zeroable)]

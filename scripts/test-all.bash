@@ -4,7 +4,7 @@ set -euo pipefail
 
 cargo test
 cargo clippy
-cargo fmt --check
+cargo +nightly fmt --check
 cargo +nightly miri nextest run
 
 pushd xdb-shuttle

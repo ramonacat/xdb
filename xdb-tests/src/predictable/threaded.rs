@@ -1,24 +1,16 @@
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver, Sender},
-    },
-    thread,
-    time::{Duration, Instant},
-};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use tracing::{info, instrument};
-use xdb::{
-    bplustree::{Tree, algorithms::find},
-    storage::in_memory::InMemoryStorage,
-};
+use xdb::bplustree::Tree;
+use xdb::bplustree::algorithms::find;
+use xdb::storage::in_memory::InMemoryStorage;
 
-use crate::{
-    RUN_LENGTH, THREAD_COUNT, final_checks,
-    predictable::{commands_for_iteration, expected_value_for_key},
-    retry_on_deadlock,
-};
+use crate::predictable::{commands_for_iteration, expected_value_for_key};
+use crate::{RUN_LENGTH, THREAD_COUNT, final_checks, retry_on_deadlock};
 
 const MILESTONE_EACH: u64 = 500;
 

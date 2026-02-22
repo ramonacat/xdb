@@ -2,13 +2,10 @@ use std::marker::PhantomData;
 
 use bytemuck::{Zeroable, bytes_of, pod_read_unaligned};
 
-use crate::{
-    Size,
-    bplustree::{
-        TreeKey,
-        node::leaf::{LEAF_NODE_DATA_SIZE, builder::MaterializedData},
-    },
-};
+use crate::Size;
+use crate::bplustree::TreeKey;
+use crate::bplustree::node::leaf::LEAF_NODE_DATA_SIZE;
+use crate::bplustree::node::leaf::builder::MaterializedData;
 
 pub(in crate::bplustree) struct LeafNodeEntry<'node, TKey> {
     key: TKey,

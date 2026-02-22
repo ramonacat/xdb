@@ -1,16 +1,12 @@
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
+
+use pretty_assertions::assert_eq;
 use tracing::debug;
 
-use crate::{
-    bplustree::{
-        AnyNodeId, InteriorNodeId, Node as _, Tree, TreeKey, TreeTransaction,
-        algorithms::{first_leaf, last_leaf},
-    },
-    storage::Storage,
-};
-
 use super::node::AnyNodeKind;
+use crate::bplustree::algorithms::{first_leaf, last_leaf};
+use crate::bplustree::{AnyNodeId, InteriorNodeId, Node as _, Tree, TreeKey, TreeTransaction};
+use crate::storage::Storage;
 
 pub fn assert_tree_equal<TStorage: Storage, TKey: TreeKey, TRightKey: TreeKey>(
     left: &Tree<TStorage, TKey>,

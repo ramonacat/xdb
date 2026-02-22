@@ -1,10 +1,7 @@
-use crate::storage::{
-    StorageError, Transaction,
-    in_memory::{
-        InMemoryPageId, InMemoryPageReservation, InMemoryStorage,
-        version_manager::{transaction::VersionManagedTransaction, versioned_page::VersionedPage},
-    },
-};
+use crate::storage::in_memory::version_manager::transaction::VersionManagedTransaction;
+use crate::storage::in_memory::version_manager::versioned_page::VersionedPage;
+use crate::storage::in_memory::{InMemoryPageId, InMemoryPageReservation, InMemoryStorage};
+use crate::storage::{StorageError, Transaction};
 
 #[derive(Debug)]
 pub struct InMemoryTransaction<'storage> {

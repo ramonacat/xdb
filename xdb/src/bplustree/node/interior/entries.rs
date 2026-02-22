@@ -1,15 +1,11 @@
-use crate::{
-    Size,
-    storage::{
-        SENTINEL_PAGE_ID, SerializedPageId,
-        in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE,
-    },
-};
 use std::marker::PhantomData;
 
 use bytemuck::{Pod, Zeroable, bytes_of, cast_slice, cast_slice_mut};
 
+use crate::Size;
 use crate::bplustree::TreeKey;
+use crate::storage::in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE;
+use crate::storage::{SENTINEL_PAGE_ID, SerializedPageId};
 
 // TODO this hardcodes magic number and depends on specific size of NodeHeader and TPageId, fix it
 const INTERIOR_NODE_DATA_SIZE: Size =
@@ -48,8 +44,6 @@ struct InteriorNodeData<TKey> {
 unsafe impl<TKey: TreeKey> Pod for InteriorNodeData<TKey> {}
 
 impl<TKey: TreeKey> InteriorNodeData<TKey> {
-    const VALUES_OFFSET: Size = Size::of::<TKey>().multiply(Self::KEY_CAPACITY);
-
     // n - max number of keys
     //
     // size = key_size*n + value_size*(n+1)
@@ -58,6 +52,7 @@ impl<TKey: TreeKey> InteriorNodeData<TKey> {
     // (size - value_size)/(key_size + value_size) = n
     const KEY_CAPACITY: usize = (INTERIOR_NODE_DATA_SIZE.subtract(Size::of::<SerializedPageId>()))
         .divide(Size::of::<TKey>().add(Size::of::<SerializedPageId>()));
+    const VALUES_OFFSET: Size = Size::of::<TKey>().multiply(Self::KEY_CAPACITY);
 
     fn from_raw_data(keys: &[TKey], values: &[SerializedPageId]) -> Self {
         assert!(Size::of_val(keys) < Self::VALUES_OFFSET);

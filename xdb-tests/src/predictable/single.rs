@@ -1,16 +1,12 @@
 use std::time::Instant;
 
 use tracing::info;
-use xdb::{
-    bplustree::{Tree, algorithms::find},
-    storage::in_memory::InMemoryStorage,
-};
+use xdb::bplustree::Tree;
+use xdb::bplustree::algorithms::find;
+use xdb::storage::in_memory::InMemoryStorage;
 
-use crate::{
-    RUN_LENGTH, final_checks,
-    predictable::{KEYS_PER_ITERATION, commands_for_iteration, expected_value_for_key},
-    retry_on_deadlock,
-};
+use crate::predictable::{KEYS_PER_ITERATION, commands_for_iteration, expected_value_for_key};
+use crate::{RUN_LENGTH, final_checks, retry_on_deadlock};
 
 pub fn run() {
     let storage = InMemoryStorage::new();

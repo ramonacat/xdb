@@ -1,21 +1,13 @@
 use std::fmt::Write;
 mod entries;
 
-use crate::{
-    bplustree::{
-        TreeKey,
-        node::interior::entries::{InteriorNodeEntries, KeyIndex, ValueIndex},
-    },
-    storage::SENTINEL_PAGE_ID,
-};
-
 use bytemuck::{AnyBitPattern, NoUninit};
 use tracing::error;
 
-use crate::bplustree::{
-    InteriorNodeId, NodeId,
-    node::{AnyNodeId, Node, NodeHeader},
-};
+use crate::bplustree::node::interior::entries::{InteriorNodeEntries, KeyIndex, ValueIndex};
+use crate::bplustree::node::{AnyNodeId, Node, NodeHeader};
+use crate::bplustree::{InteriorNodeId, NodeId, TreeKey};
+use crate::storage::SENTINEL_PAGE_ID;
 
 #[derive(Debug, AnyBitPattern, Clone, Copy)]
 #[repr(C, align(8))]
@@ -201,10 +193,8 @@ impl<TKey: TreeKey> Iterator for InteriorNodeKeysIterator<'_, TKey> {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        bplustree::{AnyNodeId, InteriorNode},
-        storage::SerializedPageId,
-    };
+    use crate::bplustree::{AnyNodeId, InteriorNode};
+    use crate::storage::SerializedPageId;
 
     #[test]
     fn merge_with() {

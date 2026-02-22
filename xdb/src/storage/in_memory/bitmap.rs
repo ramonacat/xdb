@@ -1,13 +1,10 @@
 use bytemuck::{Pod, Zeroable};
 
-use crate::{
-    Size,
-    storage::{
-        PageIndex, StorageError,
-        in_memory::{InMemoryPageId, block::Block},
-        page::PAGE_DATA_SIZE,
-    },
-};
+use crate::Size;
+use crate::storage::in_memory::InMemoryPageId;
+use crate::storage::in_memory::block::Block;
+use crate::storage::page::PAGE_DATA_SIZE;
+use crate::storage::{PageIndex, StorageError};
 
 #[derive(Debug, Zeroable, Pod, Clone, Copy)]
 #[repr(C)]
@@ -149,9 +146,9 @@ impl Bitmap {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use std::collections::HashSet;
+
+    use super::*;
 
     fn find_and_unset_retries(bitmap: &Bitmap, count: usize) -> Vec<usize> {
         let mut result = HashSet::new();

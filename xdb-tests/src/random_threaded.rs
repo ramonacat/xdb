@@ -1,16 +1,13 @@
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver, SyncSender},
-    },
-    thread::{self, JoinHandle},
-    time::{self, Duration},
-};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::thread::{self, JoinHandle};
+use std::time::{self, Duration};
 
 use rand::rng;
 use tracing::{error, info, info_span};
-use xdb::{bplustree::Tree, storage::in_memory::InMemoryStorage};
+use xdb::bplustree::Tree;
+use xdb::storage::in_memory::InMemoryStorage;
 
 use crate::{
     KeyType, RUN_LENGTH, THREAD_COUNT, TransactionCommands, final_checks, retry_on_deadlock,

@@ -5,23 +5,15 @@ use std::fmt::Debug;
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::{
-    Size,
-    bplustree::{
-        LeafNodeId, NodeId, TreeKey,
-        node::{
-            InteriorNodeId, Node, NodeHeader,
-            leaf::{
-                builder::{LeafNodeBuilder, MaterializedData, MaterializedTopology, Topology},
-                entries::{LeafNodeEntries, LeafNodeEntry},
-            },
-        },
-    },
-    storage::{
-        SENTINEL_PAGE_ID, SerializedPageId,
-        in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE,
-    },
+use crate::Size;
+use crate::bplustree::node::leaf::builder::{
+    LeafNodeBuilder, MaterializedData, MaterializedTopology, Topology,
 };
+use crate::bplustree::node::leaf::entries::{LeafNodeEntries, LeafNodeEntry};
+use crate::bplustree::node::{InteriorNodeId, Node, NodeHeader};
+use crate::bplustree::{LeafNodeId, NodeId, TreeKey};
+use crate::storage::in_memory::version_manager::versioned_page::VERSIONED_PAGE_DATA_SIZE;
+use crate::storage::{SENTINEL_PAGE_ID, SerializedPageId};
 
 // TODO magic numbers depending on size of PageId!
 const LEAF_NODE_DATA_SIZE: Size = VERSIONED_PAGE_DATA_SIZE.subtract(

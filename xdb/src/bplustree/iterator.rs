@@ -1,10 +1,6 @@
-use crate::{
-    bplustree::{
-        LeafNodeId, TreeError, TreeKey, TreeTransaction,
-        algorithms::{first_leaf, last_leaf},
-    },
-    storage::{PageId, Storage},
-};
+use crate::bplustree::algorithms::{first_leaf, last_leaf};
+use crate::bplustree::{LeafNodeId, TreeError, TreeKey, TreeTransaction};
+use crate::storage::{PageId, Storage};
 
 pub(super) type TreeIteratorItem<TKey, TPageId> = Result<(TKey, Vec<u8>), TreeError<TPageId>>;
 
