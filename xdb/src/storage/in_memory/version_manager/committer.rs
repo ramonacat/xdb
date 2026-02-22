@@ -6,11 +6,13 @@ use tracing::{debug, info_span, instrument, record_all, trace};
 
 use crate::platform::futex::Futex;
 use crate::storage::in_memory::InMemoryPageId;
-use crate::storage::in_memory::version_manager::transaction_log::TransactionLog;
+use crate::storage::in_memory::version_manager::transaction_log::{
+    StartedTransaction, TransactionLog,
+};
 use crate::storage::in_memory::version_manager::{
     TransactionPage, TransactionPageAction, VersionedBlock,
 };
-use crate::storage::{PageIndex, StorageError, TransactionId};
+use crate::storage::{PageIndex, StorageError};
 use crate::sync::atomic::Ordering;
 use crate::sync::mpsc::{self, Sender};
 use crate::sync::{Arc, Mutex};
@@ -21,8 +23,9 @@ pub struct CommitRequest {
     is_done: Pin<Arc<Futex>>,
     #[allow(clippy::type_complexity)]
     response: Arc<Mutex<Option<Result<(), StorageError<InMemoryPageId>>>>>,
-    id: TransactionId,
+
     pages: HashMap<PageIndex, TransactionPage>,
+    transaction: StartedTransaction,
 }
 
 impl CommitRequest {
@@ -43,7 +46,7 @@ impl Display for CommitRequest {
         write!(
             f,
             "commit request: {:?} ({} {}) [",
-            self.id,
+            self.transaction,
             if self.is_done.as_ref().atomic().load(Ordering::Relaxed) == 1 {
                 "done "
             } else {
@@ -70,7 +73,11 @@ struct CommitterThread<'log, 'storage> {
 }
 
 impl CommitterThread<'_, '_> {
-    fn rollback(&self, pages: HashMap<PageIndex, TransactionPage>, id: TransactionId) {
+    fn rollback(
+        &self,
+        pages: HashMap<PageIndex, TransactionPage>,
+        transaction: StartedTransaction,
+    ) {
         for page in pages.into_values() {
             let to_free = match page.action {
                 TransactionPageAction::Read | TransactionPageAction::Delete => None,
@@ -89,16 +96,15 @@ impl CommitterThread<'_, '_> {
             }
         }
 
-        self.log.rollback(id);
+        self.log.rollback(transaction);
     }
 
     #[instrument(skip(self, pages), fields(started, timestamp))]
     fn commit(
         &self,
-        id: TransactionId,
+        transaction: StartedTransaction,
         pages: HashMap<PageIndex, TransactionPage>,
     ) -> Result<(), StorageError<InMemoryPageId>> {
-        let handle = self.log.get_handle(id).unwrap();
         let mut locks = HashMap::new();
 
         let mut rollback = None;
@@ -106,7 +112,7 @@ impl CommitterThread<'_, '_> {
         for (index, page) in &pages {
             let lock = self
                 .block
-                .get_at(page.logical_index, handle.start_timestamp())
+                .get_at(page.logical_index, transaction.started())
                 .upgrade();
 
             if lock.next_version().is_some() {
@@ -128,7 +134,7 @@ impl CommitterThread<'_, '_> {
         if let Some(rollback_index) = rollback {
             drop(locks);
 
-            self.rollback(pages, id);
+            self.rollback(pages, transaction);
 
             // TODO this is not a deadlock, but an optimistic concurrency race
             return Err(StorageError::Deadlock(InMemoryPageId(rollback_index)));
@@ -143,7 +149,7 @@ impl CommitterThread<'_, '_> {
         // It is very important that we only start the commit in the log after we've taken the
         // locks. Otherwise, another commit could change the pages in the time between us taking
         // the lock and assigning a commit timestamp, which would cause inconsistencies.
-        let commit_handle = self.log.start_commit(id).unwrap();
+        let commit_handle = self.log.start_commit(transaction);
 
         record_all!(tracing::Span::current(), started = ?commit_handle.started(), timestamp = ?commit_handle.timestamp());
 
@@ -233,9 +239,9 @@ impl Committer {
                         block: &block,
                     };
                     while let Ok(mut request) = rx.recv() {
-                        info_span!("transaction commit", id = ?request.id, %request).in_scope(
+                        info_span!("transaction commit", transaction = ?request.transaction, %request).in_scope(
                             || {
-                                let commit_result = thread.commit(request.id, request.take_pages());
+                                let commit_result = thread.commit(request.transaction, request.take_pages());
 
                                 request.respond(commit_result);
                             },
@@ -253,7 +259,7 @@ impl Committer {
 
     pub fn request(
         &self,
-        id: TransactionId,
+        transaction: StartedTransaction,
         pages: HashMap<PageIndex, TransactionPage>,
     ) -> Result<(), StorageError<InMemoryPageId>> {
         let is_done = Arc::pin(Futex::new(0));
@@ -262,7 +268,7 @@ impl Committer {
             .send(CommitRequest {
                 is_done: is_done.clone(),
                 response: response.clone(),
-                id,
+                transaction,
                 pages,
             })
             .unwrap();

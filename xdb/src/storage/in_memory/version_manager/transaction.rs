@@ -12,7 +12,7 @@ use crate::storage::in_memory::block::{
     LockError, PageReadGuard as RawPageReadGuard, PageWriteGuard as RawPageWriteGuard,
     UninitializedPageGuard as RawUnitializedPageGuard,
 };
-use crate::storage::in_memory::version_manager::transaction_log::TransactionLogEntryHandle;
+use crate::storage::in_memory::version_manager::transaction_log::StartedTransaction;
 use crate::storage::in_memory::version_manager::{
     TransactionPage, TransactionPageAction, VersionManager, VersionedPage,
 };
@@ -22,7 +22,7 @@ pub struct VersionManagedTransaction<'storage> {
     id: TransactionId,
     pages: HashMap<PageIndex, TransactionPage>,
     version_manager: &'storage VersionManager,
-    log_entry: TransactionLogEntryHandle<'storage>,
+    log_entry: StartedTransaction,
     committed: bool,
 }
 
@@ -140,7 +140,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
     pub fn new(
         id: TransactionId,
         version_manager: &'storage VersionManager,
-        log_entry: TransactionLogEntryHandle<'storage>,
+        log_entry: StartedTransaction,
     ) -> Self {
         Self {
             id,
@@ -212,7 +212,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                     let lock = self
                         .version_manager
                         .data
-                        .get_at(entry.logical_index, self.log_entry.start_timestamp());
+                        .get_at(entry.logical_index, self.log_entry.started());
 
                     Ok(lock)
                 }
@@ -239,7 +239,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
             let main = self
                 .version_manager
                 .data
-                .get_at(index, self.log_entry.start_timestamp());
+                .get_at(index, self.log_entry.started());
 
             Ok(main)
         }
@@ -266,7 +266,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
                     let main = self
                         .version_manager
                         .data
-                        .get_at(entry.logical_index, self.log_entry.start_timestamp());
+                        .get_at(entry.logical_index, self.log_entry.started());
 
                     return Ok(main.upgrade());
                 }
@@ -276,7 +276,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         let main = self
             .version_manager
             .data
-            .get_at(index, self.log_entry.start_timestamp());
+            .get_at(index, self.log_entry.started());
         let versioned_page: &VersionedPage = must_cast_ref(&*main);
 
         if versioned_page.next_version().is_some() {
@@ -364,7 +364,7 @@ impl<'storage> VersionManagedTransaction<'storage> {
         //    3. fsync the modified pages
         self.version_manager
             .committer
-            .request(self.id, self.pages.drain().collect())
+            .request(self.log_entry, self.pages.drain().collect())
     }
 
     #[instrument(skip(self), fields(id = ?self.id))]
@@ -389,8 +389,6 @@ impl<'storage> VersionManagedTransaction<'storage> {
                 }
             }
         }
-
-        self.log_entry.rollback();
     }
 
     pub const fn id(&self) -> TransactionId {
